@@ -40,8 +40,8 @@ export function CountUp({ value, format = formatCount, delay = 0, className }: C
     });
     const controls = animate(mv, value, {
       type: "spring",
-      stiffness: 60,
-      damping: 20,
+      stiffness: 90,
+      damping: 24,
       mass: 1,
       delay,
     });

@@ -53,17 +53,25 @@ export function Button(props: ButtonProps) {
   );
 
   if (props.href !== undefined) {
-    const { href, variant: _v, size: _s, leading: _l, trailing: _t, className: _c, children: _ch, ...rest } = props;
+    const { href, ...rest } = stripOwn(props) as ButtonAsLink;
     return (
       <Link href={href} className={classes} {...rest}>
         {inner}
       </Link>
     );
   }
-  const { variant: _v, size: _s, leading: _l, trailing: _t, className: _c, children: _ch, type, ...rest } = props;
+  const { type, ...rest } = stripOwn(props) as ButtonAsButton;
   return (
     <button type={type ?? "button"} className={classes} {...rest}>
       {inner}
     </button>
   );
+}
+
+const OWN_KEYS: (keyof BaseProps)[] = ["variant", "size", "leading", "trailing", "className", "children"];
+
+function stripOwn<T extends BaseProps>(props: T): Omit<T, keyof BaseProps> {
+  const out = { ...props };
+  for (const k of OWN_KEYS) delete out[k];
+  return out;
 }

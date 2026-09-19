@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { X } from "@phosphor-icons/react";
@@ -18,15 +18,15 @@ export interface SheetProps {
   footer?: ReactNode;
 }
 
+const subscribeNoop = () => () => {};
+
 /** Side drawer for drill-downs. Escape and backdrop close it; focus lands on the close control. */
 export function Sheet({ open, onClose, title, description, children, side = "right", width = 440, footer }: SheetProps) {
   const reduce = useReducedMotion();
   const titleId = useId();
   const descId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(subscribeNoop, () => true, () => false);
 
   useEffect(() => {
     if (!open) return;

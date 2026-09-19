@@ -9,8 +9,8 @@ import {
   Question,
   Warning,
   WarningOctagon,
-  type IconProps,
 } from "@phosphor-icons/react/dist/ssr";
+import type { IconProps } from "@phosphor-icons/react";
 import type { DataState, PerformanceState } from "@/domain/types";
 import { cn } from "@/lib/cn";
 

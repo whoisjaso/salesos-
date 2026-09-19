@@ -204,7 +204,7 @@ create table public.assignments (
   explanation            text not null,
   accepted_at            timestamptz,
   ended_at               timestamptz,
-  -- Steps 6/7 of SOS-06 computed but not applied: { performanceWeight?, relationalSuggestionUserId?, relationalReason? }
+  -- Steps 6/7 of SOS-06 computed but not applied: { performanceWeight?, performanceReason?, relationalSuggestionUserId?, relationalReason? }
   shadow                 jsonb check (shadow is null or jsonb_typeof(shadow) = 'object'),
   created_at             timestamptz not null default now(),
   primary key (tenant_id, assignment_id),

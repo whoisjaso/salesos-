@@ -125,6 +125,7 @@ export interface Assignment {
   /** Steps 6/7 of SOS-06 computed but not applied until policy enables them. */
   shadow?: {
     performanceWeight?: number;
+    performanceReason?: string;
     relationalSuggestionUserId?: Id;
     relationalReason?: string;
   };
@@ -445,6 +446,9 @@ export interface FunnelStage {
   cohortLabel: string;
   /** Text shown under the count, e.g. "71 attended / 85 retained bookings". */
   supportingText?: string;
+  /** Money stages (e.g. net collected cash) carry the amount and its labeled basis. */
+  money?: Money;
+  basis?: RevenueBasis;
 }
 
 export interface FunnelConnector {

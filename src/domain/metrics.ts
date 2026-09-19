@@ -163,10 +163,10 @@ export function opportunityAttributedTo(
   userId: Id,
   role?: "setter" | "closer",
 ): boolean {
-  if (!role || opp.currentOwner[role] === userId) {
-    if (opp.currentOwner.setter === userId || opp.currentOwner.closer === userId) {
-      if (!role || opp.currentOwner[role] === userId) return true;
-    }
+  if (role) {
+    if (opp.currentOwner[role] === userId) return true;
+  } else if (opp.currentOwner.setter === userId || opp.currentOwner.closer === userId) {
+    return true;
   }
   return assignments.some(
     (a) => a.opportunityId === opp.opportunityId && a.userId === userId && (!role || a.role === role),
