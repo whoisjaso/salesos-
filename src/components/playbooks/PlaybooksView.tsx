@@ -16,7 +16,7 @@ export interface PlaybooksViewProps {
 
 function formatDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(d);
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(d);
 }
 
 const enter = { duration: 0.22, ease: [0.16, 1, 0.3, 1] as const };

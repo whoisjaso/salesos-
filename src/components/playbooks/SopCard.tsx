@@ -12,7 +12,7 @@ export interface SopCardProps {
 
 function formatDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(d);
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(d);
 }
 
 /** One versioned stage procedure. Every section is a short list; nothing here is a paragraph. */
@@ -79,8 +79,8 @@ export function SopCard({ sop, id, className }: SopCardProps) {
             ))}
           </ul>
         </Section>
-        <Section label="Guardrails" className="sm:col-span-2">
-          <Bullets items={sop.guardrails} className="sm:columns-2 sm:gap-10" />
+        <Section label="Guardrails">
+          <Bullets items={sop.guardrails} />
         </Section>
       </div>
     </Surface>
@@ -100,7 +100,7 @@ function Bullets({ items, numbered = false, className }: { items: string[]; numb
   return (
     <ol className={cn("flex flex-col gap-1.5", className)}>
       {items.map((it, i) => (
-        <li key={it} className="flex items-start gap-2.5 break-inside-avoid text-[13.5px] leading-snug text-fg">
+        <li key={it} className="flex items-start gap-2.5 text-[13.5px] leading-snug text-fg">
           {numbered ? (
             <span className="tabular w-4 shrink-0 text-right text-[12px] leading-[1.35rem] text-fg-subtle">{i + 1}</span>
           ) : (
