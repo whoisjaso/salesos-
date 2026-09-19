@@ -34,25 +34,24 @@ export function MatchStep({ fileName, rowCount, plan, profiles, onChangeTarget, 
   return (
     <div className="flex flex-col gap-6">
       <Surface padding="md" className="flex items-center gap-4">
-        <ProgressRing value={plan.mappedCount / total} size={72} strokeWidth={5} label="Columns matched" />
+        <ProgressRing value={plan.mappedCount / total} size={72} strokeWidth={6} label="Columns matched" className="shrink-0 [&>span]:font-semibold" />
         <div className="min-w-0 flex-1">
-          <div className="tabular text-[26px] font-semibold leading-none tracking-tight text-fg">{formatFraction(plan.mappedCount, plan.totalColumns)}</div>
-          <div className="mt-1 text-[13px] text-fg-muted">columns matched</div>
-          <div className="mt-3 flex items-center gap-2">
-            <LogoTile p={preset} size={24} />
-            <span className="truncate text-[13px] font-medium text-fg">{PRESETS[plan.preset].label}</span>
-            <span aria-hidden className="h-1 w-1 shrink-0 rounded-full bg-fg-faint" />
-            <span className="tabular shrink-0 text-[13px] text-fg-muted">{formatCount(rowCount)} rows</span>
+          <div className="text-[12px] font-medium text-fg-subtle">Columns matched</div>
+          <div className="tabular mt-1 text-[32px] font-semibold leading-none tracking-tight text-fg">{formatFraction(plan.mappedCount, plan.totalColumns)}</div>
+          <div className="mt-2 flex items-center gap-2">
+            <LogoTile p={preset} size={20} />
+            <span className="truncate text-[12px] font-medium text-fg">{PRESETS[plan.preset].label}</span>
+            <span className="tabular shrink-0 text-[12px] text-fg-subtle">{formatCount(rowCount)} rows</span>
+            <span className="truncate text-[12px] text-fg-subtle">{fileName}</span>
           </div>
         </div>
       </Surface>
-      <p className="-mt-4 truncate px-1 text-[12.5px] text-fg-subtle">{fileName}</p>
 
       {needs.length ? (
         <section aria-label="Review" className="flex flex-col gap-2">
           <div className="flex items-baseline justify-between px-1">
-            <h2 className="text-[13px] font-medium text-fg-muted">Review</h2>
-            <span className="tabular text-[11.5px] text-fg-subtle">{formatCount(needs.length)}</span>
+            <h2 className="text-[12px] font-medium text-fg-subtle">Review</h2>
+            <span className="tabular text-[12px] text-fg-subtle">{formatCount(needs.length)}</span>
           </div>
           <Surface padding="none">
             <ul className="divide-y divide-line">
@@ -69,7 +68,7 @@ export function MatchStep({ fileName, rowCount, plan, profiles, onChangeTarget, 
           </Surface>
         </section>
       ) : (
-        <p className="px-1 text-[13px] text-fg-muted">Nothing to review</p>
+        <p className="px-1 text-[12px] font-medium text-fg-subtle">Nothing to review</p>
       )}
 
       <section aria-label="All columns" className="flex flex-col gap-2">

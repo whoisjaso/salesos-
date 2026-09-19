@@ -89,7 +89,7 @@ export function HeroTile({ economics, flow, cohortLabel }: HeroTileProps) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {metric.basis ? (
-              <span className="inline-flex h-5 items-center rounded-[4px] bg-accent-soft px-1.5 text-[11px] font-medium text-accent">
+              <span className="inline-flex h-6 items-center rounded-sm bg-accent-soft px-2 text-[12px] font-medium text-accent">
                 {formatBasis(metric.basis)}
               </span>
             ) : null}
@@ -128,9 +128,9 @@ export function HeroTile({ economics, flow, cohortLabel }: HeroTileProps) {
                       <span className="sm:hidden">{PHONE_LABEL[stage.stageId]}</span>
                       <span className="hidden sm:inline">{SHORT_LABEL[stage.stageId]}</span>
                     </span>
-                    <span className="tabular truncate text-[14px] font-semibold leading-none text-fg sm:text-[16px]">
+                    <span className="tabular flex items-baseline gap-0.5 truncate text-[15px] font-semibold leading-none text-fg sm:text-[16px]">
                       {formatCount(stage.count)}
-                      {stage.unknownCount ? <span className="text-[10px] font-medium text-fg-subtle sm:text-[11px]">+{stage.unknownCount}?</span> : null}
+                      {stage.unknownCount ? <span className="text-[10px] font-medium leading-none text-fg-subtle sm:text-[11px]">+{stage.unknownCount}?</span> : null}
                     </span>
                   </button>
                 </motion.li>
@@ -138,7 +138,7 @@ export function HeroTile({ economics, flow, cohortLabel }: HeroTileProps) {
             })}
           </ol>
           <div className="mt-2 flex items-center justify-between text-[11px] text-fg-subtle">
-            <span className="truncate">{cohortLabel}</span>
+            <span className="truncate">{cohortLabel.charAt(0).toUpperCase() + cohortLabel.slice(1)}</span>
             <span className="shrink-0">Sum over sum</span>
           </div>
         </div>

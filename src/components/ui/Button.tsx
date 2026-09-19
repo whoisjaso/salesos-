@@ -3,7 +3,7 @@ import Link from "next/link";
 import { cn } from "@/lib/cn";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost";
-export type ButtonSize = "sm" | "md";
+export type ButtonSize = "sm" | "md" | "lg";
 
 interface BaseProps {
   variant?: ButtonVariant;
@@ -25,9 +25,11 @@ const VARIANT: Record<ButtonVariant, string> = {
   ghost: "bg-transparent text-fg-muted border border-transparent hover:bg-hover hover:text-fg",
 };
 
+/** sm 32, md 40, lg 44 (phone primary). Icons: 14 with sm, 16 with md and lg. */
 const SIZE: Record<ButtonSize, string> = {
   sm: "h-8 px-3 text-[13px] gap-1.5",
   md: "h-10 px-4 text-[14px] gap-2",
+  lg: "h-11 px-4 text-[15px] gap-2",
 };
 
 /**

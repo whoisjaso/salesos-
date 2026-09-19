@@ -30,7 +30,7 @@ export function MiniFunnel({ stages, className }: MiniFunnelProps) {
                 style={{ width: `${width}%` }}
               />
             </div>
-            {s.supportingText ? <span className="tabular col-span-2 text-[11.5px] leading-snug text-fg-subtle">{s.supportingText}</span> : null}
+            {s.supportingText ? <span className="tabular col-span-2 text-[11px] leading-snug text-fg-subtle">{s.supportingText}</span> : null}
           </li>
         );
       })}

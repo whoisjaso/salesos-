@@ -10,7 +10,7 @@ import type { TodayModel } from "./today-model";
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
-/** One hero: level ring, name, XP to next, streak. */
+/** Compact level row: small ring, name, level and XP to next, streak. Not a hero; the cash card is. */
 export function Hero({ model }: { model: TodayModel }) {
   const reduce = useReducedMotion();
   const { track } = model;
@@ -18,44 +18,41 @@ export function Hero({ model }: { model: TodayModel }) {
   const levelWord = model.role === "owner" ? "Team level" : "Level";
 
   return (
-    <Surface padding="lg" className="overflow-hidden">
+    <Surface padding="none">
       <motion.div
         key={model.userId}
-        initial={reduce ? false : { opacity: 0, y: 8 }}
+        initial={reduce ? false : { opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease }}
-        className="flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-8"
+        transition={{ duration: 0.4, ease }}
+        className="flex min-h-16 items-center gap-3 px-4 py-3"
       >
-        <div className="relative mx-auto shrink-0 sm:mx-0">
-          <ProgressRing value={track.progress} size={132} strokeWidth={9} label={`${levelWord} ${track.level}, ${Math.round(track.progress * 100)}% to next`} centerText=" " />
-          <div aria-hidden className="pointer-events-none absolute inset-0 grid place-items-center">
-            <div className="flex flex-col items-center leading-none">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-fg-subtle">Lvl</span>
-              <span className="tabular mt-0.5 text-[44px] font-semibold tracking-tight text-fg">{track.level}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="min-w-0 flex-1 text-center sm:text-left">
-          <h2 className="truncate text-[24px] font-semibold leading-tight tracking-tight text-fg sm:text-[28px]">{model.displayName}</h2>
-          <p className="tabular mt-1.5 text-[15px] text-fg-muted">
+        <ProgressRing
+          value={track.progress}
+          size={44}
+          strokeWidth={4}
+          label={`${levelWord} ${track.level}, ${Math.round(track.progress * 100)}% to next`}
+          centerText={`L${track.level}`}
+          className="shrink-0 [&>span]:text-[12px] [&>span]:font-semibold"
+        />
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-[15px] font-semibold leading-tight text-fg">{model.displayName}</h2>
+          <p className="tabular mt-0.5 text-[12px] leading-tight text-fg-subtle">
             {levelWord} {track.level}
-            <span aria-hidden className="mx-2 text-fg-faint">·</span>
-            {toNext === null ? "Max level" : `${formatCount(toNext)} XP to next`}
+            <span className="ml-2">{toNext === null ? "Max level" : `${formatCount(toNext)} XP to next`}</span>
           </p>
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-            <span
-              className={
-                model.streakDays > 0
-                  ? "inline-flex h-7 items-center gap-1.5 rounded-full bg-[color:var(--perf-attention-tint)] px-2.5 text-[13px] font-medium text-[color:var(--perf-attention-fg)]"
-                  : "inline-flex h-7 items-center gap-1.5 rounded-full bg-hover px-2.5 text-[13px] font-medium text-fg-muted"
-              }
-            >
-              <Flame size={15} weight={model.streakDays > 0 ? "fill" : "regular"} aria-hidden />
-              <span className="tabular">{model.streakDays > 0 ? `${model.streakDays} day streak` : "No streak yet"}</span>
-            </span>
-            {model.xpPaused ? <StateChip state="attention" label="XP paused" /> : null}
-          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span
+            className={
+              model.streakDays > 0
+                ? "tabular inline-flex h-6 items-center gap-1 rounded-sm border border-[color:var(--perf-attention-line)] px-2 text-[12px] font-medium text-[color:var(--perf-attention-fg)]"
+                : "tabular inline-flex h-6 items-center gap-1 rounded-sm border border-line-strong px-2 text-[12px] font-medium text-fg-muted"
+            }
+          >
+            <Flame size={13} weight={model.streakDays > 0 ? "fill" : "regular"} aria-hidden />
+            {model.streakDays > 0 ? `${model.streakDays} day streak` : "No streak"}
+          </span>
+          {model.xpPaused ? <StateChip state="attention" label="XP paused" /> : null}
         </div>
       </motion.div>
     </Surface>

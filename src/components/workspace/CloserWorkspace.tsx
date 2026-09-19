@@ -187,8 +187,8 @@ export function CloserWorkspace({ userId }: { userId: string }) {
   return (
     <>
       <div className="mx-auto flex max-w-[640px] flex-col gap-4">
-        <Surface padding="lg" className="flex flex-col">
-          <div className="min-h-[168px]">
+        <Surface padding="md" className="flex flex-col">
+          <div className="min-h-[148px]">
             <AnimatePresence mode="wait" initial={false}>
               {active && brief ? (
                 <motion.div
@@ -201,7 +201,7 @@ export function CloserWorkspace({ userId }: { userId: string }) {
                   {phase === "idle" ? (
                     <HeroIdle item={active} onBrief={() => setBriefOpen(true)} />
                   ) : phase === "live" ? (
-                    <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-3">
                       <LiveHead item={active} seconds={seconds} recover={recover} />
                       {!identityOk ? (
                         <div className="rounded-md border border-[color:var(--perf-attention-line)] p-3 text-[13px]">
@@ -237,7 +237,7 @@ export function CloserWorkspace({ userId }: { userId: string }) {
                           </button>
                         </div>
                       ) : null}
-                      <ol className="flex flex-col gap-1" aria-label="Stages">
+                      <ol className="-mx-2 flex flex-col" aria-label="Stages">
                         {STAGES.map((s) => {
                           const ok = done.has(s);
                           return (
@@ -247,7 +247,7 @@ export function CloserWorkspace({ userId }: { userId: string }) {
                                 role="checkbox"
                                 aria-checked={ok}
                                 onClick={() => setDone((d) => { const n = new Set(d); if (n.has(s)) n.delete(s); else n.add(s); return n; })}
-                                className="flex h-10 w-full items-center gap-2.5 rounded-sm px-2 text-left text-[14px] transition-colors hover:bg-hover motion-reduce:transition-none"
+                                className="flex h-10 w-full items-center gap-3 rounded-sm px-2 text-left text-[14px] transition-colors hover:bg-hover motion-reduce:transition-none"
                               >
                                 <span className={cn("inline-grid h-5 w-5 shrink-0 place-items-center rounded-full border", ok ? "border-accent bg-accent text-accent-fg" : "border-line-strong")} aria-hidden>
                                   {ok ? <Check size={11} weight="bold" /> : null}
@@ -284,7 +284,7 @@ export function CloserWorkspace({ userId }: { userId: string }) {
                         </div>
                       ) : null}
                       <div>
-                        <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-fg-subtle">Commitments</div>
+                        <div className="section-label mb-1.5">Commitments</div>
                         <ul className="mb-1.5 flex flex-col gap-1">
                           {commitments.map((c, i) => (
                             <li key={i} className="flex items-center justify-between rounded-sm bg-sunken px-2.5 py-1.5 text-[13px] text-fg">
@@ -304,9 +304,9 @@ export function CloserWorkspace({ userId }: { userId: string }) {
                             setDraft("");
                           }}
                         >
-                          <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add a commitment" aria-label="Commitment" className="h-9 min-w-0 flex-1 rounded-sm border border-line-strong bg-raised px-3 text-[13px] text-fg outline-none focus-visible:border-accent" />
-                          <Button type="submit" variant="secondary" size="sm" className="h-9" aria-label="Add" disabled={!draft.trim()}>
-                            <Plus size={14} weight="bold" aria-hidden />
+                          <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add a commitment" aria-label="Commitment" className="h-10 min-w-0 flex-1 rounded-sm border border-line-strong bg-raised px-3 text-[14px] text-fg outline-none focus-visible:border-accent" />
+                          <Button type="submit" variant="secondary" size="md" className="w-10 px-0" aria-label="Add" disabled={!draft.trim()}>
+                            <Plus size={16} weight="bold" aria-hidden />
                           </Button>
                         </form>
                       </div>
@@ -352,7 +352,7 @@ export function CloserWorkspace({ userId }: { userId: string }) {
                       {outcome === "no_sale" ? (
                         <div role="radiogroup" aria-label="Reason" className="flex flex-wrap gap-1.5">
                           {NO_SALE_REASONS.map((r) => (
-                            <button key={r} type="button" role="radio" aria-checked={noSaleReason === r} onClick={() => setNoSaleReason(r)} className={cn("h-8 rounded-full border px-3 text-[12.5px] transition-colors motion-reduce:transition-none", noSaleReason === r ? "border-accent bg-accent-soft text-fg" : "border-line-strong text-fg-muted hover:bg-hover")}>
+                            <button key={r} type="button" role="radio" aria-checked={noSaleReason === r} onClick={() => setNoSaleReason(r)} className={cn("h-8 rounded-full border px-3 text-[13px] transition-colors motion-reduce:transition-none", noSaleReason === r ? "border-accent bg-accent-soft text-fg" : "border-line-strong text-fg-muted hover:bg-hover")}>
                               {r}
                             </button>
                           ))}
@@ -366,20 +366,20 @@ export function CloserWorkspace({ userId }: { userId: string }) {
                   ) : (
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center gap-2 text-[17px] font-semibold text-fg">
-                        <Check size={18} weight="bold" aria-hidden className="text-perf-strong" />
+                        <Check size={20} weight="bold" aria-hidden className="text-perf-strong" />
                         {outcome === "verbal_yes" ? "Verbal yes" : outcome === "no_sale" ? `No sale: ${noSaleReason}` : "Conditional next step"}
                       </div>
-                      {outcome === "verbal_yes" ? (
-                        <div className="inline-flex h-6 w-fit items-center gap-1 rounded-sm border border-line-strong px-2 text-[12px] text-fg">
-                          <Hourglass size={11} weight="bold" aria-hidden />
-                          Follow-up task created, not revenue
-                        </div>
-                      ) : null}
                       {outcome === "conditional" ? <div className="text-[13px] text-fg-muted">{conditional}</div> : null}
-                      {commitments.length ? (
+                      {outcome === "verbal_yes" || commitments.length ? (
                         <ul className="flex flex-wrap gap-1.5">
+                          {outcome === "verbal_yes" ? (
+                            <li className="chip text-fg">
+                              <Hourglass size={12} weight="bold" aria-hidden />
+                              Follow-up task created, not revenue
+                            </li>
+                          ) : null}
                           {commitments.map((c, i) => (
-                            <li key={i} className="inline-flex h-6 items-center rounded-sm bg-sunken px-2 text-[12px] text-fg">
+                            <li key={i} className="chip border-transparent bg-sunken text-fg">
                               {c}
                             </li>
                           ))}
@@ -390,15 +390,15 @@ export function CloserWorkspace({ userId }: { userId: string }) {
                   )}
                 </motion.div>
               ) : (
-                <motion.div key="empty" initial={false} className="flex h-[168px] flex-col items-center justify-center gap-2 text-center">
+                <motion.div key="empty" initial={false} className="flex h-[148px] flex-col items-center justify-center gap-2 text-center">
                   <Handshake size={28} aria-hidden className="text-fg-subtle" />
                   <span className="text-[15px] font-medium text-fg">No upcoming appointment</span>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
-          <div className="mt-5 h-14">
-            <Button size="md" onClick={dock.onClick} disabled={dock.disabled} leading={<DockIcon size={20} weight="bold" />} className="h-14 w-full rounded-md text-[17px]" data-testid="dock">
+          <div className="mt-4 h-12">
+            <Button size="lg" onClick={dock.onClick} disabled={dock.disabled} leading={<DockIcon size={20} weight="bold" />} className="h-12 w-full rounded-md text-[17px]" data-testid="dock">
               {dock.label}
             </Button>
           </div>
@@ -425,7 +425,7 @@ export function CloserWorkspace({ userId }: { userId: string }) {
 
         {segment === "now" ? (
           <Surface padding="none" as="section" aria-label="Today">
-            <div className="px-4 pt-3 text-[11px] font-medium uppercase tracking-wide text-fg-subtle">Today</div>
+            <div className="section-label px-4 pt-3">Today</div>
             <ul className="divide-y divide-line">
               {todays.map((u) => {
                 const Icon = u.appointment.modality === "video" ? VideoCamera : Phone;
@@ -465,23 +465,23 @@ function HeroIdle({ item, onBrief }: { item: UpcomingAppointment; onBrief: () =>
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-[12px] text-fg-subtle">
-            <Icon size={13} weight="bold" aria-hidden />
+            <Icon size={12} weight="bold" aria-hidden />
             {formatDayIn(instance.scheduledStart, TENANT_TZ)}
-            {item.unresolved ? <span className="rounded-[4px] border border-dashed border-line-strong px-1 text-[10.5px]">unresolved</span> : null}
+            {item.unresolved ? <span className="tag border-dashed">unresolved</span> : null}
           </div>
-          <div className="tabular mt-0.5 text-[30px] font-semibold leading-none tracking-tight text-fg">
-            {formatTimeIn(instance.scheduledStart, TENANT_TZ)} <span className="text-[14px] font-medium text-fg-subtle">{tz}</span>
+          <div className="mt-1 text-[30px] font-semibold leading-none tracking-tight text-fg">
+            {formatTimeIn(instance.scheduledStart, TENANT_TZ)} <span className="text-[13px] font-medium text-fg-subtle">{tz}</span>
           </div>
         </div>
-        <Button variant="ghost" size="sm" onClick={onBrief} leading={<ClipboardText size={14} weight="bold" />}>
+        <Button variant="ghost" size="sm" onClick={onBrief} leading={<ClipboardText size={14} weight="bold" />} className="-mr-2 -mt-1">
           Brief
         </Button>
       </div>
-      <div>
-        <h2 className="text-[22px] font-semibold leading-tight tracking-tight text-fg">{contact.displayName}</h2>
-        {contact.organizationName ? <div className="text-[13px] text-fg-muted">{contact.organizationName}</div> : null}
+      <div className="min-w-0">
+        <h2 className="truncate text-[17px] font-semibold leading-tight tracking-tight text-fg">{contact.displayName}</h2>
+        {contact.organizationName ? <div className="truncate text-[12px] text-fg-subtle">{contact.organizationName}</div> : null}
       </div>
       <p className="line-clamp-2 text-[14px] italic leading-snug text-fg-muted">&ldquo;{appointment.purpose}&rdquo;</p>
     </div>
@@ -492,17 +492,19 @@ function LiveHead({ item, seconds, recover, ended }: { item: UpcomingAppointment
   const label = ended ? "Ended" : recover === "dropped" ? "Dropped" : recover === "reconnecting" ? "Reconnecting" : "Connected";
   const live = !ended && recover === "none";
   return (
-    <div className="flex items-center gap-2">
-      <span className="inline-grid h-8 w-8 place-items-center rounded-full bg-sunken text-[11px] font-semibold text-fg">{initials(item.contact.displayName)}</span>
-      <span className="truncate text-[15px] font-medium text-fg">{item.contact.displayName}</span>
-      <span className="ml-auto flex items-center gap-2 text-[13px] font-medium text-fg-muted">
-        <span className={cn("inline-block h-2 w-2 rounded-full", live ? "bg-perf-strong" : "bg-fg-subtle")} aria-hidden />
-        {label}
-        <span className="tabular text-fg">
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <span className="inline-grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sunken text-[11px] font-semibold text-fg">{initials(item.contact.displayName)}</span>
+        <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-fg">{item.contact.displayName}</span>
+        <span className="shrink-0 text-[15px] font-medium text-fg">
           {pad(Math.floor(seconds / 60))}:{pad(seconds % 60)}
         </span>
-        <span className="inline-flex h-5 items-center rounded-[4px] border border-line-strong px-1.5 text-[10.5px] text-fg-subtle">Provider</span>
-      </span>
+      </div>
+      <div className="flex items-center gap-2 text-[13px] font-medium text-fg-muted">
+        <span className={cn("inline-block h-2 w-2 rounded-full", live ? "bg-perf-strong" : "bg-fg-subtle")} aria-hidden />
+        <span className="text-fg">{label}</span>
+        <span className="tag ml-auto text-fg-subtle">Provider</span>
+      </div>
     </div>
   );
 }

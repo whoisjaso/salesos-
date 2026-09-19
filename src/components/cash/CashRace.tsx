@@ -30,7 +30,7 @@ export function CashRace({ entries, meId, seasonName, currency = "USD" }: CashRa
       <Link href="/team" className="block rounded-[inherit] transition-colors hover:bg-hover motion-reduce:transition-none">
         <div className="flex items-center justify-between px-4 pt-4">
           <span className="flex items-baseline gap-2">
-            <span className="text-[15px] font-semibold text-fg">Race</span>
+            <span className="text-[14px] font-semibold text-fg">Race</span>
             <span className="text-[12px] text-fg-subtle">{seasonName}</span>
           </span>
           <span className="inline-flex items-center gap-1 text-[12px] text-fg-subtle">

@@ -80,15 +80,11 @@ const closers: User[] = dataset.users.filter((u) => CLOSERS.includes(u.userId));
 function ConsentChip({ channel, state, icon: Icon }: { channel: string; state: ConsentState; icon: ComponentType<IconProps> }) {
   return (
     <span
-      className={cn(
-        "inline-flex h-7 items-center gap-1 rounded-full border px-2 text-[12px] font-medium",
-        state === "granted" ? "border-line-strong text-fg" : state === "revoked" ? "border-[color:var(--perf-issue-line)] text-perf-issue" : "border-dashed border-line-strong text-fg-subtle",
-      )}
+      className={cn("chip", state === "granted" ? "text-fg" : state === "revoked" ? "border-[color:var(--perf-issue-line)] text-perf-issue" : "border-dashed text-fg-subtle")}
       aria-label={`${channel} ${state}`}
     >
       <Icon size={12} weight="bold" aria-hidden />
-      {channel}
-      {state !== "granted" ? <span className="text-[10.5px]">{state}</span> : null}
+      {state === "granted" ? channel : `${channel} ${state}`}
     </span>
   );
 }
@@ -246,8 +242,8 @@ export function SetterWorkspace({ userId }: { userId: string }) {
     <>
       <div className="mx-auto flex max-w-[640px] flex-col gap-4">
         {/* ----- Hero ----- */}
-        <Surface padding="lg" className="flex flex-col">
-          <div className="min-h-[168px]">
+        <Surface padding="md" className="flex flex-col">
+          <div className="min-h-[148px]">
             <AnimatePresence mode="wait" initial={false}>
               {active ? (
                 <motion.div
@@ -260,15 +256,15 @@ export function SetterWorkspace({ userId }: { userId: string }) {
                   {!inFlow ? <HeroIdle item={active} expanded={expanded} onToggle={() => setExpanded((v) => !v)} /> : <HeroFlow item={active} call={call} setCall={setCall} booking={currentBooking} onHandoff={() => setHandoffOpen(true)} onBook={() => setBookingOpen(true)} handoff={handoffs[active.opportunity.opportunityId]} />}
                 </motion.div>
               ) : (
-                <motion.div key="empty" initial={false} className="flex h-[168px] flex-col items-center justify-center gap-2 text-center">
+                <motion.div key="empty" initial={false} className="flex h-[148px] flex-col items-center justify-center gap-2 text-center">
                   <Check size={28} aria-hidden className="text-perf-strong" />
                   <span className="text-[15px] font-medium text-fg">Queue clear</span>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
-          <div className="mt-5 h-14">
-            <Button size="md" onClick={dock.onClick} disabled={dock.disabled} leading={<DockIcon size={20} weight="bold" />} className="h-14 w-full rounded-md text-[17px]" data-testid="dock">
+          <div className="mt-4 h-12">
+            <Button size="lg" onClick={dock.onClick} disabled={dock.disabled} leading={<DockIcon size={20} weight="bold" />} className="h-12 w-full rounded-md text-[17px]" data-testid="dock">
               {dock.label}
             </Button>
           </div>
@@ -292,7 +288,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
 
         {segment === "now" ? (
           <div className="flex flex-col gap-3">
-            <Surface padding="md" className="flex items-center justify-around">
+            <Surface padding="sm" className="flex items-center justify-around">
               <Stat value={today.dials} label="Dials" />
               <Divider />
               <Stat value={today.twoWay} label="Two-way" />
@@ -366,6 +362,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
             description={active.contact.displayName}
             footer={
               <Button
+                size="lg"
                 className="w-full"
                 disabled={!replyText.trim()}
                 onClick={() => {
@@ -373,7 +370,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
                   setReplyText("");
                   finish(`Reply sent, ${replyChannel(active.contact)}`);
                 }}
-                leading={<ChatText size={15} weight="bold" />}
+                leading={<ChatText size={16} weight="bold" />}
               >
                 Send, {replyChannel(active.contact)}
               </Button>
@@ -397,21 +394,21 @@ function replyChannel(contact: Contact): string {
 function Stat({ value, label }: { value: number; label: string }) {
   return (
     <div className="flex flex-col items-center">
-      <span className="tabular text-[22px] font-semibold leading-none text-fg">{formatCount(value)}</span>
+      <span className="text-[17px] font-semibold leading-none text-fg">{formatCount(value)}</span>
       <span className="mt-1 text-[11px] text-fg-subtle">{label}</span>
     </div>
   );
 }
 
 function Divider() {
-  return <span aria-hidden className="h-8 w-px bg-line" />;
+  return <span aria-hidden className="h-7 w-px bg-line" />;
 }
 
 function StoppedList({ items }: { items: ReturnType<typeof buildSetterQueue>["stopped"] }) {
   if (items.length === 0) return null;
   return (
     <Surface padding="none" as="section" aria-label="Stopped">
-      <div className="flex items-center gap-1.5 px-4 pt-3 text-[11px] font-medium uppercase tracking-wide text-fg-subtle">
+      <div className="section-label flex items-center gap-1.5 px-4 pt-3">
         <Lock size={11} weight="bold" aria-hidden />
         Stopped
       </div>
@@ -438,26 +435,26 @@ function HeroIdle({ item, expanded, onToggle }: { item: SetterQueueItem; expande
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <div className="truncate text-[12px] text-fg-subtle">
+        <h2 className="text-[26px] font-semibold leading-tight tracking-tight text-fg">{contact.displayName}</h2>
+        <div className="mt-0.5 truncate text-[12px] text-fg-subtle">
           {contact.organizationName ? `${contact.organizationName}, ` : ""}
           {sourceLabel(submission?.source)}
           {submission ? `, ${formatRelativeTime(submission.receivedAt, NOW)}` : ""}
         </div>
-        <h2 className="mt-0.5 text-[26px] font-semibold leading-tight tracking-tight text-fg">{contact.displayName}</h2>
       </div>
       {submission ? (
-        <button type="button" onClick={onToggle} aria-expanded={expanded} className={cn("text-left text-[15px] italic leading-snug text-fg-muted", expanded ? "" : "line-clamp-1")}>
+        <button type="button" onClick={onToggle} aria-expanded={expanded} className={cn("text-left text-[14px] italic leading-snug text-fg-muted", expanded ? "" : "line-clamp-1")}>
           &ldquo;{submission.requestText}&rdquo;
         </button>
       ) : null}
       <div className="flex flex-wrap items-center gap-1.5">
         <ConsentChip channel="Phone" state={contact.consent.phone} icon={Phone} />
         <ConsentChip channel="SMS" state={contact.consent.sms} icon={ChatText} />
-        {contact.preferredLanguage && contact.preferredLanguage !== "en" ? <span className="inline-flex h-7 items-center rounded-full border border-line-strong px-2 text-[12px] font-medium text-fg">{languageLabel(contact.preferredLanguage)}</span> : null}
-        {prior ? <span className="inline-flex h-7 items-center rounded-full border border-dashed border-line-strong px-2 text-[12px] text-fg-muted">{prior}</span> : null}
+        {contact.preferredLanguage && contact.preferredLanguage !== "en" ? <span className="chip text-fg">{languageLabel(contact.preferredLanguage)}</span> : null}
+        {prior ? <span className="chip border-dashed text-fg-muted">{prior}</span> : null}
       </div>
-      <div className="flex items-center gap-1.5 text-[12.5px] text-fg-muted">
-        <Clock size={12} aria-hidden className="shrink-0 text-fg-subtle" />
+      <div className="flex items-center gap-1.5 text-[13px] text-fg-muted">
+        <Clock size={14} aria-hidden className="shrink-0 text-fg-subtle" />
         <span className="truncate">{item.reason}</span>
       </div>
     </div>
@@ -466,10 +463,10 @@ function HeroIdle({ item, expanded, onToggle }: { item: SetterQueueItem; expande
 
 function ProviderLine({ text, live }: { text: string; live?: boolean }) {
   return (
-    <div className="flex items-center gap-2 text-[15px] font-medium text-fg">
+    <div className="flex items-center gap-2 text-[13px] font-medium text-fg-muted">
       <span className={cn("inline-block h-2 w-2 rounded-full", live ? "bg-perf-strong" : "bg-fg-subtle")} aria-hidden />
-      {text}
-      <span className="ml-auto inline-flex h-5 items-center rounded-[4px] border border-line-strong px-1.5 text-[10.5px] font-medium text-fg-subtle">Provider</span>
+      <span className="text-fg">{text}</span>
+      <span className="tag ml-auto text-fg-subtle">Provider</span>
     </div>
   );
 }
@@ -494,10 +491,10 @@ function HeroFlow({
   const { contact } = item;
   const head = (
     <div className="flex items-center gap-2">
-      <span className="inline-grid h-8 w-8 place-items-center rounded-full bg-sunken text-[11px] font-semibold text-fg">{initials(contact.displayName)}</span>
-      <span className="truncate text-[15px] font-medium text-fg">{contact.displayName}</span>
+      <span className="inline-grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sunken text-[11px] font-semibold text-fg">{initials(contact.displayName)}</span>
+      <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-fg">{contact.displayName}</span>
       {call.phase === "connected" ? (
-        <span className="tabular ml-auto text-[15px] font-medium text-fg">
+        <span className="shrink-0 text-[15px] font-medium text-fg">
           {pad(Math.floor(call.seconds / 60))}:{pad(call.seconds % 60)}
         </span>
       ) : null}
@@ -507,7 +504,7 @@ function HeroFlow({
   const outcomes: CallInterpretedOutcome[] = ["meaningful_interaction", "voicemail", "no_answer", "wrong_contact"];
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       {head}
       {call.phase === "reserving" ? <ProviderLine text="Reserving" /> : null}
       {call.phase === "ringing" ? <ProviderLine text="Ringing" /> : null}
@@ -531,7 +528,7 @@ function HeroFlow({
       {call.phase === "summary" || call.phase === "logging" ? (
         <div className="rounded-md border border-dashed border-line-strong p-3">
           <div className="flex items-center justify-between">
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-accent">
+            <span className="section-label inline-flex items-center gap-1 text-accent">
               <Sparkle size={11} weight="bold" aria-hidden />
               {call.phase === "summary" ? "AI proposed" : "No AI evidence"}
             </span>
@@ -544,7 +541,7 @@ function HeroFlow({
           {call.phase === "summary" && !call.changing ? (
             <div className="mt-1.5 text-[17px] font-semibold text-fg">{OUTCOME_LABEL[call.outcome ?? "unknown"]}</div>
           ) : (
-            <div className="mt-2 grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Outcome">
+            <div className="mt-2 grid grid-cols-1 gap-1.5" role="radiogroup" aria-label="Outcome">
               {outcomes.map((o) => (
                 <button
                   key={o}
@@ -552,7 +549,7 @@ function HeroFlow({
                   role="radio"
                   aria-checked={call.outcome === o}
                   onClick={() => setCall((c) => ({ ...c, outcome: o }))}
-                  className={cn("h-9 rounded-sm border px-2 text-[13px] font-medium transition-colors motion-reduce:transition-none", call.outcome === o ? "border-accent bg-accent-soft text-fg" : "border-line-strong text-fg-muted hover:bg-hover")}
+                  className={cn("h-11 rounded-sm border px-3 text-left text-[14px] font-medium transition-colors motion-reduce:transition-none", call.outcome === o ? "border-accent bg-accent-soft text-fg" : "border-line-strong text-fg-muted hover:bg-hover")}
                 >
                   {OUTCOME_LABEL[o]}
                 </button>
@@ -564,21 +561,15 @@ function HeroFlow({
 
       {call.phase === "next" ? (
         <div className="flex flex-col gap-2">
-          <div className="text-[12px] text-fg-subtle">{OUTCOME_LABEL[call.outcome ?? "unknown"]}, confirmed</div>
+          <div className="flex items-center gap-1.5 text-[13px] text-fg-muted">
+            <Check size={14} weight="bold" aria-hidden className="text-perf-strong" />
+            {OUTCOME_LABEL[call.outcome ?? "unknown"]}, confirmed
+          </div>
           <div className="grid grid-cols-2 gap-2">
-            {call.outcome === "meaningful_interaction" ? (
-              <Button variant="secondary" onClick={onBook} leading={<CalendarCheck size={15} weight="bold" />}>
-                Book
-              </Button>
-            ) : (
-              <Button variant="secondary" onClick={() => setCall((c) => ({ ...c, phase: "done", result: `Reattempt ${item.priorAttempts + 2} approved` }))} leading={<ArrowCounterClockwise size={15} weight="bold" />}>
-                Reattempt
-              </Button>
-            )}
-            <Button variant="secondary" onClick={() => setCall((c) => ({ ...c, phase: "done", result: `Callback ${formatTimeIn(new Date(Date.parse(NOW) + 3 * 3_600_000).toISOString(), TENANT_TZ)}` }))} leading={<Clock size={15} weight="bold" />}>
+            <Button variant="secondary" onClick={() => setCall((c) => ({ ...c, phase: "done", result: `Callback ${formatTimeIn(new Date(Date.parse(NOW) + 3 * 3_600_000).toISOString(), TENANT_TZ)}` }))} leading={<Clock size={16} weight="bold" />}>
               Callback
             </Button>
-            <Button variant="secondary" onClick={() => setCall((c) => ({ ...c, phase: "dq" }))} leading={<Prohibit size={15} weight="bold" />} className="col-span-2">
+            <Button variant="secondary" onClick={() => setCall((c) => ({ ...c, phase: "dq" }))} leading={<Prohibit size={16} weight="bold" />}>
               Review DQ
             </Button>
           </div>
@@ -587,7 +578,7 @@ function HeroFlow({
 
       {call.phase === "dq" ? (
         <div role="radiogroup" aria-label="DQ reason" className="flex flex-col gap-1.5">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-fg-subtle">Reason code</div>
+          <div className="section-label">Reason</div>
           {DQ_REASONS.map((r) => (
             <button
               key={r.code}
@@ -595,10 +586,9 @@ function HeroFlow({
               role="radio"
               aria-checked={call.dqReason === r.code}
               onClick={() => setCall((c) => ({ ...c, dqReason: r.code }))}
-              className={cn("flex h-10 items-center justify-between rounded-sm border px-3 text-left text-[13px] font-medium transition-colors motion-reduce:transition-none", call.dqReason === r.code ? "border-accent bg-accent-soft text-fg" : "border-line-strong text-fg-muted hover:bg-hover")}
+              className={cn("flex h-11 items-center rounded-sm border px-3 text-left text-[14px] font-medium transition-colors motion-reduce:transition-none", call.dqReason === r.code ? "border-accent bg-accent-soft text-fg" : "border-line-strong text-fg-muted hover:bg-hover")}
             >
               {r.label}
-              <span className="tabular text-[11px] text-fg-subtle">{r.code}</span>
             </button>
           ))}
         </div>
@@ -611,13 +601,13 @@ function HeroFlow({
             {call.result}
           </div>
           {booking ? (
-            <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
-              <span className="inline-flex h-6 items-center gap-1 rounded-sm border border-line-strong px-2 text-fg">
-                <Check size={11} weight="bold" aria-hidden className="text-perf-strong" />
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="chip text-fg">
+                <Check size={12} weight="bold" aria-hidden className="text-perf-strong" />
                 Invitation sent
               </span>
-              <span className="inline-flex h-6 items-center gap-1 rounded-sm border border-dashed border-line-strong px-2 text-fg-muted">Customer confirmed: not yet</span>
-              {booking.supersedesInstanceId ? <span className="tabular inline-flex h-6 items-center rounded-sm border border-line px-2 text-fg-subtle">supersedes {booking.supersedesInstanceId}</span> : null}
+              <span className="chip border-dashed text-fg-muted">Customer confirmed: not yet</span>
+              {booking.supersedesInstanceId ? <span className="chip border-line text-fg-subtle">supersedes {booking.supersedesInstanceId}</span> : null}
             </div>
           ) : null}
           {call.result?.startsWith("DQ") ? <div className="text-[12px] text-fg-subtle">Stays in the assigned denominator</div> : null}

@@ -115,12 +115,12 @@ export function TeamView() {
           <SeasonHero title={seasonTitle(NOW)} daysLeft={seasonDaysLeft(NOW)} level={teamTrack.level} streakDays={teamTrack.streakDays} team descriptive={descriptive} />
         )}
 
-        <div className="flex items-center justify-between gap-3">
-          <Segmented options={segments} value={segment} onChange={setSegment} label="View" size="md" />
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Segmented options={segments} value={segment} onChange={setSegment} label="View" />
+          <div className="flex items-center gap-1">
             {segment !== "missions" ? <Segmented options={ROLES} value={role} onChange={setRole} label="Role" /> : null}
             <button type="button" onClick={() => setInfoOpen(true)} aria-label="Rules" className="inline-grid h-8 w-8 shrink-0 place-items-center rounded-sm text-fg-muted hover:bg-hover hover:text-fg">
-              <Info size={20} weight="regular" aria-hidden />
+              <Info size={18} weight="regular" aria-hidden />
             </button>
           </div>
         </div>
@@ -130,22 +130,19 @@ export function TeamView() {
             {segment === "board" ? (
               <div className="flex flex-col gap-3">
                 {allProvisional && pauseText ? (
-                  <div className="surface flex flex-col gap-2.5 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
-                    <div className="flex min-w-0 flex-1 items-center gap-2 text-[13px] text-fg">
-                      <PauseCircle size={16} weight="bold" aria-hidden className="shrink-0 text-fg-muted" />
-                      <span className="min-w-0">
-                        Ranking paused: {pauseText}.
+                  <div className="surface flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
+                    <div className="flex min-w-0 flex-1 items-start gap-2 text-[13px] text-fg">
+                      <PauseCircle size={16} weight="bold" aria-hidden className="mt-0.5 shrink-0 text-fg-muted" />
+                      <span className="tabular min-w-0 leading-snug">
+                        Ranking paused: {pauseText}
                         {isOwner ? (
-                          <>
-                            {" "}
-                            <Link href="/" className="text-accent underline-offset-2 hover:underline">
-                              Fix in Business
-                            </Link>
-                          </>
+                          <Link href="/" className="ml-2 font-medium text-accent underline-offset-2 hover:underline">
+                            Fix in Business
+                          </Link>
                         ) : null}
                       </span>
                     </div>
-                    <Switch checked={descriptive} onChange={setDescriptive} label="Show ranks anyway" />
+                    <Switch checked={descriptive} onChange={setDescriptive} label="Show ranks anyway" className="sm:shrink-0" />
                   </div>
                 ) : null}
                 {showSource ? (
@@ -169,7 +166,7 @@ export function TeamView() {
                   </ol>
                 )}
                 <div className="flex justify-end px-1">
-                  <Switch checked={showSource} onChange={setShowSource} label="Source sheet" />
+                  <Switch checked={showSource} onChange={setShowSource} label="Source sheet" className="text-[12px]" />
                 </div>
               </div>
             ) : segment === "stages" ? (

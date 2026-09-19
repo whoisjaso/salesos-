@@ -19,7 +19,7 @@ export function StepDots({ step }: { step: Step }) {
           />
         ))}
       </ol>
-      <h1 className="mt-3 text-[30px] font-semibold leading-none tracking-tight text-fg">{STEP_WORD[step]}</h1>
+      <h1 className="mt-3 text-[20px] font-semibold leading-none tracking-tight text-fg">{STEP_WORD[step]}</h1>
     </header>
   );
 }

@@ -27,21 +27,18 @@ export function DoneStep({ fileName, plan, report, at, onAgain }: DoneStepProps)
 
   return (
     <div className="flex flex-col items-center gap-6 pt-4 text-center">
-      <motion.span initial={reduce ? false : { scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 420, damping: 22 }} className="grid h-20 w-20 place-items-center rounded-full bg-[color:var(--perf-strong-tint)]">
-        <CheckCircle size={52} weight="fill" aria-hidden className="text-perf-strong" />
+      <motion.span initial={reduce ? false : { scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 420, damping: 22 }} className="grid h-16 w-16 place-items-center rounded-full bg-[color:var(--perf-strong-tint)]">
+        <CheckCircle size={40} weight="fill" aria-hidden className="text-perf-strong" />
       </motion.span>
       <div>
-        <div className="tabular text-[48px] font-semibold leading-none tracking-tight text-fg">{formatCount(rowsIn)}</div>
-        <div className="mt-2 text-[14px] text-fg-muted">rows in</div>
+        <div className="tabular text-[44px] font-semibold leading-none tracking-tight text-fg">{formatCount(rowsIn)}</div>
+        <div className="mt-2 text-[12px] font-medium text-fg-subtle">Rows in</div>
       </div>
 
-      <dl className="tabular flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[13px] text-fg-muted">
+      <dl className="tabular flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[13px] text-fg-muted">
         <Count n={report.contacts.create + report.contacts.merge} word="people" />
-        <Dot />
         <Count n={report.opportunities} word="deals" />
-        <Dot />
         <Count n={report.appointments} word="appointments" />
-        <Dot />
         <Count n={report.payments.count} word="payments" />
       </dl>
 
@@ -63,7 +60,7 @@ export function DoneStep({ fileName, plan, report, at, onAgain }: DoneStepProps)
           <Row k="Preset" v={PRESETS[plan.preset].label} />
           <Row k="Rows" v={`${formatCount(rowsIn)} in${skipped ? `, ${formatCount(skipped)} skipped` : ""}`} />
           <div>
-            <dt className="text-[12px] font-medium uppercase tracking-[0.04em] text-fg-subtle">Mapping</dt>
+            <dt className="text-[12px] font-medium text-fg-subtle">Mapping</dt>
             <dd className="mt-2 rounded-sm border border-line bg-sunken">
               <ul className="divide-y divide-line">
                 {mapped.map((c) => (
@@ -91,14 +88,10 @@ function Count({ n, word }: { n: number; word: string }) {
   );
 }
 
-function Dot() {
-  return <span aria-hidden className="h-1 w-1 rounded-full bg-fg-faint" />;
-}
-
 function Row({ k, v }: { k: string; v: string }) {
   return (
     <div>
-      <dt className="text-[12px] font-medium uppercase tracking-[0.04em] text-fg-subtle">{k}</dt>
+      <dt className="text-[12px] font-medium text-fg-subtle">{k}</dt>
       <dd className="mt-1 break-words text-[14px] text-fg">{v}</dd>
     </div>
   );

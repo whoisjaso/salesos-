@@ -29,7 +29,7 @@ export function CloserQueue({ items, onSelect }: { items: CloserQueueItem[]; onS
                   <span className="block truncate text-[14px] font-medium text-fg">{q.contact.displayName}</span>
                   <span className="block truncate text-[12px] text-fg-muted">{q.label}</span>
                 </span>
-                {q.when ? <span className="tabular shrink-0 text-[12px] text-fg-subtle">{formatDateTimeIn(q.when, TENANT_TZ)}</span> : null}
+                {q.when ? <span className="shrink-0 text-[12px] text-fg-subtle">{formatDateTimeIn(q.when, TENANT_TZ)}</span> : null}
               </button>
             </li>
           ))}

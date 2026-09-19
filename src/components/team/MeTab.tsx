@@ -40,37 +40,39 @@ export function MeTab({ player, missions, paths, milestone }: MeTabProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <section aria-label="Tracks" className="surface flex items-center justify-around px-2 py-4">
+      <section aria-label="Tracks" className="surface grid grid-cols-3 divide-x divide-line">
         {TRACKS.map((t) => {
           const lvl = player[t.key];
           return (
-            <div key={t.key} className="flex flex-col items-center gap-1.5">
-              <ProgressRing value={lvl.progress} size={60} strokeWidth={5} label={`${t.label} level ${lvl.level}`} centerText={`L${lvl.level}`} />
-              <span className="text-[12.5px] font-medium text-fg-muted">{t.label}</span>
-              <span className="tabular text-[11px] text-fg-subtle">{formatCount(lvl.xp)} XP</span>
+            <div key={t.key} className="flex items-center gap-3 px-4 py-3">
+              <ProgressRing value={lvl.progress} size={44} strokeWidth={4} label={`${t.label} level ${lvl.level}`} centerText={`L${lvl.level}`} className="shrink-0 [&>span]:font-semibold" />
+              <div className="min-w-0">
+                <div className="text-[13px] font-medium leading-tight text-fg">{t.label}</div>
+                <div className="tabular mt-0.5 text-[11px] leading-tight text-fg-subtle">{formatCount(lvl.xp)} XP</div>
+              </div>
             </div>
           );
         })}
       </section>
 
       {active ? (
-        <section aria-label="Mission" className="surface p-4 sm:p-5">
+        <section aria-label="Mission" className="surface p-4">
           <div className="flex items-center gap-4">
             <ProgressRing
               value={active.mission.target === 0 ? 0 : active.mission.progress / active.mission.target}
-              size={96}
-              strokeWidth={7}
+              size={64}
+              strokeWidth={6}
               label="Mission progress"
               centerText={`${active.mission.progress}/${active.mission.target}`}
-              className="shrink-0 [&>span]:text-[16px] [&>span]:font-semibold"
+              className="shrink-0 [&>span]:text-[14px] [&>span]:font-semibold"
             />
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium text-fg-subtle">
+              <div className="flex flex-wrap items-center gap-2 text-[12px] font-medium text-fg-subtle">
                 <span>{active.source === "coaching" ? "Mission" : "Optional lesson"}</span>
-                {active.mission.state === "paused" ? <span className="rounded-[4px] border border-dashed border-line-strong px-1.5 py-0.5 text-fg-muted">Paused, data first</span> : null}
+                {active.mission.state === "paused" ? <span className="inline-flex h-5 items-center rounded-[4px] border border-dashed border-line-strong px-1.5 text-[11px] text-fg-muted">Paused, data first</span> : null}
               </div>
               <p className="mt-1 text-[15px] font-medium leading-snug text-fg">{shortTitle(active.mission.title)}</p>
-              <button type="button" onClick={() => setShowProof((v) => !v)} aria-expanded={showProof} className="mt-2 text-left text-[12.5px] text-fg-muted hover:text-fg">
+              <button type="button" onClick={() => setShowProof((v) => !v)} aria-expanded={showProof} className="mt-1.5 block max-w-full truncate text-left text-[12px] text-fg-muted hover:text-fg">
                 Proof: {proofShort(active.mission.linkedMetricId)}
               </button>
               {showProof ? <p className="mt-1 text-[12px] leading-snug text-fg-subtle">{active.mission.evidenceRule}</p> : null}
@@ -114,7 +116,7 @@ export function MeTab({ player, missions, paths, milestone }: MeTabProps) {
         {showMilestone ? (
           <>
             <div className="min-w-0 flex-1">
-              <div className="text-[11px] font-medium text-fg-subtle">Private, optional</div>
+              <div className="text-[12px] font-medium text-fg-subtle">Private, optional</div>
               <div className="tabular mt-0.5 text-[15px] font-semibold text-fg">
                 {formatCount(milestone.progress)} <span className="font-medium text-fg-muted">of {formatCount(milestone.target)}</span>
               </div>

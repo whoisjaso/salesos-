@@ -76,7 +76,7 @@ export function LeaderboardRow({
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 py-3 text-left hover:bg-hover"
+        className="flex min-h-16 w-full items-center gap-3 py-2.5 text-left hover:bg-hover"
       >
         {row.rank !== null ? (
           <span className="tabular w-5 shrink-0 text-right text-[13px] font-medium text-fg-subtle">
@@ -93,11 +93,11 @@ export function LeaderboardRow({
           {initials(row.displayName)}
         </span>
 
-        <span className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-1.5">
-          <span className="truncate text-[15px] font-medium text-fg">
+        <span className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+          <span className="truncate text-[15px] font-medium leading-tight text-fg">
             {row.displayName}
           </span>
-          <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1">
             {tier ? (
               <TierBadge
                 tier={tier}
@@ -136,21 +136,21 @@ export function LeaderboardRow({
           </span>
         </span>
 
-        <span className="flex shrink-0 flex-col items-end">
+        <span className="flex shrink-0 flex-col items-end gap-1">
           <span className="tabular text-[17px] font-semibold leading-none tracking-tight text-fg">
             {perLead(row.revenuePerLead.value, currency)}
           </span>
-          <span className="mt-1 inline-flex h-4.5 items-center whitespace-nowrap rounded-[4px] bg-accent-soft px-1.5 text-[10px] font-medium text-accent">
+          <span className="inline-flex h-5 items-center whitespace-nowrap rounded-[4px] bg-accent-soft px-1.5 text-[11px] font-medium text-accent">
             {formatBasis(row.basis)}
           </span>
         </span>
         <span
-          className="w-4 shrink-0 text-fg-subtle"
+          className="inline-grid h-4 w-4 shrink-0 place-items-center text-fg-subtle"
           aria-label={move === "none" ? undefined : MOVE_LABEL[move]}
         >
           {MoveIcon ? (
             <MoveIcon
-              size={15}
+              size={14}
               weight="bold"
               aria-hidden
               className={cn(
@@ -173,7 +173,7 @@ export function LeaderboardRow({
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden"
           >
-            <div className="grid grid-cols-1 gap-5 pb-4 pl-2 sm:grid-cols-[minmax(0,1fr)_220px] sm:pl-12">
+            <div className="grid grid-cols-1 gap-5 pb-4 pl-12 sm:grid-cols-[minmax(0,1fr)_220px]">
               <MiniFunnel stages={funnel} />
               <div className="flex flex-col gap-3">
                 <dl className="tabular grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[12.5px]">
@@ -205,11 +205,6 @@ export function LeaderboardRow({
                       : perLead(row.priorPeriodRevenuePerLead, currency)}
                   </dd>
                 </dl>
-                {row.movementReason ? (
-                  <p className="text-[12px] leading-snug text-fg-subtle">
-                    {row.movementReason}
-                  </p>
-                ) : null}
                 {correctionSent ? (
                   <span className="inline-flex h-8 items-center gap-1.5 text-[13px] text-perf-strong">
                     <CheckCircle size={15} weight="bold" aria-hidden />

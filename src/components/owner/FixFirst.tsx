@@ -24,16 +24,16 @@ export function FixFirst({ cards, cohortLabel, owners, onAssign }: FixFirstProps
   const [first, ...rest] = cards;
 
   return (
-    <section aria-labelledby="fix-first-heading" className="flex flex-col gap-3">
+    <section aria-labelledby="fix-first-heading" className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 id="fix-first-heading" className="text-[13px] font-medium text-fg-subtle">
+        <h2 id="fix-first-heading" className="text-[12px] font-medium text-fg-subtle">
           Fix this first
         </h2>
         {rest.length > 0 ? (
           <button
             type="button"
             onClick={() => setAllOpen(true)}
-            className="inline-flex items-center gap-1 text-[13px] font-medium text-accent hover:underline"
+            className="inline-flex items-center gap-1 text-[12px] font-medium text-accent hover:underline"
           >
             See all {cards.length}
             <ArrowRight size={13} weight="bold" aria-hidden />
@@ -53,7 +53,7 @@ export function FixFirst({ cards, cohortLabel, owners, onAssign }: FixFirstProps
       <Sheet open={allOpen} onClose={() => setAllOpen(false)} title="All investigations" description={cohortLabel} width={520}>
         <div className="flex flex-col gap-3">
           {cards.map((card) => (
-            <BottleneckCardView key={card.cardId} card={card} owner={ownerOf(card)} onAssign={assign(card)} />
+            <BottleneckCardView key={card.cardId} card={card} owner={ownerOf(card)} onAssign={assign(card)} detail />
           ))}
         </div>
       </Sheet>

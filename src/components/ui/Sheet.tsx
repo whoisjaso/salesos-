@@ -79,13 +79,13 @@ export function Sheet({ open, onClose, title, description, children, side = "rig
               side === "right" ? "sm:left-auto sm:right-0 sm:border-l sm:border-t-0" : "sm:right-auto sm:left-0 sm:border-r sm:border-t-0",
             )}
           >
-            <header className="flex items-start gap-3 border-b border-line px-5 py-4">
+            <header className="flex items-start gap-3 border-b border-line px-4 py-3 sm:px-5 sm:py-4">
               <div className="min-w-0 flex-1">
-                <h2 id={titleId} className="text-[15px] font-semibold text-fg">
+                <h2 id={titleId} className="text-[17px] font-semibold leading-tight tracking-tight text-fg">
                   {title}
                 </h2>
                 {description ? (
-                  <p id={descId} className="mt-0.5 text-[13px] text-fg-muted">
+                  <p id={descId} className="mt-0.5 truncate text-[13px] text-fg-muted">
                     {description}
                   </p>
                 ) : null}
@@ -95,13 +95,13 @@ export function Sheet({ open, onClose, title, description, children, side = "rig
                 type="button"
                 onClick={onClose}
                 aria-label="Close"
-                className="-mr-2 -mt-1 inline-grid h-8 w-8 shrink-0 place-items-center rounded-sm text-fg-muted hover:bg-hover hover:text-fg"
+                className="-mr-2 inline-grid h-9 w-9 shrink-0 place-items-center rounded-sm text-fg-muted hover:bg-hover hover:text-fg"
               >
                 <X size={16} weight="bold" />
               </button>
             </header>
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-            {footer ? <footer className="border-t border-line px-5 py-3">{footer}</footer> : null}
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">{children}</div>
+            {footer ? <footer className="border-t border-line px-4 py-3 sm:px-5">{footer}</footer> : null}
           </motion.div>
         </div>
       ) : null}

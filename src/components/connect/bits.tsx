@@ -113,5 +113,5 @@ export function StepRows({ items }: { items: string[] }) {
 }
 
 export function SectionLabel({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <h3 className={cn("text-[12px] font-medium uppercase tracking-[0.04em] text-fg-subtle", className)}>{children}</h3>;
+  return <h3 className={cn("text-[12px] font-medium text-fg-subtle", className)}>{children}</h3>;
 }

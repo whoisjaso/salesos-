@@ -33,7 +33,7 @@ function bigNumber(m: MetricPayload): { value: string; detail: string } {
   return { value: formatCount(m.value), detail: "" };
 }
 
-/** ONE card: title, observed number big, the practice action, Accept. Evidence lives behind "Why". */
+/** ONE coaching card: title, observed number, the practice line, Accept. The six-part sequence lives behind Why. */
 export function HeroCard({ rec, metric, state, onState }: HeroCardProps) {
   const [why, setWhy] = useState(false);
   const [premise, setPremise] = useState(false);
@@ -45,10 +45,10 @@ export function HeroCard({ rec, metric, state, onState }: HeroCardProps) {
 
   return (
     <>
-      <Surface state={surfaceState} padding="lg" className="flex flex-col gap-5">
+      <Surface state={surfaceState} padding="md" className="flex flex-col gap-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-1.5 text-[11.5px] font-medium text-fg-subtle">
+            <div className="flex items-center gap-1.5 text-[12px] font-medium text-fg-subtle">
               {suppressed ? (
                 <span className="inline-flex items-center gap-1 text-fg-muted">
                   <Wrench size={13} weight="bold" aria-hidden />
@@ -57,47 +57,39 @@ export function HeroCard({ rec, metric, state, onState }: HeroCardProps) {
               ) : (
                 <span>Practice</span>
               )}
-              <span aria-hidden>·</span>
               <span>{OWNER_LABEL[rec.ownerRole]}</span>
             </div>
-            <h2 className="mt-1 text-[19px] font-semibold leading-tight tracking-tight text-fg sm:text-[22px]">
+            <h2 className="mt-1 text-[15px] font-semibold leading-snug text-fg">
               {suppressed ? rec.title.replace(/^Resolve data before coaching: /, "") : rec.title}
             </h2>
           </div>
           <StateChip state={suppressed ? rec.dataState : state === "proposed" ? "neutral_no_benchmark" : "strong"} label={STATE_LABEL[state]} className="shrink-0" />
         </div>
 
-        <div className="flex items-end gap-4">
-          <div className="tabular text-[52px] font-semibold leading-none tracking-tight text-fg sm:text-[60px]">{num.value}</div>
-          <div className="tabular pb-1.5 text-[13px] leading-snug text-fg-muted">
-            {num.detail}
-            {metric.dataState !== "complete" ? (
-              <div className="mt-1">
-                <StateChip state={metric.dataState} />
-              </div>
-            ) : null}
-          </div>
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="tabular text-[24px] font-semibold leading-none tracking-tight text-fg">{num.value}</span>
+          <span className="tabular text-[12px] text-fg-subtle">{num.detail}</span>
+          {metric.dataState !== "complete" ? <StateChip state={metric.dataState} className="self-center" /> : null}
         </div>
 
-        <p className="text-[16px] leading-snug text-fg">{suppressed ? capitalize(rec.action) : rec.action}</p>
-        {suppressed ? <p className="text-[13px] leading-snug text-fg-muted">{rec.suppressed?.reason}</p> : null}
+        <p className="text-[14px] leading-snug text-fg">{capitalize(rec.action)}</p>
 
-        <div className="flex flex-wrap items-center gap-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2">
           {suppressed ? (
             session?.role === "owner" ? (
-              <Button size="md" href="/">
+              <Button size="sm" href="/">
                 Open data queue
               </Button>
             ) : null
           ) : (
-            <Button size="md" disabled={next === null} onClick={() => next && onState(next)}>
+            <Button size="sm" disabled={next === null} onClick={() => next && onState(next)}>
               {NEXT_STATE_LABEL[state]}
             </Button>
           )}
-          <Button variant="ghost" size="md" onClick={() => setWhy(true)}>
+          <Button variant="ghost" size="sm" onClick={() => setWhy(true)}>
             Why
           </Button>
-          <Button variant="ghost" size="md" onClick={() => setPremise(true)} className="sm:ml-auto">
+          <Button variant="ghost" size="sm" onClick={() => setPremise(true)} className="ml-auto">
             Premise is wrong
           </Button>
         </div>

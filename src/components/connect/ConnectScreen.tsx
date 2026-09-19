@@ -10,10 +10,14 @@ import { formatCount } from "@/lib/format";
 import { Surface } from "@/components/ui/Surface";
 import { LogoTile } from "./LogoTile";
 import { ConnectSheet } from "./ConnectSheet";
-import { DetailSheet, TONE_DOT } from "./DetailSheet";
+import { DetailSheet, TONE_DOT, TONE_LABEL } from "./DetailSheet";
 import { connectedCount, isConnected, leadsLast7d, POPULAR, seedConnections, toneOf, type ConnectionMap } from "./connect-model";
 
 const CATEGORY_ORDER = Object.keys(CATEGORY_LABEL) as IntegrationProvider["category"][];
+
+/** One row height and one left edge for every list on this screen. */
+const ROW = "flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-hover motion-reduce:transition-none";
+const LABEL = "text-[12px] font-medium text-fg-subtle";
 
 /** Owner only. Reps are sent home. */
 export function ConnectScreen() {
@@ -63,24 +67,23 @@ function ConnectBody() {
 
   return (
     <div className="mx-auto flex w-full max-w-[720px] flex-col gap-6">
-      <header className="px-1">
-        <h1 className="text-[30px] font-semibold leading-none tracking-tight text-fg">Connect</h1>
-        <p className="tabular mt-2 flex items-center gap-2 text-[13px] text-fg-muted">
+      <header className="flex items-baseline justify-between gap-3 px-1">
+        <h1 className="text-[20px] font-semibold leading-none tracking-tight text-fg">Connect</h1>
+        <p className="tabular flex items-center gap-2 text-[12px] text-fg-subtle">
           <span>{formatCount(count)} connected</span>
-          <span aria-hidden className="h-1 w-1 rounded-full bg-fg-faint" />
           <span>{formatCount(leads)} leads, 7 days</span>
         </p>
       </header>
 
       <section aria-label="Move in your data">
         <Surface padding="none">
-          <Link href="/import" className="flex min-h-[64px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-hover motion-reduce:transition-none">
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[12px] bg-accent-soft text-accent">
-              <UploadSimple size={22} weight="bold" aria-hidden />
+          <Link href="/import" className={ROW}>
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-accent-soft text-accent">
+              <UploadSimple size={20} weight="bold" aria-hidden />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[15px] font-medium leading-tight text-fg">Import</span>
-              <span className="mt-0.5 block truncate text-[12.5px] text-fg-subtle">CSV, Excel, or your old CRM</span>
+              <span className="mt-0.5 block truncate text-[12px] text-fg-subtle">CSV, Excel, or your old CRM</span>
             </span>
             <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
           </Link>
@@ -90,8 +93,8 @@ function ConnectBody() {
       {connected.length ? (
         <section aria-label="Connected" className="flex flex-col gap-2">
           <div className="flex items-baseline justify-between px-1">
-            <h2 className="text-[13px] font-medium text-fg-muted">Connected</h2>
-            <span className="text-[11.5px] text-fg-subtle">7 days</span>
+            <h2 className={LABEL}>Connected</h2>
+            <span className="text-[12px] text-fg-subtle">Leads, 7 days</span>
           </div>
           <Surface padding="none">
             <ul className="divide-y divide-line">
@@ -100,15 +103,16 @@ function ConnectBody() {
                 const tone = toneOf(c);
                 return (
                   <li key={p.providerId}>
-                    <button type="button" onClick={() => setDetailId(p.providerId)} className="flex min-h-[64px] w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-hover motion-reduce:transition-none">
-                      <LogoTile p={p} />
+                    <button type="button" onClick={() => setDetailId(p.providerId)} className={ROW}>
+                      <LogoTile p={p} size={40} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[15px] font-medium leading-tight text-fg">{p.name}</span>
-                        <span className="mt-0.5 block truncate text-[12.5px] text-fg-subtle">{c.conn.accountLabel}</span>
+                        <span className="mt-0.5 block truncate text-[12px] text-fg-subtle">{c.conn.accountLabel}</span>
                       </span>
                       <span className="flex shrink-0 items-center gap-2">
                         <span className="tabular text-[15px] font-semibold text-fg">{c.health ? formatCount(c.health.receivedLast7d) : "New"}</span>
                         <span aria-hidden className={`h-2 w-2 rounded-full ${TONE_DOT[tone]}`} />
+                        <span className="sr-only">{TONE_LABEL[tone]}</span>
                       </span>
                       <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
                     </button>
@@ -122,13 +126,13 @@ function ConnectBody() {
 
       {popular.length ? (
         <section aria-label="Popular" className="flex flex-col gap-2">
-          <h2 className="px-1 text-[13px] font-medium text-fg-muted">Popular</h2>
-          <ul className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:-mx-1 sm:px-1">
+          <h2 className={`px-1 ${LABEL}`}>Popular</h2>
+          <ul className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:-mx-1 sm:px-1">
             {popular.map((p) => (
               <li key={p.providerId} className="shrink-0">
-                <button type="button" onClick={() => setConnectId(p.providerId)} className="flex w-[84px] flex-col items-center gap-2 rounded-md py-1 text-center transition-transform active:scale-[0.97] motion-reduce:transition-none">
+                <button type="button" onClick={() => setConnectId(p.providerId)} className="flex w-[80px] flex-col items-center gap-2 rounded-md py-1 text-center transition-transform active:scale-[0.97] motion-reduce:transition-none">
                   <LogoTile p={p} size={64} />
-                  <span className="line-clamp-2 text-[11.5px] font-medium leading-tight text-fg">{p.name}</span>
+                  <span className="line-clamp-2 h-[28px] text-[11px] font-medium leading-[14px] text-fg">{p.name}</span>
                 </button>
               </li>
             ))}
@@ -137,18 +141,18 @@ function ConnectBody() {
       ) : null}
 
       <section aria-label="All" className="flex flex-col gap-5">
-        <h2 className="-mb-3 px-1 text-[13px] font-medium text-fg-muted">All</h2>
+        <h2 className={`-mb-3 px-1 ${LABEL}`}>All</h2>
         {groups.map((g) => (
           <div key={g.cat} className="flex flex-col gap-2">
-            <h3 className="px-1 text-[12px] font-medium uppercase tracking-[0.04em] text-fg-subtle">{CATEGORY_LABEL[g.cat]}</h3>
+            <h3 className="px-1 text-[12px] font-medium text-fg-subtle">{CATEGORY_LABEL[g.cat]}</h3>
             <Surface padding="none">
               <ul className="divide-y divide-line">
                 {g.items.map((p) => (
                   <li key={p.providerId}>
-                    <button type="button" onClick={() => setConnectId(p.providerId)} className="flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-hover motion-reduce:transition-none">
+                    <button type="button" onClick={() => setConnectId(p.providerId)} className={ROW}>
                       <LogoTile p={p} size={40} />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[14.5px] font-medium leading-tight text-fg">{p.name}</span>
+                        <span className="block truncate text-[15px] font-medium leading-tight text-fg">{p.name}</span>
                         <span className="mt-0.5 block truncate text-[12px] text-fg-subtle">{p.oneLiner}</span>
                       </span>
                       <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />

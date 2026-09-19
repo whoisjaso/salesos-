@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BookOpenText, CaretRight, HandCoins, PlugsConnected } from "@phosphor-icons/react";
+import { BookOpenText, CaretRight, PlugsConnected, SignOut } from "@phosphor-icons/react";
 import { SEED_CONNECTED_COUNT } from "@/components/connect/connect-model";
 import type { SopModule } from "@/content/sops";
 import type { CoachingRecommendation } from "@/domain/types";
@@ -58,9 +58,9 @@ export function MeScreen({ data, sops, boundaries }: MeScreenProps) {
       {session.role === "owner" ? (
         <>
           <Link href="/connect" className="surface flex h-14 w-full items-center gap-3 px-4 text-left transition-colors hover:bg-hover motion-reduce:transition-none">
-            <PlugsConnected size={20} weight="regular" aria-hidden className="shrink-0 text-accent" />
+            <PlugsConnected size={18} weight="regular" aria-hidden className="shrink-0 text-accent" />
             <span className="flex-1 text-[15px] font-medium text-fg">Connect</span>
-            <span className="tabular text-[13px] text-fg-subtle">{SEED_CONNECTED_COUNT} connected</span>
+            <span className="tabular text-[12px] text-fg-subtle">{SEED_CONNECTED_COUNT} connected</span>
             <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
           </Link>
           <Surface padding="none" className="flex h-14 items-center justify-between px-4">
@@ -69,8 +69,14 @@ export function MeScreen({ data, sops, boundaries }: MeScreenProps) {
           </Surface>
         </>
       ) : null}
-      <button type="button" onClick={signOut} className="mx-auto mt-2 inline-flex h-10 items-center rounded-sm px-4 text-[14px] font-medium text-fg-muted hover:bg-hover hover:text-fg">
-        Not you?
+      <button
+        type="button"
+        onClick={signOut}
+        className="flex h-12 w-full items-center gap-3 rounded-sm px-4 text-left text-[13px] font-medium text-fg-subtle transition-colors hover:bg-hover hover:text-fg motion-reduce:transition-none"
+      >
+        <SignOut size={16} weight="regular" aria-hidden className="shrink-0" />
+        <span className="flex-1">Not you?</span>
+        <span className="truncate text-[12px] font-normal text-fg-faint">{session.displayName}</span>
       </button>
     </div>
   );
@@ -107,20 +113,17 @@ function RepMe({ userId, role, data }: { userId: string; role: "setter" | "close
       <RecentDrops drops={drops} tier={tierFor(summary.totalMinor)} now={NOW} currency={summary.currency} />
       {model ? <OneNumber model={model} seasonLabel={data.season.label} /> : null}
       {rec && metric ? <HeroCard rec={rec} metric={metric} state={state} onState={setState} /> : null}
-      <Surface padding="md">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="flex items-center gap-1.5 text-[13px] font-medium text-fg-muted">
-            <HandCoins size={14} aria-hidden />
-            Per attended appointment
-          </h3>
-          {dataset.commissionPolicy.hypothetical ? (
-            <span className="inline-flex h-5 items-center rounded-[4px] border border-dashed border-line-strong px-1.5 text-[11px] text-fg-muted">Hypothetical policy</span>
-          ) : null}
+      <Surface padding="md" className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[12px] font-medium text-fg-subtle">Per attended appointment</div>
+          <div className="tabular mt-1 text-[24px] font-semibold leading-none tracking-tight text-fg">{m19.value === null ? "N/A" : formatMoneyMinor(Math.round(m19.value), currency, { cents: true })}</div>
+          <div className="tabular mt-1.5 text-[12px] text-fg-subtle">
+            {formatMoneyMinor(m19.numerator, currency)} over {formatCount(m19.denominator)} attended
+          </div>
         </div>
-        <div className="tabular mt-2 text-[28px] font-semibold leading-none text-fg">{m19.value === null ? "N/A" : formatMoneyMinor(Math.round(m19.value), currency, { cents: true })}</div>
-        <div className="tabular mt-1.5 text-[12px] text-fg-subtle">
-          {formatMoneyMinor(m19.numerator, currency)} over {formatCount(m19.denominator)} attended
-        </div>
+        {dataset.commissionPolicy.hypothetical ? (
+          <span className="inline-flex h-6 shrink-0 items-center rounded-sm border border-dashed border-line-strong px-2 text-[12px] font-medium text-fg-muted">Hypothetical policy</span>
+        ) : null}
       </Surface>
     </>
   );
@@ -139,7 +142,7 @@ function OwnerMe() {
             <li key={r.recommendationId}>
               <button type="button" onClick={() => setOpen(r)} className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-hover motion-reduce:transition-none">
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[14.5px] font-medium leading-snug text-fg">{r.title.replace(/^Resolve data before coaching: /, "")}</span>
+                  <span className="block text-[15px] font-medium leading-snug text-fg">{r.title.replace(/^Resolve data before coaching: /, "")}</span>
                   <span className="block text-[12px] text-fg-subtle">{OWNER_LABEL[r.ownerRole]}</span>
                 </span>
                 <StateChip state={r.dataState} />
@@ -159,7 +162,7 @@ function PlaybookRow({ sops, boundaries }: { sops: SopModule[]; boundaries: MeSc
   return (
     <>
       <Surface padding="none" as="button" onClick={() => setOpen(true)} className="flex h-14 w-full items-center gap-3 px-4 text-left transition-colors hover:bg-hover motion-reduce:transition-none">
-        <BookOpenText size={20} weight="regular" aria-hidden className="shrink-0 text-accent" />
+        <BookOpenText size={18} weight="regular" aria-hidden className="shrink-0 text-accent" />
         <span className="flex-1 text-[15px] font-medium text-fg">Playbook</span>
         <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
       </Surface>

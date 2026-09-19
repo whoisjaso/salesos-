@@ -48,27 +48,32 @@ test.describe("Owner: Delphine", () => {
     const section = page.getByRole("region", { name: "Fix this first" });
     await expect(section).toBeVisible();
     await expect(section.getByRole("article")).toHaveCount(1);
-    await expect(section.getByText("Observed")).toBeVisible();
-    await expect(section.getByText("Comparator")).toBeVisible();
-    await expect(section.getByText("Investigate")).toBeVisible();
+    // The compact card shows the title, one observed line, the owner, and Why.
+    // Observed, Comparator, and Investigate live behind Why.
+    await section.getByRole("button", { name: "Why", exact: true }).click();
+    const why = page.getByRole("dialog");
+    await expect(why).toBeVisible();
+    await expect(why.getByText("Observed")).toBeVisible();
+    await expect(why.getByText("Comparator")).toBeVisible();
+    await expect(why.getByText("Investigate")).toBeVisible();
+
+    // Stays assigned while the owner keeps working the card.
+    const more = why.getByRole("button", { name: /^\d+ more$/ });
+    if (await more.count()) {
+      await more.click();
+      await expect(why.getByRole("button", { name: "Show fewer" })).toBeVisible();
+    }
+    const assumptions = why.getByRole("button", { name: "Assumptions" });
+    if (await assumptions.count()) {
+      await assumptions.click();
+      await expect(assumptions).toHaveAttribute("aria-expanded", "true");
+    }
+    await closeSheet(page);
 
     const owner = section.getByRole("combobox", { name: "Assign owner function" });
     await owner.selectOption("marketing");
     await expect(owner).toHaveValue("marketing");
     await expect(owner.locator("option:checked")).toHaveText("Marketing");
-
-    // Stays assigned while the owner keeps working the card.
-    const more = section.getByRole("button", { name: /^\d+ more$/ });
-    if (await more.count()) {
-      await more.click();
-      await expect(section.getByRole("button", { name: "Show fewer" })).toBeVisible();
-    }
-    const assumptions = section.getByRole("button", { name: "Assumptions" });
-    if (await assumptions.count()) {
-      await assumptions.click();
-      await expect(assumptions).toHaveAttribute("aria-expanded", "true");
-    }
-    await expect(owner).toHaveValue("marketing");
 
     // See all opens every investigation; the first card carries the same assignment, and
     // changing it there is reflected back on the hero card (one client state, not two).

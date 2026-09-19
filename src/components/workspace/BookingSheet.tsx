@@ -82,19 +82,19 @@ export function BookingSheet({ open, onClose, dataset, now, contact, closers, in
       footer={
         mode === "pick" ? (
           <div className="flex gap-2">
-            <Button variant="secondary" size="md" onClick={onClose} className="flex-1">
+            <Button variant="secondary" size="lg" onClick={onClose} className="flex-1">
               Cancel
             </Button>
-            <Button size="md" onClick={confirm} disabled={!slot || pending} leading={<CalendarCheck size={16} weight="bold" />} className="flex-1">
+            <Button size="lg" onClick={confirm} disabled={!slot || pending} leading={<CalendarCheck size={16} weight="bold" />} className="flex-1">
               Confirm
             </Button>
           </div>
         ) : (
           <div className="flex gap-2">
-            <Button variant="secondary" size="md" onClick={() => setMode("pick")} leading={<ArrowsClockwise size={15} weight="bold" />} className="flex-1">
+            <Button variant="secondary" size="lg" onClick={() => setMode("pick")} leading={<ArrowsClockwise size={16} weight="bold" />} className="flex-1">
               Reschedule
             </Button>
-            <Button size="md" onClick={onClose} className="flex-1">
+            <Button size="lg" onClick={onClose} className="flex-1">
               Done
             </Button>
           </div>
@@ -102,9 +102,9 @@ export function BookingSheet({ open, onClose, dataset, now, contact, closers, in
       }
     >
       {mode === "pick" ? (
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-4">
           <fieldset>
-            <legend className="mb-2 text-[11px] font-medium uppercase tracking-wide text-fg-subtle">Slot, {tz}</legend>
+            <legend className="mb-2 section-label">Slot, {tz}</legend>
             <div className="grid grid-cols-2 gap-2">
               {slots.map((s) => {
                 const selected = s.id === slotId;
@@ -133,7 +133,7 @@ export function BookingSheet({ open, onClose, dataset, now, contact, closers, in
           </fieldset>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-fg-subtle">Purpose, customer&apos;s words</span>
+            <span className="section-label">Purpose, customer&apos;s words</span>
             <textarea
               value={purpose}
               onChange={(e) => setPurpose(e.target.value)}
@@ -144,11 +144,11 @@ export function BookingSheet({ open, onClose, dataset, now, contact, closers, in
 
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-sm border border-line px-3 py-2">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-fg-subtle">Duration</div>
+              <div className="section-label">Duration</div>
               <div className="tabular text-[14px] font-medium text-fg">45 min</div>
             </div>
             <label className="rounded-sm border border-line px-3 py-2">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-fg-subtle">Rep</div>
+              <div className="section-label">Rep</div>
               <select value={effectiveRep ?? ""} onChange={(e) => setRepId(e.target.value)} className="w-full bg-transparent text-[14px] font-medium text-fg outline-none">
                 {closers.map((c) => (
                   <option key={c.userId} value={c.userId}>

@@ -19,7 +19,7 @@ export interface DetailSheetProps {
   onDisconnect: (providerId: string) => void;
 }
 
-const TONE_LABEL: Record<Tone, string> = { live: "Live", stale: "Quiet", paused: "Paused" };
+export const TONE_LABEL: Record<Tone, string> = { live: "Live", stale: "Quiet", paused: "Paused" };
 export const TONE_DOT: Record<Tone, string> = { live: "bg-perf-strong", stale: "bg-fg-faint", paused: "bg-perf-attention" };
 
 export function DetailSheet({ p, c, open, onClose, onPause, onDisconnect }: DetailSheetProps) {

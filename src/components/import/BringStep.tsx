@@ -69,14 +69,14 @@ export function BringStep({ tenantId, onLoad }: BringStepProps) {
   return (
     <div className="flex flex-col gap-6">
       <section aria-label="Connect your CRM" className="flex flex-col gap-2">
-        <h2 className="px-1 text-[13px] font-medium text-fg-muted">Connect your CRM</h2>
+        <h2 className="px-1 text-[12px] font-medium text-fg-subtle">Connect your CRM</h2>
         <ul className="grid grid-cols-3 gap-2">
           {CRM_SOURCES.map((s) => (
             <li key={s.provider.providerId}>
               <Surface as="button" padding="none" interactive className="w-full" onClick={() => setSource(s)}>
                 <span className="flex flex-col items-center gap-2 px-2 py-4">
                   <LogoTile p={s.provider} size={56} />
-                  <span className="line-clamp-1 text-[12.5px] font-medium leading-tight text-fg">{s.provider.name}</span>
+                  <span className="line-clamp-1 text-[12px] font-medium leading-tight text-fg">{s.provider.name}</span>
                 </span>
               </Surface>
             </li>
@@ -85,7 +85,7 @@ export function BringStep({ tenantId, onLoad }: BringStepProps) {
       </section>
 
       <section aria-label="Or upload a file" className="flex flex-col gap-2">
-        <h2 className="px-1 text-[13px] font-medium text-fg-muted">Or upload a file</h2>
+        <h2 className="px-1 text-[12px] font-medium text-fg-subtle">Or upload a file</h2>
         <Surface
           as="button"
           padding="none"
@@ -98,15 +98,15 @@ export function BringStep({ tenantId, onLoad }: BringStepProps) {
           }}
           onDragLeave={() => setOver(false)}
           onDrop={onDrop}
-          className={cn("w-full transition-colors", over && "bg-accent-soft")}
+          className={cn("w-full border-dashed transition-colors", over ? "border-accent bg-accent-soft" : "border-line-strong")}
         >
-          <span className={cn("m-1.5 flex min-h-[88px] items-center gap-3 rounded-md border border-dashed px-4 py-3 text-left transition-colors", over ? "border-accent" : "border-line-strong")}>
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
-              <UploadSimple size={22} weight="bold" aria-hidden />
+          <span className="flex min-h-16 items-center gap-3 px-4 py-2 text-left">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-accent-soft text-accent">
+              <UploadSimple size={20} weight="bold" aria-hidden />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[15px] font-semibold text-fg">Drop a CSV</span>
-              <span className="mt-0.5 block text-[12.5px] text-fg-muted">{hint ?? "Or an Excel export saved as CSV"}</span>
+              <span className="block text-[15px] font-medium leading-tight text-fg">Drop a CSV</span>
+              <span className="mt-0.5 block text-[12px] text-fg-subtle">{hint ?? "Excel export saved as CSV"}</span>
             </span>
             <span className="inline-flex h-8 shrink-0 items-center rounded-sm border border-line-strong px-3 text-[13px] font-medium text-fg">Choose</span>
           </span>

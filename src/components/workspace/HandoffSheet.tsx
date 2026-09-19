@@ -20,7 +20,7 @@ export interface HandoffSheetProps {
 function Section({ title, lines, empty = "None" }: { title: string; lines: BriefLine[]; empty?: string }) {
   return (
     <section className="py-3">
-      <h3 className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-fg-subtle">{title}</h3>
+      <h3 className="section-label mb-1.5">{title}</h3>
       {lines.length === 0 ? (
         <p className="text-[13px] text-fg-subtle">{empty}</p>
       ) : (
@@ -50,26 +50,28 @@ export function HandoffSheet({ open, onClose, brief, contactName, closerName, on
       description={closerName ? `${contactName} to ${closerName}` : contactName}
       footer={
         sent ? (
-          <div className="flex h-10 items-center text-[13px] text-fg-muted">{sent === "send" ? "Sent to closer" : "Clarification requested"}</div>
+          <div className="flex h-11 items-center text-[13px] text-fg-muted">{sent === "send" ? "Sent to closer" : "Clarification requested"}</div>
         ) : (
           <div className="flex gap-2">
             <Button
               variant="secondary"
+              size="lg"
               onClick={() => {
                 setSent("clarify");
                 onSend("clarify");
               }}
-              leading={<Question size={15} weight="bold" />}
+              leading={<Question size={16} weight="bold" />}
               className="flex-1"
             >
               Clarify
             </Button>
             <Button
+              size="lg"
               onClick={() => {
                 setSent("send");
                 onSend("send");
               }}
-              leading={<PaperPlaneTilt size={15} weight="bold" />}
+              leading={<PaperPlaneTilt size={16} weight="bold" />}
               className="flex-1"
             >
               Send to closer
@@ -102,13 +104,13 @@ export function HandoffSheet({ open, onClose, brief, contactName, closerName, on
           </details>
         ) : null}
         <section className="py-3">
-          <h3 className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-fg-subtle">Missing</h3>
+          <h3 className="section-label mb-1.5">Missing</h3>
           {brief.missing.length === 0 ? (
             <p className="text-[13px] text-fg-subtle">Nothing flagged</p>
           ) : (
             <ul className="flex flex-wrap gap-1.5">
               {brief.missing.map((m) => (
-                <li key={m} className="inline-flex h-6 items-center rounded-sm border border-dashed border-line-strong px-2 text-[12px] text-fg-muted">
+                <li key={m} className="chip border-dashed text-fg-muted">
                   {m}
                 </li>
               ))}

@@ -65,7 +65,7 @@ export function AppShell({ tenantName = "Obavia", children }: AppShellProps) {
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-30 flex h-[var(--topbar-height)] items-center border-b border-line bg-base/85 px-4 backdrop-blur-md sm:px-6">
-            <span className="truncate text-[14px] font-semibold tracking-tight text-fg">{tenantName}</span>
+            <span className="truncate text-[14px] font-semibold tracking-tight text-fg lg:hidden">{tenantName}</span>
             <ThemeToggle className="ml-auto" />
           </header>
 
@@ -94,7 +94,7 @@ export function AppShell({ tenantName = "Obavia", children }: AppShellProps) {
                   )}
                 >
                   <Icon size={24} weight={active ? "fill" : "regular"} aria-hidden className={active ? "text-accent" : undefined} />
-                  {item.label}
+                  <span className="text-center">{item.label}</span>
                 </Link>
               );
             })}

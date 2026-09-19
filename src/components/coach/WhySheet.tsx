@@ -24,7 +24,16 @@ interface Step {
 export function WhySheet({ open, onClose, rec }: WhySheetProps) {
   const s = rec.scenario;
   const steps: Step[] = [
-    { icon: Eye, label: "Observation", body: <p className="text-[13.5px] text-fg">{rec.observed}</p> },
+    {
+      icon: Eye,
+      label: "Observation",
+      body: (
+        <div>
+          <p className="text-[13.5px] text-fg">{rec.observed}</p>
+          {rec.suppressed ? <p className="mt-1 text-[12.5px] leading-snug text-fg-muted">{rec.suppressed.reason}</p> : null}
+        </div>
+      ),
+    },
     {
       icon: MagnifyingGlass,
       label: "Evidence check",
@@ -61,7 +70,7 @@ export function WhySheet({ open, onClose, rec }: WhySheetProps) {
       label: "Practice",
       body: (
         <div>
-          <p className="text-[13.5px] text-fg">{rec.action}</p>
+          <p className="text-[13.5px] text-fg">{rec.action.charAt(0).toUpperCase() + rec.action.slice(1)}</p>
           <p className="mt-1 text-[12.5px] text-fg-subtle">{rec.effort}</p>
         </div>
       ),

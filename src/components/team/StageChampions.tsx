@@ -34,7 +34,7 @@ export function StageChampions({ champions }: StageChampionsProps) {
               ? `${formatMoneyMinor(c.numerator, c.currency)} over ${formatCount(c.denominator)}`
               : `${formatCount(c.numerator)} of ${formatCount(c.denominator)}`;
           return (
-            <li key={c.stageId} className="flex items-center gap-3 py-3">
+            <li key={c.stageId} className="flex min-h-16 items-center gap-3 py-2.5">
               <span className="w-14 shrink-0 text-[13px] font-medium text-fg-muted">
                 {c.label}
               </span>
@@ -45,7 +45,7 @@ export function StageChampions({ champions }: StageChampionsProps) {
                 {c.displayName ? initials(c.displayName) : "?"}
               </span>
               <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
-                <span className="truncate text-[14.5px] font-medium text-fg">
+                <span className="truncate text-[15px] font-medium leading-tight text-fg">
                   {c.displayName ?? "No leader yet"}
                 </span>
                 <span className="flex items-center gap-1.5">
@@ -61,7 +61,7 @@ export function StageChampions({ champions }: StageChampionsProps) {
                     </Tooltip>
                   ) : null}
                   {c.stageId === "fit" ? (
-                    <span className="text-[10.5px] text-fg-subtle">
+                    <span className="text-[11px] text-fg-subtle">
                       contextual
                     </span>
                   ) : null}

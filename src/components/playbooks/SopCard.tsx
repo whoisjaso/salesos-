@@ -90,7 +90,7 @@ export function SopCard({ sop, id, className }: SopCardProps) {
 function Section({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
   return (
     <section className={cn("min-w-0", className)}>
-      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">{label}</h3>
+      <h3 className="mb-2 text-[12px] font-medium text-fg-subtle">{label}</h3>
       {children}
     </section>
   );

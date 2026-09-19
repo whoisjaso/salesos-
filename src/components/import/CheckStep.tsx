@@ -28,9 +28,9 @@ export function CheckStep({ report, onImport }: CheckStepProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <Surface padding="lg" className="text-center">
-        <div className="tabular text-[56px] font-semibold leading-none tracking-tight text-fg">{ready}%</div>
-        <div className="mt-2 text-[14px] text-fg-muted">ready</div>
+      <Surface padding="md" className="text-center">
+        <div className="tabular text-[44px] font-semibold leading-none tracking-tight text-fg">{ready}%</div>
+        <div className="mt-2 text-[12px] font-medium text-fg-subtle">Ready</div>
       </Surface>
 
       <div className="grid grid-cols-2 gap-3">
@@ -41,7 +41,7 @@ export function CheckStep({ report, onImport }: CheckStepProps) {
       </div>
 
       {report.consentPreserved > 0 ? (
-        <p className="tabular px-1 text-[13px] text-fg-muted">
+        <p className="tabular px-1 text-[12px] text-fg-subtle">
           {formatCount(report.consentPreserved)} {report.consentPreserved === 1 ? "opt-out" : "opt-outs"} kept
         </p>
       ) : null}
@@ -51,8 +51,8 @@ export function CheckStep({ report, onImport }: CheckStepProps) {
           {visible.map((g) => (
             <div key={g.severity} className="flex flex-col gap-2">
               <div className="flex items-baseline justify-between px-1">
-                <h2 className={cn("text-[13px] font-medium", TONE[g.severity])}>{SEVERITY_LABEL[g.severity]}</h2>
-                <span className="tabular text-[11.5px] text-fg-subtle">{formatCount(grouped.find((x) => x.severity === g.severity)?.items.length ?? g.items.length)}</span>
+                <h2 className={cn("text-[12px] font-medium", TONE[g.severity])}>{SEVERITY_LABEL[g.severity]}</h2>
+                <span className="tabular text-[12px] text-fg-subtle">{formatCount(grouped.find((x) => x.severity === g.severity)?.items.length ?? g.items.length)}</span>
               </div>
               <Surface padding="none">
                 <ul className="divide-y divide-line">
@@ -99,11 +99,11 @@ const TONE: Record<Severity, string> ={ error: "text-perf-issue", warning: "text
 
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <Surface padding="sm" className="flex min-h-[84px] flex-col justify-between">
-      <span className="text-[12px] font-medium text-fg-muted">{label}</span>
+    <Surface padding="none" className="flex h-[92px] flex-col justify-between p-4">
+      <span className="text-[12px] font-medium text-fg-subtle">{label}</span>
       <span>
         <span className="tabular block text-[24px] font-semibold leading-none tracking-tight text-fg">{value}</span>
-        <span className="tabular mt-1 block min-h-[15px] truncate text-[11.5px] leading-[15px] text-fg-subtle">{sub ?? ""}</span>
+        <span className="tabular mt-1 block h-4 truncate text-[12px] leading-4 text-fg-subtle">{sub ?? ""}</span>
       </span>
     </Surface>
   );
@@ -111,13 +111,13 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
 
 function IssueLine({ i }: { i: RowIssue }) {
   return (
-    <li className="flex items-start gap-3 px-4 py-2.5">
-      <span className="tabular mt-0.5 w-11 shrink-0 text-[12px] text-fg-subtle">Row {lineOf(i.row)}</span>
+    <li className="flex min-h-14 items-center gap-3 px-4 py-2">
+      <span className="tabular w-12 shrink-0 text-[12px] leading-tight text-fg-subtle">Row {lineOf(i.row)}</span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-medium leading-tight text-fg">{i.header || "Row"}</span>
-        <span className="mt-0.5 flex items-baseline gap-2 text-[12.5px] leading-snug text-fg-muted">
+        <span className="block truncate text-[14px] font-medium leading-tight text-fg">{i.header || "Row"}</span>
+        <span className="mt-0.5 flex items-baseline gap-2 text-[12px] leading-tight text-fg-muted">
           <span className="shrink-0">{i.problem}</span>
-          {i.value ? <span className="min-w-0 truncate font-mono text-[11.5px] text-fg-subtle">{i.value}</span> : null}
+          {i.value ? <span className="min-w-0 truncate font-mono text-[11px] text-fg-subtle">{i.value}</span> : null}
         </span>
       </span>
     </li>

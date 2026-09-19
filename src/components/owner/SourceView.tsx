@@ -84,7 +84,8 @@ export function SourceView() {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2 text-[12px] text-fg-subtle">
         <StateChip state="unknown" label="Not verified" />
-        <span>Visual reading of a screenshot. Reported revenue basis unknown.</span>
+        <span>Visual reading, August 2026</span>
+        <span>Revenue basis unknown</span>
       </div>
 
       <Surface padding="none" className="overflow-hidden">
@@ -92,11 +93,11 @@ export function SourceView() {
           <table className="w-full min-w-[1180px] border-collapse">
             <thead>
               <tr>
-                <th scope="col" className="sticky left-0 z-10 bg-raised px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wide text-fg-subtle">
-                  August 2026
+                <th scope="col" className="sticky left-0 z-10 bg-raised px-3 py-2.5 text-left text-[12px] font-medium text-fg-subtle">
+                  Rep
                 </th>
                 {COLUMNS.map((col) => (
-                  <th key={col.key} scope="col" className={cn("px-3 py-2.5 text-[11px] font-medium uppercase tracking-wide text-fg-subtle whitespace-nowrap", col.align === "right" ? "text-right" : "text-left")}>
+                  <th key={col.key} scope="col" className={cn("px-3 py-2.5 text-[12px] font-medium text-fg-subtle whitespace-nowrap", col.align === "right" ? "text-right" : "text-left")}>
                     {col.label}
                   </th>
                 ))}
@@ -106,7 +107,7 @@ export function SourceView() {
               {tiers.map((tier) => (
                 <Fragment key={tier}>
                   <tr className="border-t border-line-strong">
-                    <th scope="rowgroup" colSpan={COLUMNS.length + 1} className="sticky left-0 bg-sunken px-3 py-1.5 text-left text-[11px] font-medium uppercase tracking-wide text-fg-subtle">
+                    <th scope="rowgroup" colSpan={COLUMNS.length + 1} className="sticky left-0 bg-sunken px-3 py-1.5 text-left text-[12px] font-medium text-fg-subtle">
                       Tier {tier}
                     </th>
                   </tr>
@@ -122,10 +123,10 @@ export function SourceView() {
       </Surface>
 
       <Surface padding="md" className="flex flex-col gap-1.5 border-dashed">
-        <div className="text-[11px] font-medium uppercase tracking-wide text-fg-subtle">Arithmetic scenario, not a forecast</div>
+        <div className="text-[12px] font-medium text-fg-subtle">Arithmetic scenario, not a forecast</div>
         <div className="tabular text-[24px] font-semibold leading-none text-fg">{formatMoneyMinor(Math.round(counterfactual.amountMinor), "USD", { cents: true })}</div>
         <div className="tabular text-[12px] text-fg-subtle">
-          {formatCount(highVolume.leads)} × ({formatMoneyMinor(ben.reportedRevenue.amountMinor, "USD")} / {formatCount(ben.leads)}), tier 1 rate applied to tier 2 volume
+          {formatCount(highVolume.leads)} × ({formatMoneyMinor(ben.reportedRevenue.amountMinor, "USD")} / {formatCount(ben.leads)}), tier 1 rate at tier 2 volume
         </div>
       </Surface>
     </div>

@@ -105,7 +105,7 @@ export function CashHero({ summary, policy = DEFAULT_TIER_POLICY }: CashHeroProp
 
   return (
     <Surface padding="none" as="section" aria-label="This month" className="overflow-hidden">
-      <div ref={bodyRef} className="relative p-5 sm:p-6">
+      <div ref={bodyRef} className="relative p-4 sm:p-5">
         {drops.length > 0 ? (
           <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
             <motion.div
@@ -145,7 +145,7 @@ export function CashHero({ summary, policy = DEFAULT_TIER_POLICY }: CashHeroProp
           initial={reduce ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease }}
-          className="relative flex flex-col gap-5"
+          className="relative flex flex-col gap-4"
         >
           <div className="flex items-start gap-4">
             <motion.div
@@ -153,11 +153,11 @@ export function CashHero({ summary, policy = DEFAULT_TIER_POLICY }: CashHeroProp
               animate={drops.length > 0 && !reduce ? { scale: [1, 1.18, 0.96, 1.06, 1], rotate: [0, -6, 5, -2, 0] } : { scale: 1, rotate: 0 }}
               transition={{ duration: 1.1, ease: "easeOut" }}
             >
-              <TierBadge tier={tier} size={72} />
+              <TierBadge tier={tier} size={64} />
             </motion.div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-subtle">This month</span>
+                <span className="text-[12px] font-medium text-fg-subtle">This month</span>
                 <span className="text-[12px] font-medium" style={{ color: tier.hue }}>
                   {tier.label}
                 </span>
@@ -168,15 +168,15 @@ export function CashHero({ summary, policy = DEFAULT_TIER_POLICY }: CashHeroProp
               {shown.hypothetical || preview ? (
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                   {shown.hypothetical ? (
-                    <span className="inline-flex h-5 items-center rounded-[4px] border border-dashed border-line-strong px-1.5 text-[11px] text-fg-muted">Hypothetical policy</span>
+                    <span className="inline-flex h-5 items-center rounded-[4px] border border-dashed border-line-strong px-1.5 text-[11px] font-medium text-fg-muted">Hypothetical policy</span>
                   ) : null}
-                  {preview ? <span className="inline-flex h-5 items-center rounded-[4px] border border-dashed border-line-strong px-1.5 text-[11px] text-fg-muted">Preview</span> : null}
+                  {preview ? <span className="inline-flex h-5 items-center rounded-[4px] border border-dashed border-line-strong px-1.5 text-[11px] font-medium text-fg-muted">Preview</span> : null}
                 </div>
               ) : null}
             </div>
           </div>
 
-          <div className="-mt-1 flex flex-wrap items-center gap-1.5" aria-label="Commission by state">
+          <div className="flex flex-wrap items-center gap-1.5" aria-label="Commission by state">
             <StatePill label="Accrued" value={money(shown.accruedMinor)} />
             <StatePill label="Eligible" value={money(shown.eligibleMinor)} />
             <StatePill label="Paid" value={money(shown.paidMinor)} />

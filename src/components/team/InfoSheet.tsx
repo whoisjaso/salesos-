@@ -15,12 +15,12 @@ export interface InfoSheetProps {
 /** Rules and guardrails behind one info icon. Every rule is declared before use (SOS-14, SOS-15). */
 export function InfoSheet({ open, onClose, policy, guardrails }: InfoSheetProps) {
   const rules: { title: string; body: string }[] = [
-    { title: "Metric", body: `${formatBasis(policy.basis)} per assigned opportunity.` },
-    { title: "Eligible", body: `Active, reconciled data, ${policy.minMaturedSample}+ matured.` },
-    { title: "Ties", body: "Same value, order by name." },
-    { title: "Paused when", body: "Unresolved attendance or unlinked payments." },
-    { title: "Appeals", body: "Every rep can inspect counted opportunities and request a correction." },
-    { title: "XP", body: "Verified stage events only. Never pay." },
+    { title: "Metric", body: `${formatBasis(policy.basis)} per assigned opportunity` },
+    { title: "Eligible", body: `Active, reconciled data, ${policy.minMaturedSample}+ matured` },
+    { title: "Ties", body: "Same value, order by name" },
+    { title: "Paused when", body: "Unresolved attendance or unlinked payments" },
+    { title: "Appeals", body: "Inspect counted opportunities, request a correction" },
+    { title: "XP", body: "Verified stage events only, never pay" },
   ];
   const counts: { label: string; value: string }[] = [
     { label: "Opt-outs", value: formatCount(guardrails.optOuts) },
@@ -37,16 +37,18 @@ export function InfoSheet({ open, onClose, policy, guardrails }: InfoSheetProps)
           </div>
         ))}
       </dl>
-      <h3 className="mt-6 mb-2 text-[12px] font-medium text-fg-subtle">Guardrails</h3>
+      <div className="mt-6 mb-2 flex items-baseline justify-between">
+        <h3 className="text-[12px] font-medium text-fg-subtle">Guardrails</h3>
+        <span className="text-[12px] text-fg-subtle">Rise pauses XP</span>
+      </div>
       <dl className="surface flex divide-x divide-line">
         {counts.map((c) => (
           <div key={c.label} className="flex flex-1 flex-col items-center gap-0.5 py-3">
             <dd className="tabular text-[17px] font-semibold text-fg">{c.value}</dd>
-            <dt className="text-[11.5px] text-fg-subtle">{c.label}</dt>
+            <dt className="text-[12px] text-fg-subtle">{c.label}</dt>
           </div>
         ))}
       </dl>
-      <p className="mt-2 text-[12px] text-fg-subtle">A rise pauses the game mechanic.</p>
     </Sheet>
   );
 }

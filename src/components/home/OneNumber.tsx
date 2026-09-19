@@ -34,7 +34,7 @@ const SEGMENT_TEXT: Record<PerformanceState, string> = {
 function StageBar({ segments, onOpen }: { segments: StageSegment[]; onOpen: (stageId: string) => void }) {
   const reduce = useReducedMotion();
   return (
-    <div role="group" aria-label="Stages this season" className="flex h-8 w-full gap-[3px]">
+    <div role="group" aria-label="Stages this season" className="flex h-7 w-full gap-[2px]">
       {segments.map((s, i) => (
         <motion.button
           key={s.stageId}
@@ -48,7 +48,7 @@ function StageBar({ segments, onOpen }: { segments: StageSegment[]; onOpen: (sta
           style={{
             flexGrow: Math.max(s.count, 0.001),
             flexBasis: 0,
-            minWidth: 30,
+            minWidth: 28,
             backgroundColor: SEGMENT_COLOR[s.state],
             color: SEGMENT_TEXT[s.state],
             transformOrigin: "left center",
@@ -56,8 +56,8 @@ function StageBar({ segments, onOpen }: { segments: StageSegment[]; onOpen: (sta
           className={cn(
             "tabular inline-grid place-items-center text-[11px] font-semibold leading-none",
             "transition-[filter] hover:brightness-125 active:brightness-110 motion-reduce:transition-none",
-            i === 0 && "rounded-l-full",
-            i === segments.length - 1 && "rounded-r-full",
+            i === 0 && "rounded-l-[6px]",
+            i === segments.length - 1 && "rounded-r-[6px]",
           )}
         >
           {s.count}
@@ -67,24 +67,26 @@ function StageBar({ segments, onOpen }: { segments: StageSegment[]; onOpen: (sta
   );
 }
 
-/** One number: net collected per opportunity, with its basis and the stage bar. */
+/** Per opportunity: one secondary number with its basis, and the stage bar. Tap a segment for the funnel. */
 export function OneNumber({ model, seasonLabel }: { model: TodayModel; seasonLabel: string }) {
   const [open, setOpen] = useState(false);
   const [focus, setFocus] = useState<string | null>(null);
   const { number } = model;
-  const cohort = model.role === "owner" ? "All assigned, whole tenant" : `${formatCount(number.opportunities)} assigned this season`;
+  const cohort = model.role === "owner" ? "All assigned" : `${formatCount(number.opportunities)} assigned`;
   const format = (v: number) => formatMoneyMinor(Math.round(v), number.currency, { cents: true });
   const focused = model.segments.find((s) => s.stageId === focus);
 
   return (
-    <Surface padding="lg" className="flex flex-col gap-5">
-      <div>
-        <div className="text-[13px] font-medium text-fg-muted">Per opportunity</div>
-        <div className="tabular mt-1 text-[44px] font-semibold leading-none tracking-tight text-fg sm:text-[52px]">
-          {number.perOpportunityMinor === null ? <span className="text-fg-muted">N/A</span> : <CountUp value={number.perOpportunityMinor} format={format} delay={0.1} />}
+    <Surface padding="md" className="flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[12px] font-medium text-fg-subtle">Per opportunity</div>
+          <div className="tabular mt-1 text-[24px] font-semibold leading-none tracking-tight text-fg">
+            {number.perOpportunityMinor === null ? <span className="text-fg-muted">N/A</span> : <CountUp value={number.perOpportunityMinor} format={format} delay={0.1} />}
+          </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="inline-flex h-6 items-center rounded-[4px] bg-accent-soft px-2 text-[12px] font-medium text-accent">{formatBasis(number.basis)}</span>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 pt-0.5">
+          <span className="inline-flex h-6 items-center rounded-sm bg-accent-soft px-2 text-[12px] font-medium text-accent">{formatBasis(number.basis)}</span>
           {!number.complete ? <StateChip state="partial" /> : null}
           <span className="tabular text-[12px] text-fg-subtle">{cohort}</span>
         </div>

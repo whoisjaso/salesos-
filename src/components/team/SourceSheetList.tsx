@@ -30,15 +30,15 @@ export function SourceSheetList() {
                 </span>
               </div>
               <div className="tabular mt-0.5 text-[12px] text-fg-subtle">
-                {formatCount(c.leads)} leads · {formatCount(c.wins)} won · {formatMoney(c.reportedRevenue)} reported
-                {c.anomaly ? <span className="text-perf-attention"> · {c.anomaly}</span> : null}
+                {formatCount(c.leads)} leads, {formatCount(c.wins)} won, {formatMoney(c.reportedRevenue)} reported
+                {c.anomaly ? <span className="text-perf-attention">, {c.anomaly}</span> : null}
               </div>
             </div>
             <div className="text-right">
               <div className="tabular text-[15px] font-semibold text-fg">
                 {d.revenuePerLeadMinor === null ? "N/A" : formatMoneyMinor(Math.round(d.revenuePerLeadMinor), "USD", { cents: true })}
               </div>
-              <div className="text-[10.5px] text-fg-subtle">reported per lead</div>
+              <div className="text-[11px] text-fg-subtle">Reported per lead</div>
             </div>
           </li>
         ))}

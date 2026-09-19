@@ -25,60 +25,64 @@ export interface SeasonHeroProps {
   descriptive: boolean;
 }
 
-/** Season card: label, days left, level ring and XP, rank or Provisional in one chip. */
+const CHIP = "inline-flex h-6 items-center gap-1.5 rounded-sm px-2 text-[12px] font-medium";
+
+/** Season card: the one hero on Team. Level ring, month, days left, XP line, rank or Provisional. */
 export function SeasonHero({ title, daysLeft, level, streakDays, pausedReasons = [], myRow, team = false, descriptive }: SeasonHeroProps) {
   const toNext = level.xpForNextLevel === null ? null : level.xpForNextLevel - level.xp;
   const paused = pausedReasons.length > 0;
   const tier = !team && myRow ? seasonTierFor(myRow.userId, rowRole(myRow)) : undefined;
 
   return (
-    <section aria-label="Season" className="surface flex items-center gap-4 p-4 sm:gap-6 sm:p-5">
+    <section aria-label="Season" className="surface flex items-center gap-4 p-4 sm:p-5">
       <span className="relative shrink-0">
-        <ProgressRing value={level.progress} size={84} strokeWidth={6} label={`${team ? "Team level" : "Level"} ${level.level}, ${Math.round(level.progress * 100)}% to next`} centerText={`L${level.level}`} className="[&>span]:text-[18px] [&>span]:font-semibold" />
+        <ProgressRing value={level.progress} size={72} strokeWidth={6} label={`${team ? "Team level" : "Level"} ${level.level}, ${Math.round(level.progress * 100)}% to next`} centerText={`L${level.level}`} className="[&>span]:text-[17px] [&>span]:font-semibold" />
         {tier ? (
-          <TierBadge tier={tier} size={26} tooltip={`${tier.label} tier, by net collected cash this season. Display only.`} className="absolute -right-1 -bottom-1 ring-2 ring-raised" />
+          <TierBadge tier={tier} size={24} tooltip={`${tier.label} tier, by net collected cash this season. Display only.`} className="absolute -right-1 -bottom-1 ring-2 ring-raised" />
         ) : null}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <h2 className="text-[17px] font-semibold tracking-tight text-fg">{title}</h2>
-          <span className="tabular text-[13px] text-fg-subtle">{daysLeft} days left</span>
+          <span className="tabular text-[12px] text-fg-subtle">{daysLeft} days left</span>
         </div>
-        <div className="tabular mt-1 text-[13px] text-fg-muted">
-          {team ? "Team, " : ""}
-          {formatCount(level.xp)} XP
-          {toNext !== null ? <span className="text-fg-subtle"> · {formatCount(toNext)} to next</span> : null}
+        <div className="tabular mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-fg-muted">
+          <span>
+            {team ? "Team, " : ""}
+            {formatCount(level.xp)} XP
+          </span>
+          {toNext !== null ? <span className="text-fg-subtle">{formatCount(toNext)} to next</span> : null}
           {streakDays > 0 ? (
-            <span className="ml-2 inline-flex items-center gap-0.5 text-fg-subtle">
-              <Flame size={13} weight="fill" aria-hidden />
+            <span className="inline-flex items-center gap-0.5 text-fg-subtle">
+              <Flame size={12} weight="fill" aria-hidden />
               {streakDays}
             </span>
           ) : null}
         </div>
         {team && !paused ? null : (
-          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {!team ? (
               myRow ? (
                 myRow.rank !== null ? (
-                  <span className="tabular inline-flex h-7 items-center gap-1.5 rounded-sm bg-accent-soft px-2.5 text-[13px] font-semibold text-accent">
+                  <span className={`${CHIP} tabular bg-accent-soft text-accent`}>
                     #{myRow.rank}
                     {descriptive ? <span className="font-medium text-fg-subtle">descriptive</span> : null}
                   </span>
                 ) : (
                   <Tooltip content={myRow.provisionalReason ?? "Provisional"}>
-                    <span tabIndex={0} className="inline-flex h-7 items-center gap-1.5 rounded-sm border border-dashed border-line-strong px-2.5 text-[12.5px] font-medium text-fg-muted">
+                    <span tabIndex={0} className={`${CHIP} border border-dashed border-line-strong text-fg-muted`}>
                       <HourglassMedium size={13} weight="bold" aria-hidden />
                       Provisional
                     </span>
                   </Tooltip>
                 )
               ) : (
-                <span className="text-[12.5px] text-fg-subtle">No row this season</span>
+                <span className="text-[12px] text-fg-subtle">No row this season</span>
               )
             ) : null}
             {paused ? (
               <Tooltip content={pausedReasons.join("; ")}>
-                <span tabIndex={0} className="inline-flex h-7 items-center gap-1.5 rounded-sm border border-[color:var(--perf-attention-line)] px-2.5 text-[12.5px] font-medium text-perf-attention">
+                <span tabIndex={0} className={`${CHIP} border border-[color:var(--perf-attention-line)] text-perf-attention`}>
                   <PauseCircle size={13} weight="bold" aria-hidden />
                   Paused
                 </span>

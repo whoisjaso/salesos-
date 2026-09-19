@@ -44,8 +44,8 @@ export function PlaybooksView({ sops, boundaries }: PlaybooksViewProps) {
       </motion.div>
 
       <section aria-labelledby="adapt-heading" className="mt-10">
-        <h2 id="adapt-heading" className="mb-3 text-[13px] font-medium text-fg-subtle">
-          What adapts and what never adapts
+        <h2 id="adapt-heading" className="mb-3 text-[12px] font-medium text-fg-subtle">
+          Boundaries
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Surface padding="md">
@@ -88,7 +88,7 @@ export function PlaybooksView({ sops, boundaries }: PlaybooksViewProps) {
         animate={{ opacity: 1 }}
         transition={enter}
       >
-        <h2 id="history-heading" className="mb-3 text-[13px] font-medium text-fg-subtle">
+        <h2 id="history-heading" className="mb-3 text-[12px] font-medium text-fg-subtle">
           Version history
         </h2>
         <ol className="flex flex-col divide-y divide-line rounded-md border border-line bg-raised">

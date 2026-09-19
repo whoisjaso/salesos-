@@ -11,7 +11,7 @@ export function ActionLibrary() {
   const [openId, setOpenId] = useState<string | null>(null);
   return (
     <section aria-label="Stage library">
-      <div className="mb-2 text-[12px] text-fg-subtle">Investigate before blaming the rep</div>
+      <div className="mb-2 text-[12px] font-medium text-fg-subtle">Stage library, investigate first</div>
       <ol className="surface divide-y divide-line px-4">
         {STAGE_ACTION_LIBRARY.map((s, i) => {
           const id = `${s.metricId}-${i}`;
