@@ -5,13 +5,17 @@
  * intelligence, not a third-party notetaker").
  *
  * Rules baked in:
- * - The model proposes; the policy engine moves the stage. Reps can dispute any field.
+ * - The transcript decides (D: "The transcript decides. No rep approval."). Every call is
+ *   scored per stage (contacted, qualified, buying, bought) as a probability with a band.
+ *   Stages move automatically when the score clears the band; below it the stage is
+ *   recorded as leaning. Reps never confirm; dispute stays as the escape hatch.
  * - An assertion without a span is invalid. "unknown" / "none" are the only span-free values.
  * - The model may not establish money or consent facts (price, discount, consent, payment).
  * - The policy never emits payment, consent, or attendance events. Those come from providers.
  * - Transcript text is data. Nothing in it can authorize an action.
  */
 import { createEvent } from "./events";
+import { buildSystemPrompt, type LensPack } from "./lens";
 import type { Call, CallInterpretedOutcome, DomainEvent, FitValue, Id, ISODateTime, Opportunity, Task } from "./types";
 
 // ---------- Schema ----------
@@ -45,6 +49,48 @@ export interface Objection {
   spans: TranscriptSpan[];
 }
 
+/** Probability per funnel stage, 0..1. Monotone: a later stage never scores above an earlier one. */
+export interface StageScores {
+  contacted: number;
+  qualified: number;
+  buying: number;
+  bought: number;
+}
+
+export type StageKey = keyof StageScores;
+export const STAGE_KEYS: StageKey[] = ["contacted", "qualified", "buying", "bought"];
+
+export type Band = "yes" | "likely" | "unlikely" | "no";
+
+/** Owner-configurable thresholds. A score at or above a threshold earns that band. */
+export interface BandPolicy {
+  yes: number;
+  likely: number;
+  unlikely: number;
+  version: string;
+}
+
+export const DEFAULT_BAND_POLICY: BandPolicy = { yes: 0.8, likely: 0.63, unlikely: 0.4, version: "bands-1.0" };
+
+export function bandFor(p: number, policy: BandPolicy = DEFAULT_BAND_POLICY): Band {
+  if (!Number.isFinite(p)) return "no";
+  if (p >= policy.yes) return "yes";
+  if (p >= policy.likely) return "likely";
+  if (p >= policy.unlikely) return "unlikely";
+  return "no";
+}
+
+export const BAND_LABEL: Record<Band, string> = { yes: "Yes", likely: "Likely", unlikely: "Unlikely", no: "No" };
+
+/** One angle for the rep, through the lens pack. Cites the moment it comes from. */
+export interface Feedback {
+  angle: string;
+  hint: string;
+  spans: TranscriptSpan[];
+}
+
+export const MAX_FEEDBACK = 3;
+
 export interface CallExtraction {
   callId: Id;
   opportunityId: Id;
@@ -59,6 +105,13 @@ export interface CallExtraction {
   fitFacts: Record<string, { value: FitValue; spans: TranscriptSpan[] }>;
   unknowns: string[];
   uncertainty: "low" | "medium" | "high";
+  stageScores: StageScores;
+  /** Every score above 0 cites at least one span here. */
+  stageEvidence: Record<StageKey, TranscriptSpan[]>;
+  /** At most MAX_FEEDBACK angles, each citing spans. */
+  feedback: Feedback[];
+  /** The lens pack version the extraction was made through, when a model ran. */
+  lensVersion?: string;
 }
 
 export const EXTRACTION_SCHEMA_VERSION = 1 as const;
@@ -129,6 +182,24 @@ export function validateExtraction(x: CallExtraction): ValidationResult {
     else if (fact.value !== "unknown" && !spansOk(fact.spans)) errors.push(`fitFacts.${key} "${fact.value}" asserted without a transcript span`);
   }
   if (!Array.isArray(x.unknowns)) errors.push("unknowns must be an array");
+
+  if (!x.stageScores || typeof x.stageScores !== "object") errors.push("stageScores is required");
+  else {
+    for (const key of STAGE_KEYS) {
+      const p = x.stageScores[key];
+      if (typeof p !== "number" || !Number.isFinite(p) || p < 0 || p > 1) errors.push(`stageScores.${key} must be a number from 0 to 1`);
+      else if (p > 0 && !spansOk(x.stageEvidence?.[key])) errors.push(`stageScores.${key} ${p} asserted without a transcript span`);
+    }
+  }
+  if (!Array.isArray(x.feedback)) errors.push("feedback must be an array");
+  else {
+    if (x.feedback.length > MAX_FEEDBACK) errors.push(`feedback has more than ${MAX_FEEDBACK} angles`);
+    x.feedback.forEach((f, i) => {
+      if (!f?.angle?.trim() || !f?.hint?.trim()) errors.push(`feedback[${i}] needs an angle and a hint`);
+      if (!spansOk(f?.spans)) errors.push(`feedback[${i}] asserted without a transcript span`);
+      if (FORBIDDEN_EXTRACTION_FIELD.test(`${f?.angle ?? ""} ${f?.hint ?? ""}`) && /\$|\d+\s*%|\d{3,}/.test(`${f?.angle ?? ""} ${f?.hint ?? ""}`)) errors.push(`feedback[${i}] states a money or consent term; the model may not establish it`);
+    });
+  }
   return { ok: errors.length === 0, errors };
 }
 
@@ -158,6 +229,45 @@ const COMMITMENT = /\b(i'll|i will|we'll|we will|i can|let me)\s+(send|call|emai
 const OBJECTION = /\b(too expensive|not sure|concern|worried|hesitant|busy right now|bad time|we tried (something|this) before|skeptical|doesn't work for us)\b/i;
 const RESOLVED = /\b(that makes sense|fair enough|sounds good|okay that works|that helps|good to know|understood)\b/i;
 const NEGATION = /\b(no|not|don't|do not|doesn't|never|without)\b/i;
+/** Customer asks about cost or timing to start: a buying signal, not a purchase. */
+const BUY_INTENT = /\b(what does it cost|how much|what's the price|get started|move forward|when can we start|which store (would|do) (we|i) start|ready to go)\b/i;
+/** Explicit purchase words. Only count as bought together with a commitment to pay. */
+const PURCHASE = /\b(send (me |us )?(the |an? )?(agreement|contract)|(my |the )?card\b|\bpay\b|sign(ed|ing)? (it|the|up|today)|let's do it|we're in|i'm in)\b/i;
+const PAY_COMMIT = /\b((i'll|i will|we'll|we will|let me)\s+(pay|sign|send (the |a )?(card|deposit|payment))|ready to (pay|sign)|take my card|run the card|put it on (my|the) card)\b/i;
+
+const clamp01 = (n: number) => Math.max(0, Math.min(1, Math.round(n * 100) / 100));
+
+function uniqueSpans(spans: TranscriptSpan[]): TranscriptSpan[] {
+  const seen = new Set<string>();
+  return spans.filter((s) => {
+    const k = `${s.startMs}-${s.endMs}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+/** A later stage never scores above an earlier one, and an earlier stage inherits the later one's evidence. */
+function monotone(scores: StageScores, evidence: Record<StageKey, TranscriptSpan[]>): { stageScores: StageScores; stageEvidence: Record<StageKey, TranscriptSpan[]> } {
+  const out = { ...scores };
+  const ev: Record<StageKey, TranscriptSpan[]> = { contacted: [...evidence.contacted], qualified: [...evidence.qualified], buying: [...evidence.buying], bought: [...evidence.bought] };
+  for (let i = STAGE_KEYS.length - 2; i >= 0; i--) {
+    const earlier = STAGE_KEYS[i];
+    const later = STAGE_KEYS[i + 1];
+    if (out[later] > out[earlier]) {
+      out[earlier] = out[later];
+      ev[earlier] = uniqueSpans([...ev[earlier], ...ev[later]]);
+    }
+  }
+  for (const key of STAGE_KEYS) {
+    if (out[key] <= 0) ev[key] = [];
+    else if (ev[key].length === 0) out[key] = 0;
+  }
+  return { stageScores: out, stageEvidence: ev };
+}
+
+export const EMPTY_STAGE_SCORES: StageScores = { contacted: 0, qualified: 0, buying: 0, bought: 0 };
+export const EMPTY_STAGE_EVIDENCE: Record<StageKey, TranscriptSpan[]> = { contacted: [], qualified: [], buying: [], bought: [] };
 
 function stakeholderRole(text: string): string {
   const t = text.toLowerCase();
@@ -265,6 +375,78 @@ export class RuleBasedCallIntelligence implements CallIntelligence {
       fitFacts[key] = { value: negated ? "no" : "yes", spans: hits };
     }
 
+    // ----- Stage scores, deterministic and cited. -----
+    const scores: StageScores = { ...EMPTY_STAGE_SCORES };
+    const evidence: Record<StageKey, TranscriptSpan[]> = { contacted: [], qualified: [], buying: [], bought: [] };
+    const customerSaid = spans.filter((s) => s.speaker !== "rep");
+
+    if (conversational) {
+      const exchanges = labeled ? customerTurns.length : spans.length;
+      scores.contacted = exchanges >= 2 ? 0.9 : 0.7;
+      evidence.contacted = outcome.spans;
+
+      // Qualified: fit facts the customer stated, a real next step, a customer commitment, objections handled.
+      let q = 0;
+      const qEv: TranscriptSpan[] = [];
+      for (const f of Object.values(fitFacts)) {
+        if (f.value === "yes") { q += 0.3; qEv.push(...f.spans); }
+        else if (f.value === "no") { q -= 0.2; qEv.push(...f.spans); }
+      }
+      if (nextStep.value === "book") { q += 0.4; qEv.push(...nextStep.spans); }
+      else if (nextStep.value === "proposal") { q += 0.25; qEv.push(...nextStep.spans); }
+      else if (nextStep.value === "callback") { q += 0.1; qEv.push(...nextStep.spans); }
+      const customerCommitments = commitments.filter((c) => c.owner === "customer");
+      if (customerCommitments.length > 0) { q += 0.15; qEv.push(...customerCommitments[0].spans); }
+      for (const o of objections) { q += o.resolved ? 0.1 : -0.1; qEv.push(...o.spans); }
+      if (nextStep.value === "dq_review") q = 0;
+      scores.qualified = clamp01(Math.min(q, 0.95));
+      evidence.qualified = uniqueSpans(qEv);
+
+      // Buying: a commitment plus a next step toward the purchase (book or proposal), or asking what it takes to start.
+      let b = 0;
+      const bEv: TranscriptSpan[] = [];
+      if (nextStep.value === "book") { b += 0.45; bEv.push(...nextStep.spans); }
+      else if (nextStep.value === "proposal") { b += 0.35; bEv.push(...nextStep.spans); }
+      if (customerCommitments.length > 0 && b > 0) { b += 0.2; bEv.push(...customerCommitments[0].spans); }
+      const intent = customerSaid.filter((s) => BUY_INTENT.test(s.text));
+      if (intent.length > 0) { b += 0.25; bEv.push(...intent); }
+      for (const o of objections) if (!o.resolved) { b -= 0.15; bEv.push(...o.spans); }
+      if (nextStep.value === "dq_review") b = 0;
+      scores.buying = clamp01(Math.min(b, 0.95));
+      evidence.buying = uniqueSpans(bEv);
+
+      // Bought: explicit purchase words only count with a commitment to pay, both from the customer.
+      const purchase = customerSaid.filter((s) => PURCHASE.test(s.text));
+      const payCommit = customerSaid.filter((s) => PAY_COMMIT.test(s.text));
+      if (purchase.length > 0 && payCommit.length > 0) {
+        scores.bought = 0.85;
+        evidence.bought = uniqueSpans([...purchase, ...payCommit]);
+      } else if (purchase.length > 0) {
+        scores.bought = 0.3;
+        evidence.bought = purchase;
+      }
+    } else if (outcome.value === "voicemail" || outcome.value === "wrong_contact") {
+      // A dial happened; nothing else did. Low, not zero, and cited.
+      scores.contacted = 0.1;
+      evidence.contacted = outcome.spans;
+    }
+    const { stageScores, stageEvidence } = monotone(scores, evidence);
+
+    // ----- Feedback: three angles at most, each tied to a moment. No lens: the rules have none. -----
+    const feedback: Feedback[] = [];
+    for (const o of objections) {
+      if (feedback.length >= MAX_FEEDBACK) break;
+      if (!o.resolved) feedback.push({ angle: "An objection was left open", hint: "Name it back in their words before the next step, and ask what would settle it.", spans: o.spans });
+    }
+    for (const st of stakeholders) {
+      if (feedback.length >= MAX_FEEDBACK) break;
+      feedback.push({ angle: `A ${stakeholderRole(st.spans[0]?.text ?? "").replace(/_/g, " ")} decides with them`, hint: "Ask what that person needs to see, and offer to bring it to the next call.", spans: st.spans });
+    }
+    const unknownFit = Object.entries(fitFacts).filter(([, f]) => f.value === "unknown").map(([k]) => k);
+    if (feedback.length < MAX_FEEDBACK && unknownFit.length > 0 && conversational && evidence.contacted.length > 0) {
+      feedback.push({ angle: `${unknownFit.length} fit ${unknownFit.length === 1 ? "fact" : "facts"} still unknown`, hint: `Ask about ${unknownFit.map((k) => k.replace(/_/g, " ")).join(", ")} before the next step.`, spans: evidence.contacted.slice(0, 1) });
+    }
+
     // Unknown fit facts and an unknown next step are honest unknowns, not doubt about the
     // outcome. Uncertainty describes how sure the outcome assertion is.
     return {
@@ -281,6 +463,9 @@ export class RuleBasedCallIntelligence implements CallIntelligence {
       fitFacts,
       unknowns,
       uncertainty,
+      stageScores,
+      stageEvidence,
+      feedback,
     };
   }
 }
@@ -306,8 +491,165 @@ export class StubCallIntelligence implements CallIntelligence {
       fitFacts,
       unknowns: ["outcome", "nextStep", ...input.offerFitKeys],
       uncertainty: "high",
+      stageScores: { ...EMPTY_STAGE_SCORES },
+      stageEvidence: { contacted: [], qualified: [], buying: [], bought: [] },
+      feedback: [],
     };
   }
+}
+
+// ---------- Model-backed extractor (provider-agnostic) ----------
+
+/** Any reasoning model. No SDK here: the adapter that implements this owns the network. */
+export interface ReasoningModel {
+  complete(input: { system: string; user: string; schema: object }): Promise<unknown>;
+}
+
+export interface AsyncCallIntelligence {
+  extract(input: ExtractInput): Promise<CallExtraction>;
+}
+
+const SPAN_SCHEMA = {
+  type: "object",
+  required: ["startMs", "endMs", "text"],
+  properties: { startMs: { type: "number" }, endMs: { type: "number" }, text: { type: "string" }, speaker: { enum: ["customer", "rep", "unknown"] } },
+};
+const SPANS = { type: "array", items: SPAN_SCHEMA };
+
+/** JSON schema for the model's output. The wrapper fills callId, opportunityId, versions. */
+export const EXTRACTION_JSON_SCHEMA = {
+  type: "object",
+  required: ["outcome", "commitments", "stakeholders", "objections", "nextStep", "fitFacts", "unknowns", "uncertainty", "stageScores", "stageEvidence", "feedback"],
+  properties: {
+    outcome: { type: "object", required: ["value", "spans"], properties: { value: { enum: ["no_answer", "voicemail", "wrong_contact", "meaningful_interaction", "unknown"] }, spans: SPANS } },
+    commitments: { type: "array", items: { type: "object", required: ["text", "owner", "spans"], properties: { text: { type: "string" }, owner: { enum: ["customer", "rep"] }, dueAt: { type: "string" }, spans: SPANS } } },
+    stakeholders: { type: "array", items: { type: "object", required: ["role", "spans"], properties: { name: { type: "string" }, role: { type: "string" }, spans: SPANS } } },
+    objections: { type: "array", items: { type: "object", required: ["text", "resolved", "spans"], properties: { text: { type: "string" }, resolved: { type: "boolean" }, spans: SPANS } } },
+    nextStep: { type: "object", required: ["value", "spans"], properties: { value: { enum: ["book", "callback", "proposal", "dq_review", "none"] }, spans: SPANS } },
+    fitFacts: { type: "object", additionalProperties: { type: "object", required: ["value", "spans"], properties: { value: { enum: ["yes", "no", "partial", "unknown"] }, spans: SPANS } } },
+    unknowns: { type: "array", items: { type: "string" } },
+    uncertainty: { enum: ["low", "medium", "high"] },
+    stageScores: { type: "object", required: STAGE_KEYS, properties: Object.fromEntries(STAGE_KEYS.map((k) => [k, { type: "number", minimum: 0, maximum: 1 }])) },
+    stageEvidence: { type: "object", required: STAGE_KEYS, properties: Object.fromEntries(STAGE_KEYS.map((k) => [k, SPANS])) },
+    feedback: { type: "array", maxItems: MAX_FEEDBACK, items: { type: "object", required: ["angle", "hint", "spans"], properties: { angle: { type: "string" }, hint: { type: "string" }, spans: SPANS } } },
+  },
+} as const;
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Reads the model's JSON into the fixed schema. Fields the model may never establish
+ * (money, consent, payment) are stripped to unknowns before validation. Anything
+ * structurally off is left for validateExtraction to reject.
+ */
+function coerceModelOutput(raw: unknown, input: ExtractInput, modelVersion: string, promptVersion: string, lensVersion: string): CallExtraction | undefined {
+  const r = typeof raw === "string" ? safeJson(raw) : raw;
+  if (!isRecord(r)) return undefined;
+  const fitFacts: CallExtraction["fitFacts"] = {};
+  const unknowns = Array.isArray(r.unknowns) ? r.unknowns.filter((u): u is string => typeof u === "string") : [];
+  if (isRecord(r.fitFacts)) {
+    for (const [key, fact] of Object.entries(r.fitFacts)) {
+      if (FORBIDDEN_EXTRACTION_FIELD.test(key)) { if (!unknowns.includes(key)) unknowns.push(key); continue; }
+      fitFacts[key] = fact as CallExtraction["fitFacts"][string];
+    }
+  }
+  for (const key of input.offerFitKeys) {
+    if (FORBIDDEN_EXTRACTION_FIELD.test(key)) { if (!unknowns.includes(key)) unknowns.push(key); continue; }
+    if (!fitFacts[key]) { fitFacts[key] = { value: "unknown", spans: [] }; if (!unknowns.includes(key)) unknowns.push(key); }
+  }
+  const commitments = (Array.isArray(r.commitments) ? r.commitments : []).filter((c) => isRecord(c) && !(FORBIDDEN_EXTRACTION_FIELD.test(String(c.text ?? "")) && /\$|\d/.test(String(c.text ?? "")))) as Commitment[];
+  const stageScores = isRecord(r.stageScores) ? (Object.fromEntries(STAGE_KEYS.map((k) => [k, r.stageScores && isRecord(r.stageScores) ? r.stageScores[k] : undefined])) as unknown as StageScores) : ({} as StageScores);
+  const stageEvidence = isRecord(r.stageEvidence) ? (Object.fromEntries(STAGE_KEYS.map((k) => [k, (r.stageEvidence as Record<string, unknown>)[k] ?? []])) as Record<StageKey, TranscriptSpan[]>) : { contacted: [], qualified: [], buying: [], bought: [] };
+  return {
+    callId: input.callId,
+    opportunityId: input.opportunityId,
+    modelVersion,
+    promptVersion,
+    schemaVersion: EXTRACTION_SCHEMA_VERSION,
+    outcome: r.outcome as CallExtraction["outcome"],
+    commitments,
+    stakeholders: (Array.isArray(r.stakeholders) ? r.stakeholders : []) as Stakeholder[],
+    objections: (Array.isArray(r.objections) ? r.objections : []) as Objection[],
+    nextStep: r.nextStep as CallExtraction["nextStep"],
+    fitFacts,
+    unknowns,
+    uncertainty: r.uncertainty as CallExtraction["uncertainty"],
+    stageScores,
+    stageEvidence,
+    feedback: (Array.isArray(r.feedback) ? r.feedback.slice(0, MAX_FEEDBACK) : []) as Feedback[],
+    lensVersion,
+  };
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Runs any reasoning model through the lens pack. The model's JSON is validated
+ * against the CallExtraction shape; on any rejection the rules extractor answers
+ * instead, so a bad model output never reaches the policy. Money, consent, and
+ * attendance fields are never taken from the model.
+ */
+export class ModelCallIntelligence implements AsyncCallIntelligence {
+  static readonly PROMPT_VERSION = "lens-prompt-1.0";
+  private readonly system: string;
+  private readonly fallback = new RuleBasedCallIntelligence();
+
+  constructor(private readonly model: ReasoningModel, private readonly lens: LensPack, private readonly modelVersion = "model") {
+    this.system = buildSystemPrompt(lens);
+  }
+
+  /** The exact system prompt sent, for evals and audits. */
+  get systemPrompt(): string {
+    return this.system;
+  }
+
+  async extract(input: ExtractInput): Promise<CallExtraction> {
+    const user = JSON.stringify({ callId: input.callId, offerFitKeys: input.offerFitKeys, transcript: input.transcript });
+    let raw: unknown;
+    try {
+      raw = await this.model.complete({ system: this.system, user, schema: EXTRACTION_JSON_SCHEMA });
+    } catch {
+      return this.fallbackWith(input, "model call failed");
+    }
+    const coerced = coerceModelOutput(raw, input, this.modelVersion, ModelCallIntelligence.PROMPT_VERSION, this.lens.version);
+    if (!coerced) return this.fallbackWith(input, "model output was not an object");
+    const v = validateExtraction(coerced);
+    if (!v.ok) return this.fallbackWith(input, `model output rejected: ${v.errors.join("; ")}`);
+    return coerced;
+  }
+
+  private fallbackWith(input: ExtractInput, reason: string): CallExtraction {
+    const x = this.fallback.extract(input);
+    return { ...x, unknowns: [...x.unknowns, `fallback: ${reason}`], lensVersion: this.lens.version };
+  }
+}
+
+/** A canned model for tests. Returns whatever it was given, or throws when asked to. */
+export class FakeReasoningModel implements ReasoningModel {
+  public calls: { system: string; user: string; schema: object }[] = [];
+
+  constructor(private readonly response: unknown | ((input: { system: string; user: string }) => unknown), private readonly fail = false) {}
+
+  async complete(input: { system: string; user: string; schema: object }): Promise<unknown> {
+    this.calls.push(input);
+    if (this.fail) throw new Error("fake model failure");
+    return typeof this.response === "function" ? (this.response as (i: { system: string; user: string }) => unknown)(input) : this.response;
+  }
+}
+
+/** A valid model-shaped output (without ids and versions) built from a rules extraction, for tests and fixtures. */
+export function modelOutputFrom(x: CallExtraction): Record<string, unknown> {
+  const { callId: _c, opportunityId: _o, modelVersion: _m, promptVersion: _p, schemaVersion: _s, lensVersion: _l, ...rest } = x;
+  void _c; void _o; void _m; void _p; void _s; void _l;
+  return rest;
 }
 
 // ---------- Policy ----------
