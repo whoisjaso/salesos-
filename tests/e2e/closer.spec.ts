@@ -69,44 +69,68 @@ test.describe("Closer: Marcus", () => {
     await details.getByRole("button", { name: "Close", exact: true }).click();
     await expect(details).toHaveCount(0);
 
-    await brief.getByRole("button", { name: "Ask for clarification" }).click();
-    await expect(brief.getByRole("button", { name: "Clarification requested" })).toBeDisabled();
+    // The ask names who it reaches. Never a bare "Ask for clarification" with no recipient.
+    const ask = brief.getByTestId("brief-ask");
+    await expect(ask).toHaveText(/^(Ask the setter, \w+|Add missing context)$/);
+    const asked = (await ask.innerText()).startsWith("Ask the setter") ? /^Asked \w+$/ : /^Context added$/;
+    await ask.click();
+    await expect(ask).toHaveText(asked);
+    await expect(ask).toBeDisabled();
     await closeSheet(page);
   });
 
-  test("brief opens on the read and the approach; the dimensions and their cited words are behind Details", async ({ page }) => {
+  test("brief leads with the suggested approach; the read, its labels and its percentages are one tap in", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "Brief" }).click();
     const brief = sheet(page, "Brief");
     await expect(brief).toBeVisible();
     const section = brief.getByTestId("buyer-mode");
     await expect(section).toBeVisible();
-    // The read: "They value" over one value word, never a lens name as the hero, never the word "type".
-    const read = section.getByTestId("read-block");
-    await expect(read.getByText("They value")).toBeVisible();
-    await expect(read.getByTestId("read-value")).toBeVisible();
+    // The first thing in the sheet is what to do, not a word about the customer.
+    await expect(brief.locator("[data-testid]").first()).toHaveAttribute("data-testid", "buyer-mode");
+    const approach = section.getByTestId("suggested-approach");
+    await expect(approach.getByText("Suggested approach")).toBeVisible();
+    await expect(approach.getByTestId("approach-caveat")).toContainText("tentative");
+    await expect(approach.getByTestId("approach-caveat")).toContainText("earlier conversation");
+    // No percentage, no archetype label, no value word headlining the brief.
+    await expect(brief).not.toContainText("%");
+    await expect(brief).not.toContainText("They value");
+    await expect(brief.getByTestId("read-value")).toHaveCount(0);
     await expect(section).not.toContainText(/\btype\b/i);
     await expect(section).not.toContainText(/archetype/i);
-    // The read block is the first thing in the sheet.
-    await expect(brief.locator("[data-testid]").first()).toHaveAttribute("data-testid", "buyer-mode");
 
-    const hasRows = (await section.getByTestId("approach").count()) > 0;
-    if (hasRows) {
+    const hasRead = (await approach.getByTestId("approach").count()) > 0;
+    if (hasRead) {
       // Marcus's next appointment has a transcript (call_089c): numbers first, a fast decision, a partner in the room.
-      const approach = section.getByTestId("approach");
-      await expect(approach).toContainText("Lead with the numbers");
-      expect(await approach.getByRole("listitem").count()).toBeLessThanOrEqual(3);
-      // The read: the value word is a plain word, the lens label sits beneath with a percentage; details list all twelve.
-      await expect(read.getByTestId("read-top")).toHaveText(/^[A-Z][a-z]+ · \d{1,2}%$/);
-      await read.getByRole("button").click();
-      await expect(read.getByTestId("read-row")).toHaveCount(12);
-      await expect(read.getByText("what we believe, and how strongly")).toBeVisible();
-      await expect(read.getByText("No signal", { exact: true }).first()).toBeVisible();
-      await read.getByRole("button").first().click();
+      await expect(approach.getByTestId("approach-lead")).toHaveText("Lead with the numbers");
+      expect(await approach.getByTestId("approach").getByRole("listitem").count()).toBeLessThanOrEqual(2);
 
-      // The dimensions live behind Details.
+      // The read is one tap in, and nothing about it was deleted.
       await brief.getByTestId("brief-details-row").click();
       const details = sheet(page, "Details");
+      const read = details.getByTestId("brief-read");
+      await expect(read.getByText("The read behind it")).toBeVisible();
+      await expect(read.getByText("They value")).toBeVisible();
+      await expect(read.getByTestId("read-value")).toHaveText("Proof");
+      await expect(read.getByTestId("read-top")).toHaveText(/^[A-Z][a-z]+ \u00b7 \d{1,2}%$/);
+      // The sentence that says what that percentage is, right above the list it belongs to.
+      await expect(read.getByTestId("read-meaning")).toContainText("how strongly we read this signal in the customer's own words");
+      await expect(read.getByTestId("read-meaning")).toContainText("not a score for the person");
+      await expect(read.getByTestId("read-row")).toHaveCount(12);
+      await expect(read.getByText("No signal", { exact: true }).first()).toBeVisible();
+      await expect(read.getByText(/\d{1,2}% (High|Medium|Low)/).first()).toBeVisible();
+
+      // A cited word opens the passage it came from, with that turn highlighted.
+      const quote = read.getByTestId("quote-open").first();
+      const words = (await quote.innerText()).replace(/[\u201C\u201D]/g, "").trim();
+      await quote.click();
+      const passage = read.getByTestId("quote-passage").first();
+      await expect(passage).toBeVisible();
+      await expect(passage.locator('[data-cited="true"]')).toHaveCount(1);
+      await expect(passage.locator('[data-cited="true"]')).toContainText(words);
+      await expect(passage).toContainText("Svetlana Esposito");
+
+      // The dimensions live in the same sheet, each with its own cited words.
       const dims = details.getByTestId("buyer-mode-dimensions");
       await expect(dims.getByText("Buyer mode", { exact: true })).toBeVisible();
       const rows = dims.getByTestId("buyer-mode-row");
@@ -115,8 +139,7 @@ test.describe("Closer: Marcus", () => {
       await expect(rows.first()).toContainText(/^[A-Z][a-z ]+: [A-Z][a-z]+/);
       await expect(rows.first().getByTestId("confidence-dot")).toHaveAttribute("aria-label", /Confident|Low confidence/);
       await expect(dims.getByText("Evidence preference: Quantitative")).toBeVisible();
-      // Tap a row: the cited words appear with the brief's Customer-stated tag.
-      await rows.first().getByRole("button").click();
+      await rows.first().getByRole("button").first().click();
       const cited = rows.first().getByTestId("cited-words");
       await expect(cited).toBeVisible();
       await expect(cited.getByText("Customer-stated").first()).toBeVisible();
@@ -124,8 +147,8 @@ test.describe("Closer: Marcus", () => {
       await details.getByRole("button", { name: "Close", exact: true }).click();
       await expect(details).toHaveCount(0);
     } else {
+      await expect(approach.getByTestId("approach-lead")).toHaveText("No suggestion yet");
       await expect(section.getByTestId("buyer-mode-empty")).toHaveText("No signal yet");
-      await expect(read.getByTestId("read-value")).toHaveText("No signal yet");
     }
     await closeSheet(page);
   });

@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  APPROACH_TENTATIVE_SENTENCE,
   BUYER_MODE_DIMENSIONS,
   BUYER_MODE_VERSION,
   CONFIDENT,
   MAX_APPROACH,
   MAX_ARCHETYPE_READ,
+  NO_APPROACH_WORD,
+  READ_MEASURE_SENTENCE,
+  SUGGESTED_APPROACH_KICKER,
   UNKNOWN_VALUE,
   VALUE_WORD,
   approachFor,
@@ -357,5 +361,32 @@ describe("lens prompt", () => {
     expect(prompt).toMatch(/Never substitute another analogy or a generic synonym/);
     expect(prompt).toMatch(/Repetition raises the weight; first mention already counts/);
     expect(prompt).toMatch(/archetypeRead/);
+  });
+});
+
+describe("words that stop a percentage from reading as a verdict", () => {
+  it("the read sentence says what the percentage measures and never claims anything about the person", () => {
+    // The owner's complaint: "Competence 45%" alone invites "45% of what?", worst case a claim
+    // about the customer's competence. The sentence that travels with it has to rule that out.
+    expect(READ_MEASURE_SENTENCE).toMatch(/percentage is how strongly/i);
+    expect(READ_MEASURE_SENTENCE).toMatch(/customer'?s own words/i);
+    expect(READ_MEASURE_SENTENCE).toMatch(/not a score for the person/i);
+    expect(READ_MEASURE_SENTENCE).toMatch(/not a judgment of their ability/i);
+    // Plain words only: no em dash anywhere in the copy this module ships.
+    for (const line of [READ_MEASURE_SENTENCE, APPROACH_TENTATIVE_SENTENCE, SUGGESTED_APPROACH_KICKER, NO_APPROACH_WORD]) {
+      expect(line).not.toMatch(/—/);
+      expect(line.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it("the approach kicker leads with doing, and its caveat says the recommendation is tentative and unchecked", () => {
+    expect(SUGGESTED_APPROACH_KICKER).toBe("Suggested approach");
+    expect(APPROACH_TENTATIVE_SENTENCE).toMatch(/tentative/i);
+    expect(APPROACH_TENTATIVE_SENTENCE).toMatch(/earlier conversation/i);
+    expect(APPROACH_TENTATIVE_SENTENCE).toMatch(/not been checked/i);
+    // What leads the brief is a real instruction from the buyer mode, never a type label.
+    const mode = inferBuyerMode([customer("Send me the numbers first, then we can talk.")]);
+    expect(mode.approach[0]).toBe("Lead with the numbers");
+    for (const label of ARCHETYPE_LABELS) expect(mode.approach[0]).not.toContain(label);
   });
 });

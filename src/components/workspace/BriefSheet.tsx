@@ -1,13 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowRight, CaretRight, Question, ShuffleAngular } from "@phosphor-icons/react";
+import { useMemo, useState } from "react";
+import { ArrowRight, CaretRight, ChatCircleText, Question, ShuffleAngular } from "@phosphor-icons/react";
 import type { BuyerModeBriefRow, CloserBrief, UpcomingAppointment } from "@/lib/workspace-closer";
-import { NO_SIGNAL_WORD } from "@/lib/workspace-closer";
-import { READ_CAPTION } from "@/lib/review";
-import { VALUE_WORD, confidenceWordFor } from "@/domain/buyerMode";
-import type { LensName } from "@/domain/types";
+import { NO_SIGNAL_WORD, transcriptsFor } from "@/lib/workspace-closer";
+import {
+  APPROACH_TENTATIVE_SENTENCE,
+  NO_APPROACH_WORD,
+  READ_MEASURE_SENTENCE,
+  SUGGESTED_APPROACH_KICKER,
+  VALUE_WORD,
+  confidenceWordFor,
+} from "@/domain/buyerMode";
+import type { Id, LensName } from "@/domain/types";
 import { lensByName, lenses } from "@/content/lenses";
+import { obaviaDataset } from "@/fixtures/obavia";
+import { formatClock } from "@/lib/review";
 import { Button } from "@/components/ui/Button";
 import { DetailsRow } from "@/components/ui/DetailsRow";
 import { Sheet } from "@/components/ui/Sheet";
@@ -38,7 +46,7 @@ export function ConfidenceDot({ confident, className }: { confident: boolean; cl
   );
 }
 
-/** Slim bar for a read percentage. The number is always beside it. */
+/** Slim bar for a read percentage. The number is always beside it, and the sentence is above the list. */
 export function ReadBar({ percent, className }: { percent: number; className?: string }) {
   const p = Math.max(0, Math.min(100, percent));
   return (
@@ -48,21 +56,76 @@ export function ReadBar({ percent, className }: { percent: number; className?: s
   );
 }
 
-/** A quoted customer span: the words, then the provenance tag (the brief's evidence pattern). */
-export function QuoteList({ quotes }: { quotes: string[] }) {
+/** One turn of the transcript around a quoted span. The cited turn carries `cited`. */
+export interface PassageTurn {
+  speaker: "customer" | "rep" | "unknown";
+  text: string;
+  startMs: number;
+  cited: boolean;
+}
+
+/** The passage a quoted span came from, with the turn on either side of it for context. */
+export interface Passage {
+  callId: Id;
+  turns: PassageTurn[];
+}
+
+export type PassageFor = (quote: string) => Passage | undefined;
+
+export const OPEN_PASSAGE_LABEL = "read it in the conversation";
+
+/**
+ * A quoted customer span: the words, then the provenance tag (the brief's evidence pattern).
+ * Tapping the words opens the passage they came from, the cited turn highlighted with the turn
+ * on either side, so a conclusion never sits above a transcript the reader has to search.
+ */
+export function QuoteList({ quotes, passageFor, contactName }: { quotes: string[]; passageFor?: PassageFor; contactName?: string }) {
+  const [open, setOpen] = useState<string | undefined>(undefined);
   return (
     <ul className="flex flex-col gap-1.5 pb-2 pl-1" data-testid="cited-words">
-      {quotes.map((q) => (
-        <li key={q} className="flex items-start justify-between gap-3">
-          <span className="text-[13px] leading-snug text-fg-muted">&ldquo;{q}&rdquo;</span>
-          <EvidenceTag label="Customer-stated" className="mt-0.5" />
-        </li>
-      ))}
+      {quotes.map((q) => {
+        const passage = passageFor?.(q);
+        const isOpen = open === q;
+        return (
+          <li key={q} className="flex flex-col gap-1.5">
+            <div className="flex items-start justify-between gap-3">
+              {passage ? (
+                <button
+                  type="button"
+                  onClick={() => setOpen((cur) => (cur === q ? undefined : q))}
+                  aria-expanded={isOpen}
+                  aria-label={`${q}, ${OPEN_PASSAGE_LABEL}`}
+                  data-testid="quote-open"
+                  className="flex min-w-0 items-start gap-1.5 text-left text-[13px] leading-snug text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+                >
+                  <ChatCircleText size={13} weight="bold" aria-hidden className="mt-0.5 shrink-0 text-accent" />
+                  <span>&ldquo;{q}&rdquo;</span>
+                </button>
+              ) : (
+                <span className="text-[13px] leading-snug text-fg-muted">&ldquo;{q}&rdquo;</span>
+              )}
+              <EvidenceTag label="Customer-stated" className="mt-0.5" />
+            </div>
+            {isOpen && passage ? (
+              <ol className="flex flex-col gap-1 border-l border-line pl-2.5" data-testid="quote-passage" aria-label="The passage this came from">
+                {passage.turns.map((t) => (
+                  <li key={t.startMs} data-cited={t.cited ? "true" : undefined} className="flex flex-col">
+                    <span className="tabular text-[10.5px] text-fg-subtle">
+                      {t.speaker === "customer" ? (contactName ?? "Them") : t.speaker === "rep" ? "Our side" : "Unknown"} · {formatClock(t.startMs)}
+                    </span>
+                    <span className={cn("text-[12.5px] leading-snug", t.cited ? "rounded-sm bg-accent-soft px-1 py-0.5 font-medium text-fg" : "text-fg-subtle")}>{t.text}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </li>
+        );
+      })}
     </ul>
   );
 }
 
-function DimensionRow({ row, open, onToggle }: { row: BuyerModeBriefRow; open: boolean; onToggle: () => void }) {
+function DimensionRow({ row, open, onToggle, passageFor, contactName }: { row: BuyerModeBriefRow; open: boolean; onToggle: () => void; passageFor?: PassageFor; contactName?: string }) {
   return (
     <li className="flex flex-col" data-testid="buyer-mode-row">
       <button type="button" onClick={onToggle} aria-expanded={open} className="-mx-1 flex h-10 items-center gap-2 rounded-md px-1 text-left hover:bg-hover">
@@ -72,7 +135,7 @@ function DimensionRow({ row, open, onToggle }: { row: BuyerModeBriefRow; open: b
         <ConfidenceDot confident={row.confident} />
         <CaretRight size={12} weight="bold" aria-hidden className={cn("text-fg-subtle transition-transform motion-reduce:transition-none", open && "rotate-90")} />
       </button>
-      {open ? <QuoteList quotes={row.quotes} /> : null}
+      {open ? <QuoteList quotes={row.quotes} passageFor={passageFor} contactName={contactName} /> : null}
     </li>
   );
 }
@@ -89,6 +152,7 @@ export interface ReadLine {
 
 export const NO_SIGNAL_SHORT = "No signal";
 export const THEY_VALUE = "They value";
+export const READ_SECTION_LABEL = "The read behind it";
 
 /** The twelve archetypes alphabetically by label, each with its read (or 0% and no words). */
 function allTwelve(read: ReadLine[]): ReadLine[] {
@@ -98,65 +162,125 @@ function allTwelve(read: ReadLine[]): ReadLine[] {
 }
 
 /**
- * The read: what the customer values, as the biggest text on the card, from the top archetype's
- * value word; the archetype label and percentage as a muted subheader; details on tap listing
- * all twelve alphabetically with a slim bar, a confidence word, and the cited words. Nothing
- * scoring reads "No signal yet". Never a type label; the lens name stays a subheader.
+ * The read, one tap in from the suggested approach (D: "The read is a suggested approach first").
+ * Nothing here is deleted or hidden: the value word, the archetype label and its percentage, all
+ * twelve archetypes alphabetically, the confidence words, and the customer's cited words are all
+ * present. What changed is that they no longer headline a screen without their explanation, so the
+ * sentence saying what the percentage measures sits above the list and is never separated from it.
  */
-export function ReadBlock({ read, className }: { read: ReadLine[]; className?: string }) {
-  const [open, setOpen] = useState(false);
+export function ReadBlock({ read, className, passageFor, contactName }: { read: ReadLine[]; className?: string; passageFor?: PassageFor; contactName?: string }) {
   const top = read[0];
   const list = allTwelve(read);
   return (
-    <div className={cn("flex flex-col", className)} data-testid="read-block">
-      {top ? (
-        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="-mx-1 flex flex-col items-start rounded-md px-1 py-1 text-left hover:bg-hover">
-          <span className="text-[11px] text-fg-subtle">{THEY_VALUE}</span>
-          <span className="text-[30px] font-semibold leading-tight tracking-tight text-fg" data-testid="read-value">
-            {VALUE_WORD[top.name]}
-          </span>
+    <div className={cn("flex flex-col gap-2", className)} data-testid="read-block">
+      <div className="flex flex-col">
+        <span className="text-[11px] text-fg-subtle">{THEY_VALUE}</span>
+        <span className={cn("text-[24px] font-semibold leading-tight tracking-tight", top ? "text-fg" : "text-fg-subtle")} data-testid="read-value">
+          {top ? VALUE_WORD[top.name] : NO_SIGNAL_WORD}
+        </span>
+        {top ? (
           <span className="tabular text-[13px] text-fg-muted" data-testid="read-top">
             {top.label} · {top.percent}%
           </span>
-          <span className="mt-0.5 text-[12px] text-fg-subtle">{open ? "Hide details" : "Tap for details"}</span>
-        </button>
-      ) : (
-        <div className="flex flex-col py-1">
-          <span className="text-[11px] text-fg-subtle">{THEY_VALUE}</span>
-          <span className="text-[30px] font-semibold leading-tight tracking-tight text-fg-subtle" data-testid="read-value">
-            {NO_SIGNAL_WORD}
-          </span>
-        </div>
-      )}
-      {open ? (
-        <div className="mt-1 flex flex-col gap-1">
-          <span className="text-[11px] text-fg-subtle">{READ_CAPTION}</span>
-          <ul className="flex flex-col" data-testid="read-list">
-            {list.map((r) => {
-              const none = r.percent === 0;
-              return (
-                <li key={r.name} className={cn("flex flex-col gap-1 py-1.5", none && "opacity-60")} data-testid="read-row" data-signal={!none}>
-                  <div className="flex items-center gap-3">
-                    <span className="w-[92px] shrink-0 truncate text-[13px] text-fg">{r.label}</span>
-                    <ReadBar percent={r.percent} />
-                    <span className="tabular w-[96px] shrink-0 whitespace-nowrap text-right text-[12px] text-fg-muted">{none ? NO_SIGNAL_SHORT : `${r.percent}% ${confidenceWordFor(r.percent / 100)}`}</span>
-                  </div>
-                  {r.quotes.length > 0 ? <QuoteList quotes={r.quotes} /> : null}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
+      <p className="text-[12px] leading-snug text-fg-subtle" data-testid="read-meaning">
+        {READ_MEASURE_SENTENCE}
+      </p>
+      <ul className="flex flex-col" data-testid="read-list">
+        {list.map((r) => {
+          const none = r.percent === 0;
+          return (
+            <li key={r.name} className={cn("flex flex-col gap-1 py-1.5", none && "opacity-60")} data-testid="read-row" data-signal={!none}>
+              <div className="flex items-center gap-3">
+                <span className="w-[92px] shrink-0 truncate text-[13px] text-fg">{r.label}</span>
+                <ReadBar percent={r.percent} />
+                <span className="tabular w-[96px] shrink-0 whitespace-nowrap text-right text-[12px] text-fg-muted">{none ? NO_SIGNAL_SHORT : `${r.percent}% ${confidenceWordFor(r.percent / 100)}`}</span>
+              </div>
+              {r.quotes.length > 0 ? <QuoteList quotes={r.quotes} passageFor={passageFor} contactName={contactName} /> : null}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
 
 /**
- * Pre-call brief. Opens on the read (They value, the value word, the archetype with its
- * percentage) and the approach, then the primary action. Everything else (why you, the labeled
- * rows, verified fit, unknowns, the buyer mode dimensions with their cited words, evidence, the
- * coaching lens) sits behind one Details row that opens a second sheet. Every assertion in
+ * Lead with what to do. The kicker, the instruction as the biggest text, and one line saying
+ * plainly that it is a tentative recommendation from an earlier conversation. Any further lines
+ * follow it small. No value word, no archetype label, no percentage: those live one tap in.
+ */
+export function ApproachBlock({ approach, className }: { approach: string[]; className?: string }) {
+  const [lead, ...rest] = approach;
+  return (
+    <div className={cn("flex flex-col gap-2", className)} data-testid="suggested-approach">
+      <div className="flex flex-col">
+        <span className="text-[11px] text-fg-subtle">{SUGGESTED_APPROACH_KICKER}</span>
+        <span className={cn("text-[30px] font-semibold leading-tight tracking-tight", lead ? "text-fg" : "text-fg-subtle")} data-testid="approach-lead">
+          {lead ?? NO_APPROACH_WORD}
+        </span>
+      </div>
+      <p className="text-[12px] leading-snug text-fg-subtle" data-testid="approach-caveat">
+        {APPROACH_TENTATIVE_SENTENCE}
+      </p>
+      {rest.length > 0 ? (
+        <ul className="flex flex-col gap-1" data-testid="approach">
+          {rest.map((line) => (
+            <li key={line} className="flex items-start gap-2 text-[14px] leading-snug text-fg">
+              <ArrowRight size={13} weight="bold" aria-hidden className="mt-[3px] shrink-0 text-fg-subtle" />
+              {line}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+/** First name only, for a button that has to name who it reaches. */
+function firstName(displayName: string): string {
+  return displayName.trim().split(/\s+/)[0];
+}
+
+/** Who a question about this brief reaches, and what the button says. Never an unaddressed "Ask". */
+export function askTarget(item: UpcomingAppointment): { label: string; done: string } {
+  const setterId = item.opportunity.currentOwner.setter;
+  const setter = setterId ? obaviaDataset.users.find((u) => u.userId === setterId) : undefined;
+  if (setter) return { label: `Ask the setter, ${firstName(setter.displayName)}`, done: `Asked ${firstName(setter.displayName)}` };
+  return { label: "Add missing context", done: "Context added" };
+}
+
+/**
+ * Where a quoted customer span came from, built from the opportunity's own ended calls. The
+ * reader stays on the brief: the passage opens in place with the cited turn highlighted, so no
+ * observation depends on being allowed to open somebody else's call.
+ */
+export function usePassage(opportunityId: Id): PassageFor {
+  return useMemo(() => {
+    const index = new Map<string, Passage>();
+    for (const { callId, transcript } of transcriptsFor(obaviaDataset, opportunityId)) {
+      transcript.forEach((span, i) => {
+        const key = span.text.trim();
+        if (index.has(key)) return;
+        const turns = [transcript[i - 1], span, transcript[i + 1]].filter(Boolean).map((t) => ({
+          speaker: t.speaker ?? "unknown",
+          text: t.text,
+          startMs: t.startMs,
+          cited: t.startMs === span.startMs && t.endMs === span.endMs,
+        }));
+        index.set(key, { callId, turns });
+      });
+    }
+    return (quote: string) => index.get(quote.trim());
+  }, [opportunityId]);
+}
+
+/**
+ * Pre-call brief. Opens on the suggested approach: the instruction the closer should act on,
+ * and one line saying it is a tentative reading of an earlier conversation. The read behind it
+ * (the value word, the archetype label with its percentage, all twelve archetypes, the confidence
+ * words, the cited words) and every other fact sit behind one Details row. Every assertion in
  * Details carries its provenance (SOS-10); no provenance tag shows on the first view.
  */
 export function BriefSheet({ open, onClose, item, brief }: BriefSheetProps) {
@@ -165,6 +289,7 @@ export function BriefSheet({ open, onClose, item, brief }: BriefSheetProps) {
   const bm = brief.buyerMode;
   const approach = bm.approach.slice(0, 3);
   const description = item.contact.organizationName ? `${item.contact.displayName}, ${item.contact.organizationName}` : item.contact.displayName;
+  const ask = askTarget(item);
   return (
     <>
       <Sheet
@@ -173,30 +298,17 @@ export function BriefSheet({ open, onClose, item, brief }: BriefSheetProps) {
         title="Brief"
         description={description}
         footer={
-          <Button variant="secondary" size="lg" className="w-full" disabled={asked} onClick={() => setAsked(true)} leading={<Question size={16} weight="bold" />}>
-            {asked ? "Clarification requested" : "Ask for clarification"}
+          <Button variant="secondary" size="lg" className="w-full" disabled={asked} onClick={() => setAsked(true)} leading={<Question size={16} weight="bold" />} data-testid="brief-ask">
+            {asked ? ask.done : ask.label}
           </Button>
         }
       >
-        <section className="flex flex-col gap-3" aria-label="Buyer mode" data-testid="buyer-mode">
-          <ReadBlock read={bm.read} />
-          {bm.rows.length === 0 ? (
+        <section className="flex flex-col gap-3" aria-label="Suggested approach" data-testid="buyer-mode">
+          <ApproachBlock approach={approach} />
+          {bm.rows.length === 0 && bm.read.length === 0 ? (
             <p className="text-[13px] text-fg-subtle" data-testid="buyer-mode-empty">
               {NO_SIGNAL_WORD}
             </p>
-          ) : null}
-          {approach.length > 0 ? (
-            <div>
-              <div className="section-label mb-1">Approach</div>
-              <ul className="flex flex-col gap-1" data-testid="approach">
-                {approach.map((line) => (
-                  <li key={line} className="flex items-start gap-2 text-[14px] leading-snug text-fg">
-                    <ArrowRight size={13} weight="bold" aria-hidden className="mt-[3px] shrink-0 text-fg-subtle" />
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            </div>
           ) : null}
         </section>
         <div className="-mx-4 mt-3 border-t border-line sm:-mx-5">
@@ -208,15 +320,22 @@ export function BriefSheet({ open, onClose, item, brief }: BriefSheetProps) {
   );
 }
 
-/** The second sheet: every fact behind the read, each with its provenance. */
+/** The second sheet: the read behind the approach, then every fact, each with its provenance. */
 function BriefDetailsSheet({ open, onClose, item, brief, description }: BriefSheetProps & { description: string }) {
   const [openRow, setOpenRow] = useState<string | undefined>(undefined);
   const lens = brief.lensHypothesis ? lensByName[brief.lensHypothesis] : undefined;
   const bm = brief.buyerMode;
+  const passageFor = usePassage(item.opportunity.opportunityId);
   const toggle = (id: string) => setOpenRow((cur) => (cur === id ? undefined : id));
   return (
     <Sheet open={open} onClose={onClose} title="Details" description={description}>
       <div className="divide-y divide-line" data-testid="brief-details">
+        {/* ----- The read: the labels and their percentages, with the sentence that says what they measure. ----- */}
+        <section className="pb-2.5" aria-label="The read" data-testid="brief-read">
+          <div className="section-label mb-1.5">{READ_SECTION_LABEL}</div>
+          <ReadBlock read={bm.read} passageFor={passageFor} contactName={item.contact.displayName} />
+        </section>
+
         {item.assignment ? (
           <div className="py-2.5">
             <div className="mb-1 flex items-center justify-between">
@@ -277,7 +396,7 @@ function BriefDetailsSheet({ open, onClose, item, brief, description }: BriefShe
           ) : (
             <ul className="flex flex-col">
               {bm.rows.map((r) => (
-                <DimensionRow key={r.dimension} row={r} open={openRow === r.dimension} onToggle={() => toggle(r.dimension)} />
+                <DimensionRow key={r.dimension} row={r} open={openRow === r.dimension} onToggle={() => toggle(r.dimension)} passageFor={passageFor} contactName={item.contact.displayName} />
               ))}
             </ul>
           )}

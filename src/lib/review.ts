@@ -5,15 +5,22 @@
  * stage; the policy applies at the band; the rep can dispute any field.
  */
 import {
+  appendCorrection,
   applyExtractionPolicy,
   BAND_LABEL,
+  correctionEvent,
+  correctionsFor,
   DEFAULT_EXTRACTION_POLICY,
+  openCorrections,
   RuleBasedCallIntelligence,
   STAGE_KEYS,
   validateExtraction,
   type Band,
   type CallExtraction,
+  type CorrectionKind,
   type ExtractionPolicyResult,
+  type FieldCorrection,
+  type NextStepValue,
   type StageApplication,
   type StageKey,
   type TranscriptSpan,
@@ -23,7 +30,7 @@ import { BUYER_MODE_DIMENSIONS, BUYER_MODE_LABEL, UNKNOWN_VALUE, emptyBuyerMode,
 import { RulesCoachingEngine } from "@/domain/coaching";
 import { lensByName } from "@/content/lenses";
 import { MEANING_WORD, ORIGIN_WORD, reject, significance, suggestReuse, type CitedReference } from "@/domain/references";
-import type { Call, CallInterpretedOutcome, CoachingRecommendation, Contact, DomainEvent, Id, Opportunity, User } from "@/domain/types";
+import type { Call, CallInterpretedOutcome, CoachingRecommendation, Contact, DomainEvent, Id, ISODateTime, Opportunity, User } from "@/domain/types";
 import { NOW, obaviaDataset } from "@/fixtures/obavia";
 import { TRANSCRIPT_CALL_IDS, transcriptFor } from "@/fixtures/calls";
 
@@ -148,8 +155,6 @@ export interface BuyerModeView {
   empty: boolean;
 }
 
-export const READ_CAPTION = "what we believe, and how strongly";
-
 export interface Review {
   call: Call;
   contact: Contact;
@@ -225,6 +230,92 @@ export const NEXT_STEP_WORD: Record<CallExtraction["nextStep"]["value"], string>
 };
 
 export const NEVER_LINE = "Never writes money, consent, or attendance";
+
+// ---------- The assessment, in words (D: "A stage is a stage, a prediction is a prediction") ----------
+
+/**
+ * Each stage in plain language. The default view says this instead of a number, because a
+ * percentage with no stated meaning, horizon, or track record reads as more certainty than the
+ * evidence carries. The number, what it measures, and its calibration live one tap in.
+ */
+export const STAGE_ASSESSMENT: Record<StageKey, string> = {
+  contacted: "Talking with us",
+  qualified: "A fit for the offer",
+  buying: "Considering the offer",
+  bought: "Said yes on this call",
+};
+
+export const NO_CONTACT_ASSESSMENT = "No conversation yet";
+
+export const ASSESSMENT_KICKER = "Current assessment";
+export const SUPPORT_WORD = "View supporting conversation";
+export const NO_SUPPORT_WORD = "Nothing in the transcript was cited";
+
+/** What each stage score is a probability of, said plainly. Goes beside every percentage. */
+export const STAGE_MEANING: Record<StageKey, string> = {
+  contacted: "How strongly this transcript reads as a two-way conversation with the right person. It is not a measure of interest.",
+  qualified: "How strongly this transcript reads as a fit for the offer. It reads the conversation, it does not rate the customer.",
+  buying: "How strongly this transcript reads as active consideration of the offer. It is not a chance of purchase.",
+  bought: "How strongly this transcript reads as a spoken yes on this call. Signatures and money still come from the contract and the ledger.",
+};
+
+/** Said wherever a stage percentage is shown. No number here has been checked against an outcome. */
+export const CALIBRATION_LINE =
+  "Not calibrated yet. None of these readings has been measured against what actually happened, so no percentage here is a track record.";
+
+/** The band a stage has to reach before the policy moves it (mirrors applyExtractionPolicy auto mode). */
+export const REQUIRED_BAND: Record<StageKey, Band> = { contacted: "likely", qualified: "likely", buying: "likely", bought: "yes" };
+
+/** The band that moved the stage, or the band it fell short of, in words. */
+export function stageBandLine(stage: StageView): string {
+  const need = BAND_LABEL[REQUIRED_BAND[stage.key]];
+  if (stage.application === "applied") return `Reached the ${need} band, so the stage moved`;
+  if (stage.application === "leaning") return `Under the ${need} band, so nothing moved`;
+  return "Not scored on this call";
+}
+
+/** The next step, as an instruction. Never a label the rep has to decode. */
+const NEXT_STEP_INSTRUCTION: Record<Exclude<NextStepValue, "none">, string> = {
+  book: "Confirm the booking and who attends",
+  callback: "Call back at the time you agreed",
+  proposal: "Send the proposal they asked for",
+  dq_review: "Check whether this is a fit before the next call",
+};
+
+/** One line naming what to do next, from the extraction. Deterministic, pure. */
+export function nextStepLine(review: Review): string {
+  const x = review.extraction;
+  if (x.nextStep.value !== "none") return NEXT_STEP_INSTRUCTION[x.nextStep.value];
+  const open = x.objections.find((o) => !o.resolved);
+  if (open) return `Answer the open concern about ${objectionWord(open.text).toLowerCase()}`;
+  if (x.outcome.value === "voicemail") return "Try them again and leave a way to reply";
+  if (x.outcome.value === "no_answer" || x.outcome.value === "wrong_contact") return "Try them again at a different time";
+  if (x.stakeholders.length > 0) return "Confirm the decision process";
+  return "Agree the next step with them";
+}
+
+/** The default view of a reviewed call: the stage in words, the next step, and what it rests on. */
+export interface Assessment {
+  /** The stage in plain language. The one large line. */
+  headline: string;
+  /** What to do next, named. */
+  nextStep: string;
+  /** Indexes into `transcript` the assessment rests on. Empty when nothing was cited. */
+  spanIndexes: number[];
+  /** The stage the headline names, when one cleared its band. */
+  stageKey?: StageKey;
+}
+
+export function assessmentFor(review: Review): Assessment {
+  const key = review.hero.key;
+  const stage = review.stages.find((s) => s.key === (key ?? "contacted"));
+  return {
+    headline: key ? STAGE_ASSESSMENT[key] : NO_CONTACT_ASSESSMENT,
+    nextStep: nextStepLine(review),
+    spanIndexes: stage?.spanIndexes ?? [],
+    stageKey: key,
+  };
+}
 
 const STAKEHOLDER_WORD: Record<string, string> = {
   partner: "Partner",
@@ -563,16 +654,97 @@ export function buildReview(callId: Id): Review | undefined {
   };
 }
 
-// ---------- Disputes (client state, recomputed purely) ----------
+// ---------- Corrections (D: "Every correction keeps the original") ----------
 
-/** A disputed field holds what it touched until resolved: the only way a rep stops the transcript. */
-export function policyWithDisputes(review: Review, disputed: ReadonlySet<string>): ExtractionPolicyResult {
-  if (disputed.size === 0) return review.policy;
-  const labels = review.fields.filter((f) => disputed.has(f.id)).map((f) => f.label.toLowerCase());
+export const FLAG_WORD = "Flag an issue";
+export const WITHDRAW_WORD = "Withdraw flag";
+export const FLAGGED_WORD = "Flagged";
+
+/** Said where a rep can flag. The point of the affordance, in one line. */
+export const KEEPS_ORIGINAL_LINE =
+  "Flagging holds the field for review. The original reading and the words it cited are kept, and every flag stays in the history.";
+
+/** "call_005:span:62000-71000" reads 62000. Undefined when the ref is not a span ref. */
+export function spanRefStartMs(ref: string): number | undefined {
+  const m = /:span:(\d+)-(\d+)$/.exec(ref);
+  return m ? Number(m[1]) : undefined;
+}
+
+/** Span evidence refs for one field, in the envelope's own form, so the original citation survives the correction. */
+function evidenceRefsFor(review: Review, spanIndexes: number[]): string[] {
+  return spanIndexes
+    .map((i) => review.transcript[i])
+    .filter(Boolean)
+    .map((s) => `${review.call.callId}:span:${s.startMs}-${s.endMs}`);
+}
+
+/**
+ * One correction entry for one extracted field, with the extraction's own value and cited spans
+ * copied onto it. Nothing in the extraction is touched; the entry sits beside it.
+ */
+export function correctionFor(
+  review: Review,
+  fieldId: string,
+  kind: CorrectionKind,
+  by: Id,
+  at: ISODateTime,
+  extra?: { correctedValue?: string; note?: string },
+): FieldCorrection {
+  const field = review.fields.find((f) => f.id === fieldId);
+  return {
+    fieldId,
+    kind,
+    originalValue: field?.value ?? "",
+    originalEvidenceRefs: evidenceRefsFor(review, field?.spanIndexes ?? []),
+    at,
+    by,
+    ...(extra?.correctedValue ? { correctedValue: extra.correctedValue } : {}),
+    ...(extra?.note ? { note: extra.note } : {}),
+  };
+}
+
+/** Flag a field. Append-only: the returned history keeps everything that came before. */
+export function flagField(review: Review, history: readonly FieldCorrection[], fieldId: string, by: Id, at: ISODateTime, extra?: { correctedValue?: string; note?: string }): FieldCorrection[] {
+  return appendCorrection(history, correctionFor(review, fieldId, "flagged", by, at, extra));
+}
+
+/** Withdraw a flag. The flag itself stays in the history; this adds an entry, it does not erase one. */
+export function withdrawFlag(review: Review, history: readonly FieldCorrection[], fieldId: string, by: Id, at: ISODateTime): FieldCorrection[] {
+  return appendCorrection(history, correctionFor(review, fieldId, "withdrawn", by, at));
+}
+
+/** Field ids currently held, from the history. */
+export function openFieldIds(history: readonly FieldCorrection[]): Set<string> {
+  return openCorrections(history);
+}
+
+/** Every entry for one field, oldest first. */
+export function historyFor(history: readonly FieldCorrection[], fieldId: string): FieldCorrection[] {
+  return correctionsFor(history, fieldId);
+}
+
+/** The dispute event the correction history produces. Extends the extraction, never replaces it. */
+export function correctionEventFor(review: Review, history: readonly FieldCorrection[], by: Id, at: ISODateTime) {
+  return correctionEvent({
+    extraction: review.extraction,
+    call: review.call,
+    opportunity: review.opportunity,
+    history,
+    now: at,
+    by,
+    policyVersion: DEFAULT_EXTRACTION_POLICY.policyVersion,
+  });
+}
+
+/** A held field holds what it touched until resolved: the only way a rep stops the transcript. */
+export function policyWithCorrections(review: Review, history: readonly FieldCorrection[]): ExtractionPolicyResult {
+  const open = openCorrections(history);
+  if (open.size === 0) return review.policy;
+  const labels = review.fields.filter((f) => open.has(f.id)).map((f) => f.label.toLowerCase());
   return {
     ...review.policy,
     requiresRepConfirmation: true,
-    reasons: [...review.policy.reasons, `disputed by rep: ${labels.join(", ")}; held until resolved`],
+    reasons: [...review.policy.reasons, `flagged by rep: ${labels.join(", ")}; held until resolved`],
   };
 }
 
@@ -585,11 +757,6 @@ export function coachingMoment(review: Review): Moment | undefined {
     review.moments.find((m) => m.kind !== "outcome" && m.kind !== "reference") ??
     review.moments[0]
   );
-}
-
-/** "65%, likely": the one caption under the hero word. */
-export function heroCaption(hero: Hero): string {
-  return `${hero.percent}%, ${hero.bandLabel.toLowerCase()}`;
 }
 
 /** A good example for the playbook: meaningful, booked, and every objection resolved. */

@@ -5,10 +5,11 @@ import { useMetricDefinition } from "@/components/metrics/MetricDefinitionProvid
 import { CountUp } from "@/components/ui/CountUp";
 import { DetailsRow } from "@/components/ui/DetailsRow";
 import { Surface } from "@/components/ui/Surface";
-import { formatBasis, formatMoneyMinor } from "@/lib/format";
+import { formatMoneyMinor } from "@/lib/format";
 import type { MetricPayload, PerformanceVerdict } from "@/domain/types";
-import type { EconomicsView } from "@/lib/owner-model";
+import { measurementSentence, type EconomicsView, type MeasurementKey } from "@/lib/owner-model";
 import { HeroCard } from "./HeroCard";
+import { ProvisionalMark } from "./ProvisionalMark";
 
 const DESCRIPTIVE: PerformanceVerdict = { state: "neutral_no_benchmark", label: "Descriptive", explanation: "" };
 
@@ -45,8 +46,9 @@ export function MoneyView({ economics }: { economics: EconomicsView }) {
   const sheet = useMetricDefinition();
   const net = economics.netCollected;
   const currency = net.currency ?? "USD";
+  const measure = economics.measurements.netCollected;
   const open = (metric: MetricPayload, definition: MetricDefinitionText) => sheet.open(metric, { verdict: DESCRIPTIVE, definition });
-  const rows: { key: keyof typeof DEFINITIONS; metric: MetricPayload }[] = [
+  const rows: { key: MeasurementKey & keyof typeof DEFINITIONS; metric: MetricPayload }[] = [
     { key: "contracted", metric: economics.contracted },
     { key: "outstanding", metric: economics.outstanding },
     { key: "refunds", metric: economics.refunds },
@@ -55,18 +57,33 @@ export function MoneyView({ economics }: { economics: EconomicsView }) {
   return (
     <div className="flex flex-col gap-4">
       <HeroCard
-        label="Collected"
+        label={measure.name}
         value={net.value === null ? <span className="text-fg-muted">N/A</span> : <CountUp value={net.value} format={(v) => formatMoneyMinor(Math.round(v / 100) * 100, currency)} />}
-        caption={net.basis ? formatBasis(net.basis) : undefined}
-        ariaLabel={`${net.label}, ${whole(net)}. Open definition.`}
+        qualifiers={[
+          measure.over,
+          measure.period,
+          ...(measure.provisional ? [<ProvisionalMark key="provisional" note={measure.provisional} />] : []),
+        ]}
+        ariaLabel={`${measurementSentence(whole(net), measure)} Open definition.`}
         onClick={() => open(net, DEFINITIONS.net)}
         data-testid="money-hero"
       />
       <Surface padding="none">
         <div className="divide-y divide-line">
-          {rows.map(({ key, metric }) => (
-            <DetailsRow key={key} label={metric.label} value={whole(metric)} data-testid="money-row" onClick={() => open(metric, DEFINITIONS[key])} />
-          ))}
+          {rows.map(({ key, metric }) => {
+            const m = economics.measurements[key];
+            return (
+              <DetailsRow
+                key={key}
+                label={m.name}
+                hint={m.provisional ? `${m.over}, ${m.period}, ${m.provisional.label.toLowerCase()}` : `${m.over}, ${m.period}`}
+                value={whole(metric)}
+                ariaLabel={`${measurementSentence(whole(metric), m)} Open definition.`}
+                data-testid="money-row"
+                onClick={() => open(metric, DEFINITIONS[key])}
+              />
+            );
+          })}
         </div>
       </Surface>
     </div>

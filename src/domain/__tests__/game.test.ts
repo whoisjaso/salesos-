@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LEVELS, XP_TABLE, deriveGameEvents, levelFor, playerState, qualityGate, streakDays, type GameEvent } from "@/domain/game";
 import { NOW, obaviaDataset } from "@/fixtures/obavia";
 import type { Call, Contract, LedgerEntry } from "@/domain/types";
-import { emptyDataset, mkOpp } from "./helpers";
+import { emptyDataset, mkInstance, mkOpp } from "./helpers";
 
 const ev = (kind: GameEvent["kind"], occurredAt: string, userId = "u1"): GameEvent => ({ kind, userId, occurredAt, evidenceRef: `ev_${occurredAt}` });
 
@@ -202,28 +202,122 @@ describe("streakDays", () => {
   });
 });
 
-describe("qualityGate", () => {
-  it("pauses the mechanic for the rep whose opportunity has a refund", () => {
-    const refund = obaviaDataset.ledger.find((e) => e.kind === "refund");
-    expect(refund?.opportunityId).toBeDefined();
-    const opp = obaviaDataset.opportunities.find((o) => o.opportunityId === refund?.opportunityId);
-    const closer = opp?.currentOwner.closer as string;
-    expect(closer).toBeTruthy();
-    const gate = qualityGate(obaviaDataset, closer);
-    expect(gate.paused).toBe(true);
-    expect(gate.reasons.join(" ")).toMatch(/refund or dispute/);
+describe("qualityGate is scoped, never a global pause", () => {
+  const signed = (contractId: string, signedAt: string): Contract => ({
+    tenantId: "t_test",
+    contractId,
+    opportunityId: "o1",
+    offerId: "offer_test",
+    offerVersion: "1",
+    value: { amountMinor: 1, currency: "USD" },
+    state: "signed",
+    signedAt,
+  });
+  const pay = (entryId: string, extra: Partial<LedgerEntry>): LedgerEntry => ({
+    tenantId: "t_test",
+    entryId,
+    opportunityId: "o1",
+    kind: "payment_collected",
+    amount: { amountMinor: 480_000, currency: "USD" },
+    providerRef: entryId,
+    idempotencyKey: `k:${entryId}`,
+    occurredAt: "2026-09-16T10:00:00Z",
+    receivedAt: "2026-09-16T10:00:05Z",
+    commercialCategory: "new_customer",
+    ...extra,
+  });
+  const season = { from: "2026-09-01T00:00:00Z", to: "2026-10-01T00:00:00Z" };
+  const contracts = [signed("ctr_1", "2026-09-16T10:00:00Z"), signed("ctr_2", "2026-09-17T10:00:00Z"), signed("ctr_3", "2026-09-18T10:00:00Z")];
+  const opp = mkOpp("o1", { currentOwner: { closer: "c1" } });
+  const clean = emptyDataset({ opportunities: [opp], contracts });
+  const withUnlinkedPayment = emptyDataset({
+    opportunities: [opp],
+    contracts,
+    ledger: [pay("led_unlinked", { opportunityId: undefined })],
   });
 
-  it("does not pause a rep with no incidents, and flags opt-outs on owned opportunities", () => {
-    const clean = emptyDataset({ opportunities: [mkOpp("o1", { currentOwner: { setter: "s1" } })] });
-    expect(qualityGate(clean, "s1")).toEqual({ paused: false, reasons: [] });
+  it("an unlinked payment does not pause XP, does not freeze the level, and does not break the streak", () => {
+    const before = playerState(clean, "c1", NOW, season);
+    const after = playerState(withUnlinkedPayment, "c1", NOW, season);
+    expect(after.gate.paused).toBe(false);
+    expect(after.commercial.xp).toBe(before.commercial.xp);
+    expect(after.commercial.xp).toBe(3 * XP_TABLE.contract_signed.xp);
+    expect(after.commercial.level).toBe(before.commercial.level);
+    expect(after.commercial.progress).toBe(before.commercial.progress);
+    expect(after.streakDays).toBe(before.streakDays);
+    expect(after.streakDays).toBe(3);
+    expect(after.recent.map((e) => e.evidenceRef)).toEqual(before.recent.map((e) => e.evidenceRef));
+  });
+
+  it("holds only the XP kind that rests on the held surface, and names what keeps accruing", () => {
+    const gate = qualityGate(withUnlinkedPayment, "c1", NOW);
+    expect(gate.paused).toBe(false);
+    expect(gate.provisionalTracks).toEqual(["commercial"]);
+    expect(gate.affectedSurfaces).toContain("revenue_attribution");
+    const hold = gate.holds.find((h) => h.track === "commercial");
+    expect(hold?.held).toEqual(["cash_collected"]);
+    expect(hold?.accruing).toEqual(expect.arrayContaining(["two_way_contact", "retained_booking", "attended_show", "verified_fit", "contract_signed"]));
+    expect(hold?.statement).toMatch(/unlinked payment/);
+    expect(hold?.statement).toMatch(/level and streak are untouched/);
+    // Mastery and team XP rest on no held surface at all.
+    expect(gate.holds.map((h) => h.track)).not.toContain("mastery");
+    expect(gate.holds.map((h) => h.track)).not.toContain("team");
+  });
+
+  it("a refund on the rep's opportunity holds cash XP only, and never the mechanic", () => {
+    const refund = obaviaDataset.ledger.find((e) => e.kind === "refund");
+    expect(refund?.opportunityId).toBeDefined();
+    const opportunity = obaviaDataset.opportunities.find((o) => o.opportunityId === refund?.opportunityId);
+    const closer = opportunity?.currentOwner.closer as string;
+    expect(closer).toBeTruthy();
+    const gate = qualityGate(obaviaDataset, closer, NOW);
+    expect(gate.paused).toBe(false);
+    expect(gate.incidents.map((i) => i.kind)).toContain("refund_under_review");
+    expect(gate.reasons.join(" ")).toMatch(/refund or dispute/);
+    expect(gate.provisionalTracks).not.toContain("mastery");
+  });
+
+  it("nothing open means no hold at all", () => {
+    const gate = qualityGate(emptyDataset({ opportunities: [mkOpp("o1", { currentOwner: { setter: "s1" } })] }), "s1", NOW);
+    expect(gate).toMatchObject({ paused: false, reasons: [], provisionalTracks: [], holds: [], affectedSurfaces: [], incidents: [] });
+  });
+
+  it("an opt-out blocks the channel with its reason and holds no XP track", () => {
     const optedOut = emptyDataset({
       opportunities: [mkOpp("o1", { currentOwner: { setter: "s1" } })],
       contacts: [{ tenantId: "t_test", contactId: "ct_o1", displayName: "x", consent: { phone: "revoked", sms: "granted", email: "granted" } }],
     });
-    expect(qualityGate(optedOut, "s1").reasons.join(" ")).toMatch(/opt-out/);
-    // Another rep is unaffected by someone else's incident.
-    expect(qualityGate(optedOut, "s2").paused).toBe(false);
+    const gate = qualityGate(optedOut, "s1", NOW);
+    expect(gate.paused).toBe(false);
+    expect(gate.holds).toEqual([]);
+    expect(gate.provisionalTracks).toEqual([]);
+    expect(gate.affectedSurfaces).toEqual(["contact_permission"]);
+    expect(gate.reasons.join(" ")).toMatch(/Contact permission is not established/);
+    // Another rep is untouched by someone else's incident.
+    expect(qualityGate(optedOut, "s2", NOW).affectedSurfaces).toEqual([]);
+  });
+
+  it("unresolved attendance holds the show XP kind and leaves signing and practice alone", () => {
+    const ds = emptyDataset({
+      opportunities: [mkOpp("o1", { currentOwner: { closer: "c1" } })],
+      contracts,
+      appointmentInstances: [mkInstance("inst_open", "o1", "unknown")],
+    });
+    const gate = qualityGate(ds, "c1", NOW);
+    expect(gate.paused).toBe(false);
+    expect(gate.affectedSurfaces).toEqual(["attendance_outcome"]);
+    const hold = gate.holds.find((h) => h.track === "commercial");
+    expect(hold?.held).toEqual(["attended_show"]);
+    expect(hold?.accruing).toContain("contract_signed");
+    expect(playerState(ds, "c1", NOW, season).commercial.xp).toBe(3 * XP_TABLE.contract_signed.xp);
+  });
+
+  it("playerState carries the scope so a screen can ask what is held and why", () => {
+    const state = playerState(withUnlinkedPayment, "c1", NOW, season);
+    expect(state.scope.incidents.map((i) => i.kind)).toEqual(["unlinked_payment"]);
+    expect(state.scope.surfaces.revenue_attribution.held).toBe(true);
+    expect(state.scope.surfaces.communication_read.held).toBe(false);
+    expect(state.scope.affected.map((s) => s.surface)).toEqual(["revenue_attribution", "commission"]);
   });
 });
 

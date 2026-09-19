@@ -1141,3 +1141,136 @@ function applyConfirm(extraction: CallExtraction, call: Call, opportunity: Oppor
   if (!requiresRepConfirmation && reasons.length === 0) reasons.push("applied by policy");
   return { proposedEvents, requiresRepConfirmation, disputable: true, stageBands: stageBands(extraction.stageScores, bands), stageApplication: { ...NO_APPLICATION }, mode: "confirm", reasons };
 }
+
+// ---------- Corrections (D: "Every correction keeps the original") ----------
+
+/**
+ * What a rep did to one extracted field. "flagged" holds the field and asks for a look;
+ * "withdrawn" takes the flag back. Neither kind edits the extraction: both are entries in a
+ * history that sits beside it.
+ */
+export type CorrectionKind = "flagged" | "withdrawn";
+
+/**
+ * One entry in a field's correction history. Append-only by construction: `originalValue` and
+ * `originalEvidenceRefs` are copied off the extraction at the moment of the flag and are never
+ * rewritten, so the model's output and the spans it cited survive every correction.
+ */
+export interface FieldCorrection {
+  /** The extracted field this is about: "outcome", "nextStep", "stage:buying", "objection:0". */
+  fieldId: string;
+  kind: CorrectionKind;
+  /** The extraction's own value for that field, kept exactly as the model produced it. */
+  originalValue: string;
+  /** Evidence refs for the spans the extraction cited, kept so the original citation survives. */
+  originalEvidenceRefs: Id[];
+  /** What the rep says instead. Optional: flagging an issue never requires a replacement. */
+  correctedValue?: string;
+  /** The rep's short note, when they left one. */
+  note?: string;
+  at: ISODateTime;
+  /** The human who flagged it. Corrections are never made by the AI actor. */
+  by: Id;
+}
+
+export const MAX_CORRECTION_NOTE = 280;
+
+/**
+ * Field ids and replacement values a correction may never touch. Money, consent, and attendance
+ * come from the ledger and from providers; a rep's note about a model reading cannot establish them.
+ */
+export const FORBIDDEN_CORRECTION_FIELD =
+  /price|pricing|discount|consent|opt[_-]?in|opt[_-]?out|payment|paid|card|collected|refund|commission|attendance|attended|no[_-]?show/i;
+
+/** Errors, empty when valid. */
+export function validateCorrection(c: FieldCorrection): string[] {
+  const errors: string[] = [];
+  if (!c || typeof c !== "object") return ["correction is not an object"];
+  if (!c.fieldId?.trim()) errors.push("correction has no fieldId");
+  else if (FORBIDDEN_CORRECTION_FIELD.test(c.fieldId)) errors.push(`correction may not touch ${c.fieldId}: money, consent, and attendance come from the ledger and providers`);
+  if (c.kind !== "flagged" && c.kind !== "withdrawn") errors.push("correction kind must be flagged or withdrawn");
+  if (typeof c.originalValue !== "string") errors.push("correction must keep the original value");
+  if (!Array.isArray(c.originalEvidenceRefs)) errors.push("correction must keep the original evidence refs");
+  if (!c.at?.trim()) errors.push("correction has no timestamp");
+  if (!c.by?.trim()) errors.push("correction has no author");
+  if (c.correctedValue !== undefined) {
+    if (typeof c.correctedValue !== "string" || !c.correctedValue.trim()) errors.push("correctedValue is empty");
+    else if (FORBIDDEN_CORRECTION_FIELD.test(c.correctedValue) && /\$|\d/.test(c.correctedValue)) errors.push("correctedValue states a money, consent, or attendance term; a correction may not establish it");
+  }
+  if (c.note !== undefined) {
+    if (typeof c.note !== "string") errors.push("note must be text");
+    else if (c.note.length > MAX_CORRECTION_NOTE) errors.push(`note is longer than ${MAX_CORRECTION_NOTE} characters`);
+  }
+  return errors;
+}
+
+/**
+ * Append-only. The result holds every earlier entry, in order, plus this one. Nothing is
+ * replaced and nothing is removed, so withdrawing a flag still leaves the flag in the record.
+ */
+export function appendCorrection(history: readonly FieldCorrection[], entry: FieldCorrection): FieldCorrection[] {
+  const errors = validateCorrection(entry);
+  if (errors.length > 0) throw new Error(`invalid correction: ${errors.join("; ")}`);
+  return [...history, entry];
+}
+
+/** Field ids whose most recent entry is a flag: what is held right now. */
+export function openCorrections(history: readonly FieldCorrection[]): Set<string> {
+  const latest = new Map<string, CorrectionKind>();
+  for (const c of history) latest.set(c.fieldId, c.kind);
+  const open = new Set<string>();
+  for (const [fieldId, kind] of latest) if (kind === "flagged") open.add(fieldId);
+  return open;
+}
+
+/** The history for one field, oldest first. */
+export function correctionsFor(history: readonly FieldCorrection[], fieldId: string): FieldCorrection[] {
+  return history.filter((c) => c.fieldId === fieldId);
+}
+
+/**
+ * The dispute event. It extends the recorded extraction instead of replacing it: the
+ * `call.extraction_recorded` event still carries the model's output, and this one carries the
+ * rep's correction history with the original value and original spans of every flagged field.
+ * Never emitted with the AI actor, and never for a money, consent, or attendance field.
+ */
+export function correctionEvent(input: {
+  extraction: CallExtraction;
+  call: Call;
+  opportunity: Opportunity;
+  history: readonly FieldCorrection[];
+  now: ISODateTime;
+  by: Id;
+  policyVersion?: string;
+}): DomainEvent {
+  const { extraction, call, opportunity, history, now, by } = input;
+  if (history.length === 0) throw new Error("correctionEvent needs at least one correction");
+  const errors = history.flatMap(validateCorrection);
+  if (errors.length > 0) throw new Error(`invalid correction history: ${errors.join("; ")}`);
+  const evidenceRefs = [extraction.callId, ...new Set(history.flatMap((c) => c.originalEvidenceRefs))];
+  return createEvent({
+    eventId: `${extraction.callId}:correction:${history.length}`,
+    tenantId: call.tenantId,
+    eventType: "call.extraction_disputed",
+    aggregateType: "call",
+    aggregateId: call.callId,
+    opportunityId: opportunity.opportunityId,
+    occurredAt: now,
+    receivedAt: now,
+    actorType: "user",
+    actorId: by,
+    sourceSystem: "call_intelligence",
+    sourceEventId: `${extraction.callId}:correction:${history.length}`,
+    causationId: `${extraction.callId}:extraction`,
+    evidenceRefs,
+    payload: {
+      /** The extraction event this extends. The model's output is kept there, untouched. */
+      extractionEventId: `${extraction.callId}:extraction`,
+      extractionReplaced: false,
+      modelVersion: extraction.modelVersion,
+      policyVersion: input.policyVersion,
+      open: [...openCorrections(history)],
+      corrections: history.map((c) => ({ ...c })),
+    },
+  });
+}

@@ -6,7 +6,19 @@ import { defaultAccent, initialsOf } from "@/domain/profile";
 import type { CashTier } from "@/domain/cashTiers";
 import { TierBadge } from "@/components/cash/TierBadge";
 import { ACCENT_HEX, useProfiles } from "@/lib/profiles";
+import { formatMoneyMinor } from "@/lib/format";
 import { cn } from "@/lib/cn";
+
+/**
+ * What the corner mark means, in words. A badge small enough to need memorizing carries
+ * its meaning in text on tap ("Say the whole measurement", docs/DECISIONS.md), so nobody
+ * has to learn a private alphabet of icons.
+ */
+function tierMeaning(tier: CashTier): string {
+  return tier.minMinor > 0
+    ? `${tier.label} tier: monthly net collected cash of ${formatMoneyMinor(tier.minMinor)} or more.`
+    : `${tier.label} tier: the first tier, under the next threshold of monthly net collected cash.`;
+}
 
 export type AvatarSize = 24 | 32 | 40 | 48 | 64 | 96 | 128;
 
@@ -53,6 +65,8 @@ export function Avatar({ userId, name, size = 40, accent, photoUrl, ring, ringLa
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const clamped = hasRing ? Math.max(0, Math.min(1, ring)) : 0;
+  const badgeMeaning = badge ? tierMeaning(badge) : undefined;
+  const opensCard = Boolean(onOpenCard) && Boolean(userId);
 
   const style: CSSProperties = { width: size, height: size };
   const face = (
@@ -108,7 +122,17 @@ export function Avatar({ userId, name, size = 40, accent, photoUrl, ring, ringLa
         </svg>
       ) : null}
       {face}
-      {badge ? <TierBadge tier={badge} size={BADGE[size]} className="absolute -right-0.5 -bottom-0.5 ring-2 ring-raised" /> : null}
+      {badge ? (
+        <span
+          role="img"
+          aria-label={badgeMeaning}
+          className="absolute -right-0.5 -bottom-0.5 inline-grid place-items-center rounded-[6px] ring-2 ring-raised"
+        >
+          {/* The badge inside a tappable avatar is not focusable a second time: the avatar's own
+              name already states the tier, and its card states it again in full. */}
+          <TierBadge tier={badge} size={BADGE[size]} tooltip={opensCard ? undefined : badgeMeaning} />
+        </span>
+      ) : null}
     </>
   );
 
@@ -120,7 +144,7 @@ export function Avatar({ userId, name, size = 40, accent, photoUrl, ring, ringLa
           e.stopPropagation();
           onOpenCard(userId);
         }}
-        aria-label={profile ? `@${profile.handle}, open card` : "Open card"}
+        aria-label={[profile ? `@${profile.handle}` : "Person", badgeMeaning, "open card"].filter(Boolean).join(", ")}
         data-avatar={userId}
         className={cn("relative inline-block shrink-0 rounded-full transition-transform duration-150 hover:scale-[1.04] active:scale-[0.97] motion-reduce:transition-none motion-reduce:hover:scale-100", className)}
         style={style}

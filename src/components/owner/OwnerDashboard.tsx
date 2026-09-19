@@ -41,7 +41,7 @@ export function OwnerDashboard({ view }: OwnerDashboardProps) {
   const tenantData = useTenantData();
   const cohort = view.cohorts[cohortKeyId(cohortKey)];
   const filtered = cohortKey.path !== "all" || cohortKey.tier !== "all";
-  const summary = `${formatCount(cohort.assigned)} assigned`;
+  const summary = `${formatCount(cohort.assigned)} assigned ${cohort.assigned === 1 ? "opportunity" : "opportunities"}, ${cohort.economics.period.label}`;
 
   // A business created through onboarding has its own rows (zero on day one), not the fixture's.
   if (!tenantData.demo) return <OwnerEmptyBusiness data={tenantData} />;
@@ -76,7 +76,7 @@ export function OwnerDashboard({ view }: OwnerDashboardProps) {
         <motion.div key={`${tab}-${cohort.key}`} {...enter}>
           {tab === "now" ? (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] lg:items-start lg:gap-5">
-              <HeroTile economics={cohort.economics} flow={cohort.flow} cohortLabel={cohort.label} onOpenCohort={() => setCohortOpen(true)} />
+              <HeroTile economics={cohort.economics} flow={cohort.flow} cohortLabel={cohort.label} narrowed={filtered} onOpenCohort={() => setCohortOpen(true)} />
               <FixFirst cards={cohort.cards} cohortLabel={cohort.label} owners={owners} onAssign={(id, o) => setOwners((prev) => ({ ...prev, [id]: o }))} trust={view.trust} />
             </div>
           ) : null}

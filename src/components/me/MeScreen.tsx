@@ -3,18 +3,18 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BookOpenText, CaretRight, GraduationCap, PauseCircle, PlugsConnected, SignOut, Trophy, UsersThree } from "@phosphor-icons/react";
+import { BookOpenText, CaretRight, GraduationCap, PlugsConnected, SignOut, Trophy, UsersThree } from "@phosphor-icons/react";
 import type { SopModule } from "@/content/sops";
 import type { CoachingRecommendation } from "@/domain/types";
 import { RulesCoachingEngine } from "@/domain/coaching";
-import { cashRace, commissionPolicyFor, commissionSummary, recentCashDrops, tierFor, tierPolicyFor } from "@/domain/cashTiers";
-import { qualityGate } from "@/domain/game";
+import { cashRace, commissionPolicyFor, commissionSummary, recentCashDrops, tierFor, tierPolicyFor, type ProvisionalNotice } from "@/domain/cashTiers";
+import { qualityGate, type GameTrack } from "@/domain/game";
 import { computeMetric } from "@/domain/metrics";
 import { obaviaCommissionPolicies, obaviaDataset, obaviaDatasetWithPairs, obaviaPairs, NOW } from "@/fixtures/obavia";
 import { useSession } from "@/lib/session";
 import { useTenantData } from "@/lib/onboarding";
 import { CoachEmpty, MeEmpty } from "@/components/onboarding/MeEmpty";
-import { formatCount } from "@/lib/format";
+import { formatCount, formatMonthName } from "@/lib/format";
 import { buildPairView, OWNER_LABEL, pairForRep, type PairView, type RecommendationUiState } from "@/lib/team-data";
 import { DEFAULT_LEADERBOARD_POLICY } from "@/domain/leaderboard";
 import { PairSheet } from "@/components/pairs/PairSheet";
@@ -48,6 +48,13 @@ export interface MeScreenProps {
   data: TodayData;
   sops: SopModule[];
   boundaries: { canAdapt: string[]; neverAdapts: string[] };
+  /**
+   * Set when a data incident makes the rep's money provisional. Passed straight
+   * to the money hero, which says so in words with what it is waiting on. The
+   * incident scope model in `src/domain/incidents.ts` is what fills this in;
+   * until it is wired the default is null and nothing reads as held.
+   */
+  provisional?: ProvisionalNotice | null;
 }
 
 /**
@@ -55,7 +62,7 @@ export interface MeScreenProps {
  * Everything else (level and streak, partner and pair bar, race, coaching, playbook,
  * profile edit) lives behind its row's sheet.
  */
-export function MeScreen({ data, sops, boundaries }: MeScreenProps) {
+export function MeScreen({ data, sops, boundaries, provisional = null }: MeScreenProps) {
   const router = useRouter();
   const { session, ready, clear } = useSession();
   const tenantData = useTenantData();
@@ -104,7 +111,7 @@ export function MeScreen({ data, sops, boundaries }: MeScreenProps) {
           </Rows>
         </>
       ) : tenantData.demo ? (
-        <RepMe key={session.userId} userId={session.userId} role={session.role} data={data}>
+        <RepMe key={session.userId} userId={session.userId} role={session.role} data={data} provisional={provisional}>
           {shared}
         </RepMe>
       ) : (
@@ -137,7 +144,26 @@ function Rows({ children }: { children: ReactNode }) {
 
 type RepSheet = "level" | "partner" | "race" | "coach" | null;
 
-function RepMe({ userId, role, data, children }: { userId: string; role: "setter" | "closer"; data: TodayData; children: ReactNode }) {
+/** XP tracks in the words a rep uses. A hold is always named by its track, never as "XP paused". */
+const TRACK_LABEL: Record<GameTrack, string> = {
+  commercial: "Commercial XP",
+  mastery: "Practice XP",
+  team: "Team XP",
+};
+
+function RepMe({
+  userId,
+  role,
+  data,
+  provisional,
+  children,
+}: {
+  userId: string;
+  role: "setter" | "closer";
+  data: TodayData;
+  provisional: ProvisionalNotice | null;
+  children: ReactNode;
+}) {
   const model = data.personas.find((p) => p.userId === userId);
   const [state, setState] = useState<RecommendationUiState>("proposed");
   const [sheet, setSheet] = useState<RepSheet>(null);
@@ -167,7 +193,25 @@ function RepMe({ userId, role, data, children }: { userId: string; role: "setter
       organizationName: contacts.get(opps.get(d.opportunityId)?.primaryContactId ?? "")?.organizationName,
     }));
   }, [userId, season]);
-  const seasonName = data.season.label.replace(/ season$/, "");
+  const seasonName = formatMonthName(data.season.from);
+
+  /**
+   * The money hero says in words when a data incident makes commission
+   * provisional. The caller can pass its own notice; otherwise the open
+   * incidents that name the commission surface supply one, so the figure never
+   * reads as settled when it is not. Nothing else on the screen is held.
+   */
+  const commissionNotice = useMemo<ProvisionalNotice | null>(() => {
+    if (provisional) return provisional;
+    const touching = gate.incidents.filter((i) => i.surfaces.includes("commission"));
+    if (touching.length === 0) return null;
+    return {
+      statement: touching.map((i) => i.effect).join(" "),
+      waitingOn: touching.map((i) => i.waitingOn).join(", and "),
+      label: "Commission",
+      ownerLabel: touching[0].ownerLabel,
+    };
+  }, [provisional, gate]);
 
   const partnerId = pairView ? (userId === pairView.pair.setterUserId ? pairView.pair.closerUserId : pairView.pair.setterUserId) : null;
   const partnerName = pairView ? (userId === pairView.pair.setterUserId ? pairView.closerDisplayName : pairView.setterDisplayName) : null;
@@ -178,10 +222,26 @@ function RepMe({ userId, role, data, children }: { userId: string; role: "setter
       <CashHero
         summary={summary}
         policy={tierPolicy}
+        role={role}
+        period={seasonName}
+        provisional={commissionNotice}
         details={
           <>
-            {model ? <OneNumber model={model} seasonLabel={data.season.label} /> : null}
-            <RecentDrops drops={drops} tier={tierFor(summary.totalMinor, tierPolicy)} now={NOW} currency={summary.currency} />
+            {model ? (
+              <section aria-label="Net collected cash per assigned opportunity" className="flex flex-col gap-1.5">
+                <p className="text-[12px] text-fg-subtle">
+                  Net collected cash per assigned opportunity, {seasonName}. Company cash on the opportunities assigned to you, not your pay.
+                </p>
+                <OneNumber model={model} seasonLabel={data.season.label} />
+              </section>
+            ) : null}
+            <RecentDrops
+              drops={drops}
+              tier={tierFor(summary.totalMinor, tierPolicy)}
+              now={NOW}
+              currency={summary.currency}
+              period={seasonName}
+            />
           </>
         }
       />
@@ -191,16 +251,9 @@ function RepMe({ userId, role, data, children }: { userId: string; role: "setter
           <DetailsRow
             label="Level"
             leading={<Avatar userId={userId} size={32} ring={model.track.progress} ringLabel={`${Math.round(model.track.progress * 100)}% to next level`} />}
-            value={
-              model.xpPaused ? (
-                <span className="inline-flex items-center gap-1 text-perf-attention">
-                  <PauseCircle size={15} weight="bold" aria-hidden />
-                  Paused
-                </span>
-              ) : (
-                formatCount(model.track.level)
-              )
-            }
+            // The level is the rep's own verified progress and never reads as a global pause.
+            // A track-specific hold is named, with its reason, inside the sheet.
+            value={formatCount(model.track.level)}
             onClick={() => setSheet("level")}
           />
         ) : null}
@@ -228,18 +281,22 @@ function RepMe({ userId, role, data, children }: { userId: string; role: "setter
       </Rows>
 
       {model ? (
-        <Sheet open={sheet === "level"} onClose={close} title="Level" description={seasonName}>
+        <Sheet open={sheet === "level"} onClose={close} title="Level" description={`${seasonName}, your verified progress`}>
           <div className="flex flex-col gap-3">
-            <Hero model={model} />
-            {model.xpPaused ? (
+            {/* The level, the ring and the streak are the rep's own verified progress, so the
+                generic pause chip stays off. A hold is named by track, with its reason, below. */}
+            <Hero model={{ ...model, xpPaused: false }} />
+            {gate.holds.length > 0 ? (
               <Surface padding="md" state="attention" className="flex flex-col gap-2">
-                <StateChip state="attention" label="XP paused" className="self-start" />
-                <p className="text-[13px] text-fg-muted">XP pauses while these are under review. It resumes on its own once they are settled.</p>
-                <ul className="flex flex-col gap-1 text-[13px] text-fg">
-                  {gate.reasons.map((r) => (
-                    <li key={r}>{r}</li>
-                  ))}
-                </ul>
+                <p className="text-[13px] text-fg">
+                  Your level {formatCount(model.track.level)} and your streak are verified progress, in {seasonName}. Nothing below changes them, and nothing below changes your pay.
+                </p>
+                {gate.holds.map((hold) => (
+                  <div key={hold.track} className="flex flex-col gap-1.5">
+                    <StateChip state="attention" label={`${TRACK_LABEL[hold.track]} partly on hold`} className="self-start" />
+                    <p className="text-[13px] text-fg-muted">{hold.statement}</p>
+                  </div>
+                ))}
               </Surface>
             ) : null}
           </div>
@@ -257,7 +314,7 @@ function RepMe({ userId, role, data, children }: { userId: string; role: "setter
         />
       </Sheet>
 
-      <Sheet open={sheet === "race"} onClose={close} title="Race" description={`${seasonName}, net collected cash`}>
+      <Sheet open={sheet === "race"} onClose={close} title="Race" description={`Net collected cash in ${seasonName}, not commission`}>
         <CashRace entries={race} meId={userId} seasonName={seasonName} currency={summary.currency} />
       </Sheet>
 

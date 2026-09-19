@@ -7,10 +7,13 @@
  * - Practice XP and commercial XP are tracked separately and never converted to pay.
  * - Seasons reset the display, not history.
  * - Streaks tolerate approved leave.
- * - A quality incident (opt-out, complaint, refund, misrepresentation) pauses the mechanic for that rep.
+ * - A data incident holds only the XP that rests on the surface it makes unreliable.
+ *   It never pauses the mechanic, the level, or the streak. See docs/DECISIONS.md,
+ *   "A held measurement never holds the person" (2026-09-19).
  */
 import type { Dataset } from "./metrics";
-import type { Id, ISODateTime } from "./types";
+import { type IncidentScope, type SurfaceStatus, holdFor, scopeIncidents } from "./incidents";
+import type { AffectedSurface, Id, ISODateTime, ScopedIncident } from "./types";
 
 export type GameEventKind =
   | "two_way_contact"
@@ -30,7 +33,11 @@ export interface GameEvent {
   evidenceRef: string;
 }
 
-export const XP_TABLE: Record<GameEventKind, { xp: number; track: "commercial" | "mastery" | "team"; label: string }> = {
+export type GameTrack = "commercial" | "mastery" | "team";
+
+export const GAME_TRACKS: GameTrack[] = ["commercial", "mastery", "team"];
+
+export const XP_TABLE: Record<GameEventKind, { xp: number; track: GameTrack; label: string }> = {
   two_way_contact: { xp: 10, track: "commercial", label: "Real conversation" },
   retained_booking: { xp: 20, track: "commercial", label: "Booking held" },
   attended_show: { xp: 40, track: "commercial", label: "Show" },
@@ -103,25 +110,109 @@ export function deriveGameEvents(dataset: Dataset): GameEvent[] {
   return events.sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
 }
 
-export interface QualityGate {
-  paused: boolean;
-  reasons: string[];
+/**
+ * Which surface each XP kind rests on. A kind that is absent rests on none of
+ * them: no data incident can ever hold it. Signing, fit, handoffs, practice, and
+ * real conversations are verified where they happen, so they always accrue.
+ */
+export const XP_SURFACE: Partial<Record<GameEventKind, AffectedSurface>> = {
+  cash_collected: "revenue_attribution",
+  attended_show: "attendance_outcome",
+};
+
+export interface TrackHold {
+  track: GameTrack;
+  /** Kinds on this track whose XP is untouched by any open incident. */
+  accruing: GameEventKind[];
+  /** Kinds whose award waits on a held surface. XP already earned is never removed. */
+  held: GameEventKind[];
+  surfaces: AffectedSurface[];
+  /** One sentence: what waits, who owns it, and what keeps running. */
+  statement: string;
 }
 
-/** Opt-outs, refunds, or disputes on a rep's opportunities pause the mechanic (SOS-15). */
-export function qualityGate(dataset: Dataset, userId: Id): QualityGate {
-  const reasons: string[] = [];
-  const mine = new Set(
-    dataset.opportunities.filter((o) => o.currentOwner.setter === userId || o.currentOwner.closer === userId).map((o) => o.opportunityId),
-  );
-  const refunds = dataset.ledger.filter((e) => e.opportunityId && mine.has(e.opportunityId) && (e.kind === "refund" || e.kind === "dispute_debit"));
-  if (refunds.length > 0) reasons.push(`${refunds.length} refund or dispute under review`);
-  const optOuts = dataset.opportunities.filter((o) => mine.has(o.opportunityId)).filter((o) => {
-    const c = dataset.contacts.find((ct) => ct.contactId === o.primaryContactId);
-    return c && Object.values(c.consent).some((s) => s === "revoked");
-  });
-  if (optOuts.length > 0) reasons.push(`${optOuts.length} opt-out under review`);
-  return { paused: reasons.length > 0, reasons };
+export interface QualityGate {
+  /**
+   * Kept for compatibility with screens that read it. True only when every track
+   * is held at once, which a scoped data incident never does: the mechanic as a
+   * whole is not pausable by a measurement problem.
+   */
+  paused: boolean;
+  /** One plain sentence per hold, each naming its limited effect. */
+  reasons: string[];
+  /** Tracks whose totals can move when an incident resolves. Their XP still accrues. */
+  provisionalTracks: GameTrack[];
+  holds: TrackHold[];
+  affectedSurfaces: AffectedSurface[];
+  incidents: ScopedIncident[];
+}
+
+function trackKinds(track: GameTrack): GameEventKind[] {
+  return (Object.keys(XP_TABLE) as GameEventKind[]).filter((k) => XP_TABLE[k].track === track);
+}
+
+/**
+ * Per-track holds from an incident scope. Only the kinds that rest on a held
+ * surface wait; everything else on the same track keeps accruing, so a level is
+ * never frozen by an unrelated incident.
+ */
+export function trackHolds(scope: IncidentScope): TrackHold[] {
+  const holds: TrackHold[] = [];
+  for (const track of GAME_TRACKS) {
+    const kinds = trackKinds(track);
+    const held: GameEventKind[] = [];
+    const surfaces = new Set<AffectedSurface>();
+    const statuses: SurfaceStatus[] = [];
+    for (const kind of kinds) {
+      const surface = XP_SURFACE[kind];
+      if (!surface) continue;
+      const status = holdFor(scope, [surface]);
+      if (!status) continue;
+      held.push(kind);
+      surfaces.add(surface);
+      statuses.push(status);
+    }
+    if (held.length === 0) continue;
+    const accruing = kinds.filter((k) => !held.includes(k));
+    const waiting = held.map((k) => XP_TABLE[k].label).join(" and ");
+    const keeps = accruing.map((k) => XP_TABLE[k].label).join(", ");
+    holds.push({
+      track,
+      accruing,
+      held,
+      surfaces: [...surfaces],
+      statement: `${waiting} XP waits on ${statuses[0].waitingOn} (${statuses[0].ownerLabel}); ${keeps ? `${keeps} XP` : "every other track"} keeps accruing, and the level and streak are untouched.`,
+    });
+  }
+  return holds;
+}
+
+/**
+ * The scoped gate. A data incident holds the XP kinds that rest on the surface it
+ * makes unreliable and nothing else: levels, streaks, and every unrelated verified
+ * event keep running. `paused` stays false unless every track is held at once.
+ */
+export function qualityGate(dataset: Dataset, userId: Id, now?: ISODateTime): QualityGate {
+  const scope = scopeIncidents(dataset, { userId, now });
+  return gateFromScope(scope);
+}
+
+export function gateFromScope(scope: IncidentScope): QualityGate {
+  const holds = trackHolds(scope);
+  const surfaces = scope.affected.map((s) => s.surface);
+  const reasons = [...holds.map((h) => h.statement), ...scope.affected.filter((s) => !surfaceOnATrack(s.surface)).map((s) => s.statement)];
+  return {
+    paused: holds.length === GAME_TRACKS.length && holds.every((h) => h.accruing.length === 0),
+    reasons,
+    provisionalTracks: holds.map((h) => h.track),
+    holds,
+    affectedSurfaces: surfaces,
+    incidents: scope.incidents,
+  };
+}
+
+function surfaceOnATrack(surface: AffectedSurface): boolean {
+  return Object.values(XP_SURFACE).includes(surface);
 }
 
 export interface PlayerState {
@@ -134,6 +225,8 @@ export interface PlayerState {
   lastEventAt?: ISODateTime;
   recent: GameEvent[]; // last 5, newest first
   gate: QualityGate;
+  /** The incidents that touch this rep's work, each with its limited effect. */
+  scope: IncidentScope;
 }
 
 function dayKey(iso: ISODateTime): string {
@@ -169,21 +262,25 @@ export function playerState(
   now: ISODateTime,
   season: { from: ISODateTime; to: ISODateTime },
   approvedLeaveDays: string[] = [],
+  scope?: IncidentScope,
 ): PlayerState {
   const all = deriveGameEvents(dataset).filter((e) => e.userId === userId);
   const inSeason = all.filter((e) => e.occurredAt >= season.from && e.occurredAt < season.to && e.occurredAt <= now);
-  const sum = (track: "commercial" | "mastery" | "team") =>
+  const sum = (track: GameTrack) =>
     inSeason.filter((e) => XP_TABLE[e.kind].track === track).reduce((acc, e) => acc + XP_TABLE[e.kind].xp, 0);
+  const resolved = scope ?? scopeIncidents(dataset, { userId, now });
   return {
     userId,
     season,
+    // Verified events accrue whatever is held elsewhere: a held measurement never holds the person.
     commercial: levelFor(sum("commercial")),
     mastery: levelFor(sum("mastery")),
     team: levelFor(sum("team")),
     streakDays: streakDays(all.filter((e) => e.occurredAt <= now), now, approvedLeaveDays),
     lastEventAt: inSeason.at(-1)?.occurredAt,
     recent: [...inSeason].reverse().slice(0, 5),
-    gate: qualityGate(dataset, userId),
+    gate: gateFromScope(resolved),
+    scope: resolved,
   };
 }
 

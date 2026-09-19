@@ -13,9 +13,10 @@ import { ReviewList } from "./ReviewList";
 
 /**
  * Gate and switch. Signed out goes to "/". A rep opens only their own calls; the owner
- * opens any. No call param lists the reviewable calls for the viewer.
+ * opens any. No call param lists the reviewable calls for the viewer. `span` is a deep link
+ * from an observation shown elsewhere: it highlights that passage on arrival.
  */
-export function ReviewScreen({ callId }: { callId?: string }) {
+export function ReviewScreen({ callId, span }: { callId?: string; span?: number }) {
   const router = useRouter();
   const { session, ready } = useSession();
 
@@ -65,5 +66,5 @@ export function ReviewScreen({ callId }: { callId?: string }) {
     );
   }
 
-  return <ReviewCall key={callId} review={review} viewer={viewer} />;
+  return <ReviewCall key={callId} review={review} viewer={viewer} span={span} />;
 }

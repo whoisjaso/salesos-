@@ -15,7 +15,20 @@ import {
   sourceSheetTotals,
   type SourceSheetColumn,
 } from "@/fixtures/sourceSheet";
+import { measurementSentence, type MeasurementCopy } from "@/lib/owner-model";
 import { HeroCard } from "./HeroCard";
+import { ProvisionalMark } from "./ProvisionalMark";
+
+/**
+ * The owner's source sheet is a visual reading of a spreadsheet, not verified operating
+ * data (AGENTS.md rule 9). Every figure taken from it says so where it is read.
+ */
+const SHEET_PERIOD = "August 2026";
+const UNVERIFIED = {
+  label: "Unverified",
+  reason: "a visual reading of the owner's sheet, revenue basis unknown",
+  sentence: "Unverified: these figures are a visual reading of the owner's sheet and the revenue basis is unknown, so they are not operating data.",
+} as const;
 
 const COLUMNS: { key: string; label: string; align?: "right" }[] = [
   { key: "tier", label: "Tier" },
@@ -68,7 +81,7 @@ function Row({ c, total = false }: { c: SourceSheetColumn; total?: boolean }) {
       <th scope="row" className="sticky left-0 z-10 bg-raised px-3 py-2 text-left text-[13px] font-medium text-fg whitespace-nowrap">
         <span className="inline-flex items-center gap-2">
           {total ? "Team total" : shortName(c)}
-          {c.anomaly && !total ? <StateChip state="partial" label="Retained > leads" /> : null}
+          {c.anomaly && !total ? <StateChip state="partial" label="Retained > leads" meaning="Retained bookings exceed the leads for this column, so the sheet's own arithmetic does not close." explain /> : null}
         </span>
       </th>
       {cells.map((v, i) => (
@@ -134,32 +147,54 @@ export function SourceView() {
   const counterfactual = counterfactualRevenueAtLeads(ben, highVolume.leads);
   const teamRpl = money(deriveSourceMetrics(totals).revenuePerLeadMinor, true);
   const reps = [...sourceSheetColumns].sort((a, b) => a.leadTier - b.leadTier);
+  const teamMeasure: MeasurementCopy = {
+    name: "Reported revenue per lead",
+    over: `Reported revenue over ${formatCount(totals.leads)} leads`,
+    period: SHEET_PERIOD,
+    provisional: { ...UNVERIFIED },
+  };
 
   return (
     <div className="flex flex-col gap-4">
       <HeroCard
-        label="Revenue per lead"
+        label={teamMeasure.name}
         value={teamRpl}
-        caption="August 2026, unverified"
-        ariaLabel={`Team revenue per lead, ${teamRpl}, unverified. Tap for details.`}
+        qualifiers={[teamMeasure.over, teamMeasure.period, <ProvisionalMark key="unverified" note={teamMeasure.provisional!} />]}
+        ariaLabel={`${measurementSentence(teamRpl, teamMeasure)} Tap for details.`}
         onClick={() => setDetailsOpen(true)}
         data-testid="source-hero"
       />
 
       <Surface padding="none">
         <ul className="divide-y divide-line" aria-label="Reps">
-          {reps.map((c) => (
-            <li key={c.repLabel}>
-              <DetailsRow label={shortName(c)} value={money(deriveSourceMetrics(c).revenuePerLeadMinor, true)} data-testid="source-row" onClick={() => setRep(c)} />
-            </li>
-          ))}
+          {reps.map((c) => {
+            const value = money(deriveSourceMetrics(c).revenuePerLeadMinor, true);
+            const measure: MeasurementCopy = {
+              name: `${shortName(c)}, reported revenue per lead`,
+              over: `Reported revenue over ${formatCount(c.leads)} leads, lead tier ${c.leadTier}`,
+              period: SHEET_PERIOD,
+              provisional: { ...UNVERIFIED },
+            };
+            return (
+              <li key={c.repLabel}>
+                <DetailsRow
+                  label={shortName(c)}
+                  hint={`${measure.over}, ${SHEET_PERIOD}, unverified`}
+                  value={value}
+                  ariaLabel={`${measurementSentence(value, measure)} Tap for details.`}
+                  data-testid="source-row"
+                  onClick={() => setRep(c)}
+                />
+              </li>
+            );
+          })}
         </ul>
       </Surface>
 
       <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} title="Source sheet" description="Visual reading, August 2026" width={1280}>
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2 text-[12px] text-fg-subtle">
-            <StateChip state="unknown" label="Not verified" />
+            <StateChip state="unknown" label="Not verified" meaning="A visual reading of the owner's sheet. The revenue basis is unknown, so nothing here is operating data." explain />
             <span>Revenue basis unknown</span>
           </div>
 
@@ -178,7 +213,7 @@ export function SourceView() {
       <Sheet open={rep !== null} onClose={() => setRep(null)} title={rep ? shortName(rep) : ""} description={rep ? `Tier ${rep.leadTier}, August 2026, unverified` : undefined}>
         {rep ? (
           <div className="flex flex-col gap-4">
-            {rep.anomaly ? <StateChip state="partial" label="Retained > leads" /> : null}
+            {rep.anomaly ? <StateChip state="partial" label="Retained > leads" meaning="Retained bookings exceed the leads for this column, so the sheet's own arithmetic does not close." explain /> : null}
             <dl className="divide-y divide-line border-t border-line">
               {cellsOf(rep).map((v, i) =>
                 COLUMNS[i].key === "tier" ? null : (

@@ -7,7 +7,11 @@ import { test, expect, PEOPLE, sheet, closeSheet, tabLabels } from "./fixtures";
  * Details sheet. Why, the owner dropdown and the scenario live in the card's Assign sheet.
  */
 
-const HERO_NAME = /^Net collected per assigned opportunity, \$[\d,]+\.\d{2}\. Tap for details\.$/;
+/** Name, value, what it is over with its count, the period, and how sure it is. */
+const PERIOD = String.raw`\w{3} \d{1,2} to \w{3} \d{1,2}, \d{4}`;
+const HERO_NAME = new RegExp(
+  String.raw`^Net collected per assigned opportunity, \$[\d,]+\.\d{2}\. Net collected cash over [\d,]+ assigned opportunities(, [^.]+)?\. ${PERIOD}\.( Provisional: .+\.)? Tap for details\.$`,
+);
 
 function hero(page: import("@playwright/test").Page) {
   return page.getByTestId("owner-hero");
@@ -20,7 +24,12 @@ test.describe("Owner: Delphine", () => {
     await page.goto("/");
     await expect(hero(page)).toHaveAccessibleName(HERO_NAME);
     await expect(hero(page).getByText(/^\$[\d,]+\.\d{2}$/)).toBeVisible();
-    await expect(hero(page)).toContainText("Per opportunity");
+    // The whole measurement, under the number: the name with its denominator in words,
+    // what it is over with its count, the period, and the word Provisional where it is read.
+    await expect(hero(page)).toContainText("Net collected per assigned opportunity");
+    await expect(hero(page)).toContainText(/Net collected cash over [\d,]+ assigned opportunities/);
+    await expect(hero(page)).toContainText(new RegExp(PERIOD));
+    await expect(hero(page)).toContainText("Provisional");
 
     // Nothing else on the first view: no basis chip, no sum over sum, no funnel tiles, no data-state chip.
     await expect(page.getByText("Sum over sum")).toHaveCount(0);
@@ -46,7 +55,7 @@ test.describe("Owner: Delphine", () => {
     const details = sheet(page, "Per opportunity");
     await expect(details).toBeVisible();
     await expect(details.getByText("Net collected cash")).toBeVisible();
-    await expect(details.getByText(/^\$[\d,]+ over \d+$/)).toBeVisible();
+    await expect(details.getByText(/^\$[\d,]+ over \d+ assigned opportunities$/)).toBeVisible();
     await expect(details.getByText("Sum over sum")).toBeVisible();
 
     const bar = details.getByRole("list", { name: /^Funnel stages/ });
@@ -141,6 +150,33 @@ test.describe("Owner: Delphine", () => {
     // Note: leaving the Now view (Money/Source) remounts FixFirst and resets the assignment; see report.
   });
 
+  test("Fix this first keeps what is missing, who resolves it and what it affects, and clips none of it", async ({ page }) => {
+    await page.goto("/");
+    const card = page.getByRole("region", { name: "Fix this first" }).getByRole("article");
+    // The decisive sentence, in three lines that each fit rather than one line that is cut.
+    await expect(card).toContainText(/\$[\d,]+\.\d{2} collected, not linked to an opportunity\./);
+    await expect(card).toContainText(/^(Rep|Marketing|Sales ops|Product|Finance|Delivery) \w/m);
+    await expect(card).toContainText(/^Until then, .+\.$/m);
+    // Nothing inside the card is cut off at this width: no element scrolls sideways inside itself.
+    const clipped = await card
+      .locator("p, h3")
+      .evaluateAll((els) => els.filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent ?? ""));
+    expect(clipped).toEqual([]);
+  });
+
+  test("a state mark carries its meaning as text, not only as a symbol", async ({ page }) => {
+    await page.goto("/");
+    await hero(page).click();
+    const details = sheet(page, "Per opportunity");
+    // The data-state mark is pressable and its name is the whole sentence, not the word alone.
+    const mark = details.getByRole("button", { name: /^Partial\. .+\.$/ });
+    await expect(mark).toBeVisible();
+    await expect(mark).toHaveAccessibleName(/Some records are missing/);
+    await mark.click();
+    await expect(details.locator('[role="tooltip"]').first()).toHaveText(/Some records are missing/);
+    await closeSheet(page);
+  });
+
   test("Activity is one row; the feeds and their records open from it", async ({ page }) => {
     await page.goto("/");
     const row = page.getByTestId("activity-open");
@@ -156,15 +192,27 @@ test.describe("Owner: Delphine", () => {
     await page.goto("/");
     await page.getByRole("radio", { name: "Money" }).click();
     const cash = page.getByTestId("money-hero");
-    await expect(cash).toHaveAccessibleName(/^Net collected cash, \$[\d,]+\. Open definition\.$/);
+    await expect(cash).toHaveAccessibleName(
+      new RegExp(
+        String.raw`^Net collected cash, \$[\d,]+\. Payments minus refunds and disputes, across [\d,]+ assigned opportunities\. ${PERIOD}\.( Provisional: .+\.)? Open definition\.$`,
+      ),
+    );
+    await expect(cash).toContainText(/Payments minus refunds and disputes, across [\d,]+ assigned opportunities/);
     const rows = page.getByTestId("money-row");
     await expect(rows).toHaveCount(3);
-    await expect(rows.nth(0)).toContainText(/^Contracted value\$[\d,]+$/);
-    await expect(rows.nth(1)).toContainText(/^Outstanding\$[\d,]+$/);
-    await expect(rows.nth(2)).toContainText(/^Refunds and disputes\$[\d,]+$/);
+    // Every row value says what it is over and over what period, and says provisional when it is.
+    await expect(rows.nth(0)).toContainText(
+      new RegExp(String.raw`^Contracted valueSigned value, not cash, from [\d,]+ signed contracts?, ${PERIOD}(, provisional)?\$[\d,]+$`),
+    );
+    await expect(rows.nth(1)).toContainText(
+      new RegExp(String.raw`^OutstandingContracted minus collected, across [\d,]+ signed contracts?, ${PERIOD}, provisional\$[\d,]+$`),
+    );
+    await expect(rows.nth(2)).toContainText(
+      new RegExp(String.raw`^Refunds and disputesRefunds and dispute debits, [\d,]+ entr(y|ies), ${PERIOD}(, provisional)?\$[\d,]+$`),
+    );
     // Cash and contract are different numbers in different places.
     const cashText = (await cash.getAttribute("aria-label"))?.match(/\$[\d,]+/)?.[0];
-    const contracted = (await rows.nth(0).innerText()).match(/\$[\d,]+/)?.[0];
+    const contracted = (await rows.nth(0).getAttribute("aria-label"))?.match(/\$[\d,]+/)?.[0];
     expect(cashText).not.toEqual(contracted);
     // No verdict chips on the first view.
     await expect(page.locator("main").getByText("Descriptive")).toHaveCount(0);
@@ -186,8 +234,10 @@ test.describe("Owner: Delphine", () => {
     await page.goto("/");
     await page.getByRole("radio", { name: "Source" }).click();
     const src = page.getByTestId("source-hero");
-    await expect(src).toContainText("Revenue per lead");
-    await expect(src).toContainText("unverified");
+    await expect(src).toContainText("Reported revenue per lead");
+    await expect(src).toContainText(/Reported revenue over [\d,]+ leads/);
+    await expect(src).toContainText("August 2026");
+    await expect(src).toContainText("Unverified");
     await expect(page.getByRole("table")).toHaveCount(0);
     await expect(page.getByText("$4,126,635.66")).toHaveCount(0);
     const reps = page.getByTestId("source-row");
@@ -220,7 +270,7 @@ test.describe("Owner: Delphine", () => {
     const cohort = sheet(page, "Cohort");
     await expect(cohort).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(1);
-    await expect(cohort.getByText(/^\d+ assigned$/)).toBeVisible();
+    await expect(cohort.getByText(new RegExp(String.raw`^\d+ assigned opportunit(y|ies), ${PERIOD}$`))).toBeVisible();
     const paths = cohort.getByRole("radiogroup", { name: "Entry path" }).getByRole("radio");
     await paths.nth(1).click();
     await expect(cohort.getByRole("button", { name: "Reset" })).toBeEnabled();

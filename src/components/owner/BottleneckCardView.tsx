@@ -9,7 +9,7 @@ import { Surface } from "@/components/ui/Surface";
 import { StateChip } from "@/components/ui/StateChip";
 import { cn } from "@/lib/cn";
 import { formatMoney, formatPercent } from "@/lib/format";
-import { OWNER_FUNCTION_LABEL, STAGE_LABEL, perceptionGapOf } from "@/lib/owner-model";
+import { OWNER_FUNCTION_LABEL, STAGE_LABEL, fixFirstCopy, perceptionGapOf } from "@/lib/owner-model";
 
 const OWNER_OPTIONS = Object.keys(OWNER_FUNCTION_LABEL) as CoachingOwner[];
 const VISIBLE_EXPLANATIONS = 3;
@@ -56,8 +56,8 @@ function Chips({ card, pairTag }: { card: BottleneckCard; pairTag?: string }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <StateChip state={card.verdict.state} label={card.verdict.label} />
-        {card.verdict.state !== "data_state" && card.dataState !== "complete" ? <StateChip state={card.dataState} /> : null}
+        <StateChip state={card.verdict.state} label={card.verdict.label} meaning={card.verdict.explanation} explain />
+        {card.verdict.state !== "data_state" && card.dataState !== "complete" ? <StateChip state={card.dataState} explain /> : null}
         {pairTag ? <span className="tag text-fg-muted">{pairTag}</span> : null}
       </div>
       {perception ? (
@@ -84,6 +84,7 @@ function Chips({ card, pairTag }: { card: BottleneckCard; pairTag?: string }) {
 export function BottleneckCardView({ card, owner, onAssign, detail = false, pairTag, className }: BottleneckCardViewProps) {
   const [open, setOpen] = useState(false);
   const title = STAGE_LABEL[card.stageId] ?? card.stageId;
+  const copy = fixFirstCopy(card, owner);
 
   if (detail) {
     return (
@@ -91,6 +92,11 @@ export function BottleneckCardView({ card, owner, onAssign, detail = false, pair
         <div className="flex flex-col gap-2">
           <h3 className="text-[15px] font-semibold text-fg">{title}</h3>
           <Chips card={card} pairTag={pairTag} />
+        </div>
+        <div className="flex flex-col gap-1.5 text-[13px] leading-snug">
+          <p className="tabular font-medium text-fg">{copy.missing}</p>
+          <p className="text-fg-muted">{copy.resolver}</p>
+          <p className="text-fg-muted">{copy.affects}</p>
         </div>
         <Body card={card} />
         <div className="flex items-center justify-between gap-3 border-t border-line pt-3 text-[12px] text-fg-subtle">
@@ -105,15 +111,27 @@ export function BottleneckCardView({ card, owner, onAssign, detail = false, pair
     <>
       <Surface as="article" state={card.verdict.state} padding="md" className={cn("flex flex-col gap-3", className)}>
         <h3 className="text-[15px] font-semibold text-fg">{title}</h3>
-        <p className="tabular truncate text-[13px] text-fg-muted" title={card.observed}>
-          {card.observed}
-        </p>
+        {/*
+          What is missing, who resolves it, what it affects. Written short enough to wrap
+          inside a 390px card, never clipped: an ellipsis here would take away the one thing
+          the card exists to say ("Say the whole measurement", docs/DECISIONS.md).
+        */}
+        <div className="flex flex-col gap-1.5 text-[13px] leading-snug">
+          <p className="tabular font-medium text-balance text-fg">{copy.missing}</p>
+          <p className="text-fg-muted">{copy.resolver}</p>
+          <p className="text-fg-muted">{copy.affects}</p>
+        </div>
         <Button size="md" onClick={() => setOpen(true)} className="w-full">
           Assign
         </Button>
       </Surface>
       <Sheet open={open} onClose={() => setOpen(false)} title={title} description={card.verdict.label} width={480}>
         <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-1.5 text-[13px] leading-snug">
+            <p className="tabular font-medium text-fg">{copy.missing}</p>
+            <p className="text-fg-muted">{copy.resolver}</p>
+            <p className="text-fg-muted">{copy.affects}</p>
+          </div>
           <Chips card={card} pairTag={pairTag} />
           <div className="flex items-center justify-between gap-3">
             <span className="text-[13px] font-medium text-fg">Owner</span>

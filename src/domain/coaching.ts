@@ -3,9 +3,18 @@
  * Sequence per card: observation, evidence check, possible cause, controllable
  * action, labeled financial scenario, review. Scenarios are never forecasts
  * and benchmark gaps are never "lost" money.
+ *
+ * Coaching is never suppressed wholesale (docs/DECISIONS.md, "A held measurement
+ * never holds the person"). A recommendation is held only when the surface its
+ * own evidence rests on is unreliable: a recommendation read from conversations
+ * stands while an unlinked payment holds the revenue recommendation. A held
+ * recommendation says what it waits on and who owns it, and it never displaces
+ * the coaching that is valid.
  */
 import type {
+  AffectedSurface,
   BottleneckCard,
+  CoachingHold,
   CoachingOwner,
   CoachingRecommendation,
   CoachingScenario,
@@ -18,6 +27,14 @@ import type {
   Money,
   PerformanceVerdict,
 } from "./types";
+import {
+  SURFACE_ACTION,
+  type IncidentScope,
+  type SurfaceStatus,
+  holdFor,
+  scopeIncidents,
+  surfacesForMetric,
+} from "./incidents";
 import {
   type CohortFilter,
   type Dataset,
@@ -330,7 +347,13 @@ function teamFilter(filter: CohortFilter): CohortFilter {
   return rest;
 }
 
-function perceptionGapRecommendation(dataset: Dataset, filter: CohortFilter, userId: Id, now: ISODateTime): Candidate | undefined {
+function perceptionGapRecommendation(
+  dataset: Dataset,
+  filter: CohortFilter,
+  userId: Id,
+  now: ISODateTime,
+  scope: IncidentScope,
+): Candidate | undefined {
   const gap = perceptionGap(dataset, filter, now);
   if (gap.band !== "under_perceiving" && gap.band !== "over_perceiving" || gap.gapPoints === null) return undefined;
   const entry = libraryEntryByKey("perception_gap");
@@ -360,6 +383,9 @@ function perceptionGapRecommendation(dataset: Dataset, filter: CohortFilter, use
     reviewAt: reviewDate(now),
     state: "proposed",
     provenance: { engine: "rules", version: COACHING_ENGINE_VERSION },
+    // Read from conversations and assessments: an unlinked payment never touches it.
+    dependsOn: [...new Set([...surfacesForMetric("M09"), ...surfacesForMetric("M10")])],
+    provisional: holdFor(scope, [...surfacesForMetric("M09"), ...surfacesForMetric("M10")]) !== null,
     perception: gap,
   };
   const severity = Math.abs(gap.gapPoints) > 2 * PERCEPTION_GAP_ALIGNED_POINTS ? 3 : 2;
@@ -474,18 +500,49 @@ function observedText(m: MetricPayload): string {
   return `${m.numerator}`;
 }
 
-function suppression(m: MetricPayload, dataset: Dataset): { reason: string; action: string } | undefined {
-  if (m.metricId === "M08" && m.unknownCount > 0) {
-    return {
-      reason: `${m.unknownCount} matured appointment instance(s) have unresolved attendance evidence; show rate is only a bound (${formatPercent(m.bounds?.lower ?? null)} to ${formatPercent(m.bounds?.upper ?? null)}).`,
-      action: "resolve attendance evidence",
-    };
-  }
-  if ((m.metricId === "M16" || m.metricId === "M19") && dataset.ledger.some((e) => e.opportunityId === undefined)) {
-    return { reason: "Unlinked payment(s) sit in the exception queue; cash attribution is unreconciled.", action: "verify payment mapping" };
+interface Hold {
+  hold: CoachingHold;
+  action: string;
+  surfaces: AffectedSurface[];
+}
+
+function coachingHoldFrom(status: SurfaceStatus): CoachingHold {
+  return {
+    surface: status.surface,
+    incidentIds: status.incidents.map((i) => i.incidentId),
+    waitingOn: status.waitingOn ?? "",
+    owner: status.owner ?? "sales_ops",
+    ownerLabel: status.ownerLabel ?? "Sales ops",
+    statement: status.statement,
+  };
+}
+
+/**
+ * The hold on one recommendation, through the surfaces its own evidence rests on.
+ * A metric that rests on no held surface is never held, whatever else is open.
+ */
+function holdOn(m: MetricPayload, scope: IncidentScope): Hold | undefined {
+  const surfaces = surfacesForMetric(m.metricId);
+  const status = holdFor(scope, surfaces);
+  if (status) {
+    const hold = coachingHoldFrom(status);
+    if (m.metricId === "M08" && m.unknownCount > 0 && m.bounds) {
+      hold.statement = `${status.statement} The show rate is only a bound (${formatPercent(m.bounds.lower, 0)} to ${formatPercent(m.bounds.upper, 0)}) until then.`;
+    }
+    return { hold, action: SURFACE_ACTION[status.surface], surfaces };
   }
   if (m.dataState === "stale" || m.dataState === "unknown") {
-    return { reason: `Data state is ${m.dataState}.`, action: "fix the data before coaching" };
+    return {
+      hold: {
+        incidentIds: [],
+        waitingOn: `the ${m.label} cohort is refreshed`,
+        owner: "sales_ops",
+        ownerLabel: "Sales ops",
+        statement: `This figure alone is ${m.dataState}, so this one recommendation waits; every other recommendation stands.`,
+      },
+      action: `refresh the data behind ${m.label}`,
+      surfaces,
+    };
   }
   return undefined;
 }
@@ -511,8 +568,9 @@ function buildRecommendation(
   filter: CohortFilter,
   userId: Id | null,
   now: ISODateTime,
+  scope: IncidentScope,
 ): Candidate | undefined {
-  const suppressed = suppression(metric, dataset);
+  const suppressed = holdOn(metric, scope);
   const isIssue = verdict.state === "attention" || verdict.state === "material_issue";
   if (!suppressed && !isIssue) return undefined;
 
@@ -536,10 +594,10 @@ function buildRecommendation(
   const rec: CoachingRecommendation = {
     tenantId: dataset.tenant.tenantId,
     recommendationId: `rec_${metric.metricId}_${userId ?? "team"}_${Date.parse(now)}`,
-    ownerRole: suppressed ? "sales_ops" : userId ? "rep" : entry.owner,
+    ownerRole: suppressed ? ownerRoleFor(suppressed) : userId ? "rep" : entry.owner,
     ownerUserId: userId ?? undefined,
-    title: suppressed ? `Resolve data before coaching: ${entry.issue}` : entry.issue,
-    issue: suppressed ? suppressed.reason : `${entry.issue}: ${verdict.explanation}`,
+    title: suppressed ? `Waiting on data: ${entry.issue}` : entry.issue,
+    issue: suppressed ? suppressed.hold.statement : `${entry.issue}: ${verdict.explanation}`,
     metricIds: [metric.metricId],
     cohortId: metric.cohortId,
     dataState: metric.dataState,
@@ -556,38 +614,73 @@ function buildRecommendation(
     guardrails: [...entry.guardrails, "Correlation is not cause; a rep can challenge this premise."],
     reviewAt: reviewDate(now),
     state: "proposed",
-    suppressed: suppressed ? { reason: suppressed.reason } : undefined,
+    suppressed: suppressed ? { reason: suppressed.hold.statement } : undefined,
     provenance: { engine: "rules", version: COACHING_ENGINE_VERSION },
+    dependsOn: surfacesForMetric(metric.metricId),
+    held: suppressed?.hold,
   };
 
   const controllable = entry.owner === "rep" ? 2 : 1;
   const severity = verdict.state === "material_issue" ? 3 : verdict.state === "attention" ? 2 : 1;
   const cashWeight = scenario ? Math.min(3, scenario.modeledCash.amountMinor / 500_000) : 0;
-  const priority = suppressed ? 100 : severity * 10 + controllable * 3 + cashWeight;
+  // A held recommendation never outranks valid coaching: it is listed after it, not instead of it.
+  const priority = suppressed ? 0 : severity * 10 + controllable * 3 + cashWeight;
   return { rec, priority };
+}
+
+function ownerRoleFor(hold: Hold): CoachingOwner {
+  return hold.hold.owner === "owner" ? "sales_ops" : hold.hold.owner;
 }
 
 const COACHED_METRICS: MetricId[] = ["M04", "M06", "M08", "M09", "M11", "M12", "M16"];
 
+/** How many held recommendations ride along with the valid ones, so the wait is visible but never dominant. */
+export const HELD_RECOMMENDATION_SLOTS = 1;
+export const STANDING_RECOMMENDATION_SLOTS = 3;
+
+export interface CoachingPlan {
+  /** Recommendations whose evidence no open incident touches. These always come first. */
+  standing: CoachingRecommendation[];
+  /** Recommendations waiting on an incident, each naming what it waits on and who owns it. */
+  held: CoachingRecommendation[];
+  scope: IncidentScope;
+}
+
+/**
+ * Every candidate recommendation, split into what stands and what waits. Nothing
+ * is dropped for being held, and nothing valid is displaced by a hold.
+ */
+export function coachingPlan(dataset: Dataset, userId: Id | null, now: ISODateTime, scope?: IncidentScope): CoachingPlan {
+  const resolved = scope ?? scopeIncidents(dataset, { userId: userId ?? undefined, now });
+  const filter: CohortFilter = userId ? { userId } : {};
+  const candidates: Candidate[] = [];
+  for (const id of COACHED_METRICS) {
+    const metric = computeMetric(id, dataset, filter, now);
+    const verdict = evaluate(metric, defaultBenchmarkFor(id));
+    const entry = libraryEntry(id);
+    if (!entry) continue;
+    const candidate = buildRecommendation(dataset, metric, verdict, entry, filter, userId, now, resolved);
+    if (candidate) candidates.push(candidate);
+  }
+  // Perception gap for a rep: emitted only when a direction can be named; not emitted on small samples.
+  if (userId) {
+    const gap = perceptionGapRecommendation(dataset, filter, userId, now, resolved);
+    if (gap) candidates.push(gap);
+  }
+  const ordered = [...candidates].sort((a, b) => b.priority - a.priority);
+  return {
+    standing: ordered.filter((c) => !c.rec.held).map((c) => c.rec),
+    held: ordered.filter((c) => c.rec.held).map((c) => c.rec),
+    scope: resolved,
+  };
+}
+
 export const RulesCoachingEngine: CoachingEngine = {
   recommend(dataset, userId, now) {
-    const filter: CohortFilter = userId ? { userId } : {};
-    const candidates: Candidate[] = [];
-    for (const id of COACHED_METRICS) {
-      const metric = computeMetric(id, dataset, filter, now);
-      const verdict = evaluate(metric, defaultBenchmarkFor(id));
-      const entry = libraryEntry(id);
-      if (!entry) continue;
-      const candidate = buildRecommendation(dataset, metric, verdict, entry, filter, userId, now);
-      if (candidate) candidates.push(candidate);
-    }
-    // Perception gap for a rep: emitted only when a direction can be named; suppressed on small samples.
-    if (userId) {
-      const gap = perceptionGapRecommendation(dataset, filter, userId, now);
-      if (gap) candidates.push(gap);
-    }
-    // One primary task plus a small number of optional lessons.
-    return candidates.sort((a, b) => b.priority - a.priority).slice(0, 3).map((c) => c.rec);
+    const plan = coachingPlan(dataset, userId, now);
+    // One primary task plus a small number of optional lessons, then at most one
+    // held item so the rep can see what is waiting and who owns it.
+    return [...plan.standing.slice(0, STANDING_RECOMMENDATION_SLOTS), ...plan.held.slice(0, HELD_RECOMMENDATION_SLOTS)];
   },
 };
 
@@ -628,12 +721,17 @@ export function buildBottleneckCards(dataset: Dataset, now: ISODateTime, filter:
       stageId: "net_collected_cash",
       cohortId: "ledger:exception_queue",
       observed: `${unlinked.length} payment(s) totaling ${formatMoney(money(amount, currency))} are not linked to an opportunity.`,
-      comparator: "Policy: zero unreconciled payments before ranking or commission.",
+      comparator: "Policy: zero unreconciled payments before a cash-basis ranking or a commission figure is final.",
       dataState: "partial",
       responsibleFunction: "finance",
       candidateExplanations: ["Provider mapping gap", "Payment made under a different contact name", "Manual invoice outside the workflow"],
       proposedInvestigation: "Map each payment to its opportunity or record an audited exception; then restate affected cohorts.",
-      verdict: { state: "data_state", label: "Data state: partial", explanation: "Cash metrics are unreconciled until these payments are mapped." },
+      verdict: {
+        state: "data_state",
+        label: "Data state: partial",
+        explanation:
+          "Collected cash attribution, commission, and the cash-basis standing are provisional until these payments are mapped. Calling, appointments, XP, levels, and coaching read from conversations are unaffected.",
+      },
     });
   }
 

@@ -8,6 +8,7 @@ import {
   cashRace,
   commissionBucket,
   commissionPolicyFor,
+  commissionStatus,
   commissionSummary,
   nextTier,
   recentCashDrops,
@@ -209,6 +210,48 @@ describe("commissionSummary", () => {
     expect(commissionBucket("paid")).toBe("paid");
     expect(commissionBucket("disputed")).toBeNull();
     expect(commissionBucket("adjusted")).toBeNull();
+  });
+});
+
+describe("commissionStatus", () => {
+  const at = (accruedMinor: number, eligibleMinor: number, paidMinor: number) => commissionStatus({ accruedMinor, eligibleMinor, paidMinor });
+
+  it("names the one state that applies, in money words", () => {
+    expect(at(0, 0, 0)).toMatchObject({ id: "none", label: "No commission yet" });
+    expect(at(1_000, 0, 0)).toMatchObject({ id: "pending", word: "Pending", label: "Pending commission, not yet approved" });
+    expect(at(0, 1_000, 0)).toMatchObject({ id: "payable", word: "Payable", label: "Payable commission, not yet paid" });
+    expect(at(0, 0, 1_000)).toMatchObject({ id: "paid", word: "Paid", label: "Paid commission" });
+  });
+
+  it("names every state that applies when a total is mixed, so nothing has to be decoded", () => {
+    expect(at(1, 1, 0).label).toBe("Earned commission: pending and payable");
+    expect(at(0, 1, 1).label).toBe("Earned commission: payable and paid");
+    expect(at(1, 1, 1)).toMatchObject({ id: "mixed", word: "Earned", label: "Earned commission: pending, payable and paid" });
+  });
+
+  it("never returns a tier name and always carries a meaning for the Details sheet", () => {
+    const tierWords = DEFAULT_TIERS.map((t) => t.label.toLowerCase());
+    for (const s of [at(0, 0, 0), at(5, 0, 0), at(0, 5, 0), at(0, 0, 5), at(5, 5, 5)]) {
+      expect(s.meaning.length).toBeGreaterThan(0);
+      for (const word of tierWords) expect(s.label.toLowerCase()).not.toContain(word);
+    }
+  });
+
+  it("reads the synthetic setter's month as payable, never as a tier name", () => {
+    const summary = commissionSummary(obaviaDataset, "usr_setter_tomasz", SEASON, NOW, obaviaCommissionPolicies);
+    expect(summary.totalMinor).toBe(27_750);
+    expect(commissionStatus(summary)).toMatchObject({ id: "payable", label: "Payable commission, not yet paid" });
+    // The tier is still Coins; the tier name is a badge and never labels the money.
+    expect(tierFor(summary.totalMinor, tierPolicyFor("setter")).label).toBe("Coins");
+  });
+
+  it("separates a verified zero from an absent figure: zero is a status, not a gap", () => {
+    const zero = commissionSummary(obaviaDataset, "usr_closer_marcus", SEASON, NOW, obaviaCommissionPolicies);
+    expect(zero.totalMinor).toBe(0);
+    expect(commissionStatus(zero).id).toBe("none");
+    // M19 is computable for him, so the ratio is a real zero and not "not available".
+    expect(zero.perAttended.value).toBe(0);
+    expect(zero.perAttended.denominator).toBeGreaterThan(0);
   });
 });
 

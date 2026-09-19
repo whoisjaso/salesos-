@@ -1,9 +1,10 @@
 "use client";
 
+import { Question } from "@phosphor-icons/react";
 import { motion, useReducedMotion } from "motion/react";
 import type { CashDrop, CashTier } from "@/domain/cashTiers";
 import { Surface } from "@/components/ui/Surface";
-import { formatMoneyMinor, formatRelativeTime } from "@/lib/format";
+import { MONEY_NOT_AVAILABLE, formatMoneyMinor, formatRelativeTime } from "@/lib/format";
 import { TierBadge } from "./TierBadge";
 
 export interface RecentDropItem extends CashDrop {
@@ -16,22 +17,38 @@ export interface RecentDropsProps {
   tier: CashTier;
   now: string;
   currency?: string;
+  /** The period these payments cover, in words. */
+  period?: string;
+  /**
+   * False when the payment feed could not be read. A verified zero and a
+   * missing figure are different words in different weights, so this is never
+   * inferred from an empty list.
+   */
+  available?: boolean;
 }
 
 /** The last five collected payments on the rep's opportunities. Ledger facts only. */
-export function RecentDrops({ drops, tier, now, currency = "USD" }: RecentDropsProps) {
+export function RecentDrops({ drops, tier, now, currency = "USD", period = "this month", available = true }: RecentDropsProps) {
   const reduce = useReducedMotion();
   const shown = drops.slice(0, 5);
   return (
-    <Surface padding="none" as="section" aria-label="Recent cash">
-      <div className="flex items-center justify-between px-4 pt-4">
-        <span className="text-[14px] font-semibold text-fg">Cash in</span>
-        <span className="text-[12px] text-fg-subtle">Ledger</span>
+    <Surface padding="none" as="section" aria-label="Cash collected">
+      <div className="px-4 pt-4">
+        <p className="text-[14px] font-semibold text-fg">Cash collected</p>
+        <p className="mt-0.5 text-[12px] text-fg-subtle">{period}, from the payment ledger. This is company cash, not your pay.</p>
       </div>
-      {shown.length === 0 ? (
-        <p className="px-4 pt-2 pb-4 text-[13px] text-fg-subtle">No cash yet</p>
+      {!available ? (
+        <p className="flex items-start gap-1.5 px-4 pt-3 pb-4 text-[13px] text-fg-muted">
+          <Question size={14} weight="bold" aria-hidden className="mt-[2px] shrink-0" />
+          <span>{MONEY_NOT_AVAILABLE}. Nothing here is a zero; the feed has not been read.</span>
+        </p>
+      ) : shown.length === 0 ? (
+        <div className="px-4 pt-3 pb-4">
+          <p className="tabular text-[15px] font-medium text-fg">{formatMoneyMinor(0, currency)} collected in {period}</p>
+          <p className="mt-0.5 text-[12px] text-fg-subtle">No payments landed on your opportunities. This is a verified zero.</p>
+        </div>
       ) : (
-        <ol className="px-4 pt-1 pb-2">
+        <ol className="px-4 pt-2 pb-2">
           {shown.map((d, i) => (
             <motion.li
               key={`${d.opportunityId}:${d.at}`}

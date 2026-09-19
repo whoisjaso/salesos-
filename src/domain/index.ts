@@ -3,6 +3,7 @@
  */
 export * from "./types";
 export * from "./money";
+export * from "./incidents";
 export * from "./events";
 export * from "./metrics";
 export * from "./performance";

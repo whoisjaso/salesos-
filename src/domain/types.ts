@@ -517,6 +517,12 @@ export interface CoachingRecommendation {
   state: "proposed" | "accepted" | "in_practice" | "evaluated" | "adopted" | "rejected" | "inconclusive";
   suppressed?: { reason: string }; // when data is stale/unreconciled, the action is "fix the data"
   provenance: { engine: "rules" | "llm"; version: string };
+  /** The surfaces this recommendation's evidence depends on. Empty means nothing can hold it. */
+  dependsOn?: AffectedSurface[];
+  /** Set when an incident makes this recommendation's evidence unreliable. */
+  held?: CoachingHold;
+  /** The recommendation stands, but its numbers can move when an incident resolves. */
+  provisional?: boolean;
 }
 
 // ---------- Leaderboard (SOS-14) ----------
@@ -542,6 +548,20 @@ export interface LeaderboardRow {
   refundCount: number;
   movementReason?: string;
   priorPeriodRevenuePerLead?: number | null;
+  /**
+   * Whether the revenue figure is an established amount, an established zero, or
+   * not available at all. "$0 collected" and "payment data not available" are
+   * different facts and must not render alike.
+   */
+  revenueState?: "amount" | "verified_zero" | "unavailable";
+  /** The amount is shown but can move when an incident resolves. */
+  revenueProvisional?: boolean;
+  /** "at_least" when attendance evidence is unresolved for this row's appointments. */
+  attendedState?: "verified" | "at_least";
+  unresolvedAttendanceCount?: number;
+  /** Surfaces held for this row, with the incidents behind them in `heldStatement`. */
+  heldSurfaces?: AffectedSurface[];
+  heldStatement?: string;
 }
 
 // ---------- Gamification (SOS-15) ----------
@@ -580,6 +600,94 @@ export interface DataIncident {
   affected: string; // which decisions this touches
   owner: CoachingOwner;
   openedAt: ISODateTime;
+  /** The business owner, when it is the owner rather than a function. Takes precedence over `owner`. */
+  ownerRole?: IncidentOwnerRole;
+  /** Optional declared scope. When absent the incident holds nothing on its own (see AffectedSurface). */
+  kind?: DataIncidentKind;
+  surfaces?: AffectedSurface[];
+  /** One sentence: what is held, and what keeps running. */
+  effect?: string;
+  /** What has to happen for the hold to lift. */
+  waitingOn?: string;
+  subjects?: IncidentSubjects;
+}
+
+// ---------- Incident scope (D: "A held measurement never holds the person") ----------
+
+/**
+ * The surfaces a data incident can make unreliable. Nothing outside this list is
+ * affected by an incident: XP, levels, streaks, calling, appointments, and
+ * conversation-based coaching keep running while a measurement is held.
+ */
+export type AffectedSurface =
+  | "revenue_attribution"
+  | "commission"
+  | "standings"
+  | "attendance_outcome"
+  | "contact_permission"
+  | "communication_read";
+
+export type DataIncidentKind =
+  | "unlinked_payment"
+  | "unresolved_attendance"
+  | "stale_sync"
+  | "missing_consent_record"
+  | "contact_restriction"
+  | "refund_under_review"
+  | "unreviewed_communication"
+  | "declared";
+
+/** Who resolves an incident. Sales ops, the owner, the rep, or another function. */
+export type IncidentOwnerRole = CoachingOwner | "owner";
+
+/**
+ * What a reader may do with a figure on a surface.
+ * - reliable: no incident touches it.
+ * - provisional: show the figure, say it can move, name what it waits on.
+ * - withheld: do not produce the figure at all (a rank, a permitted action).
+ */
+export type SurfaceDisposition = "reliable" | "provisional" | "withheld";
+
+/** The specific records an incident covers. Never the whole tenant unless it really is. */
+export interface IncidentSubjects {
+  opportunityIds?: Id[];
+  userIds?: Id[];
+  appointmentInstanceIds?: Id[];
+  ledgerEntryIds?: Id[];
+  contactIds?: Id[];
+  callIds?: Id[];
+}
+
+export interface ScopedIncident {
+  incidentId: Id;
+  kind: DataIncidentKind;
+  severity: "info" | "warning" | "critical";
+  title: string;
+  /** The only surfaces this incident makes unreliable. */
+  surfaces: AffectedSurface[];
+  owner: IncidentOwnerRole;
+  /** Display form, e.g. "Sales ops". */
+  ownerLabel: string;
+  /** One sentence in plain words: the limited effect. */
+  effect: string;
+  /** What has to happen for the hold to lift. */
+  waitingOn: string;
+  openedAt: ISODateTime;
+  subjects: IncidentSubjects;
+  evidenceRefs: Id[];
+  /** How many records this incident covers. */
+  count: number;
+}
+
+/** A recommendation waiting on an incident says what it waits on and who owns it. */
+export interface CoachingHold {
+  surface?: AffectedSurface;
+  incidentIds: Id[];
+  waitingOn: string;
+  owner: IncidentOwnerRole;
+  ownerLabel: string;
+  /** One sentence of the limited effect, ready to render. */
+  statement: string;
 }
 
 export interface BottleneckCard {

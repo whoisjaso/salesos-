@@ -19,11 +19,17 @@
   --bg-sunken: #090a0c;
   --bg-hover: rgba(255, 255, 255, 0.04);
 
-  /* Text, warm off-white ramp */
+  /*
+    Text, warm off-white ramp.
+    Measured against --bg-overlay (#1a1d23), the lightest surface text sits on, so the
+    ratio only improves on --bg-raised and --bg-base. Anything that carries an
+    instruction clears 4.5:1; incidental marks clear 3:1 ("Say the whole measurement",
+    docs/DECISIONS.md). fg 13.9:1, muted 8.7:1, subtle 5.6:1, faint 3.6:1.
+  */
   --fg: #ece9e2;
-  --fg-muted: #a7a59d;
-  --fg-subtle: #7a786f;
-  --fg-faint: #55534d;
+  --fg-muted: #bdbab1;
+  --fg-subtle: #96948b;
+  --fg-faint: #757369;
 
   /* Lines */
   --line: rgba(236, 233, 226, 0.08);
@@ -65,7 +71,12 @@
   --tabbar-height: 60px;
 }
 
-/* Light theme values */
+/*
+  Light theme values.
+  Measured against --bg-sunken (#ebeae6), the darkest surface text sits on:
+  fg 14.5:1, muted 6.6:1, subtle 4.8:1, faint 3.1:1. The performance hues moved only
+  as far as 4.5:1 on that same surface required; the accent did not move.
+*/
 :root[data-theme="light"] {
   color-scheme: light;
   --bg-base: #f4f3f0;
@@ -74,9 +85,9 @@
   --bg-sunken: #ebeae6;
   --bg-hover: rgba(0, 0, 0, 0.04);
   --fg: #1b1a18;
-  --fg-muted: #5f5e58;
-  --fg-subtle: #85837b;
-  --fg-faint: #b1afa7;
+  --fg-muted: #52514b;
+  --fg-subtle: #67665f;
+  --fg-faint: #87857d;
   --line: rgba(27, 26, 24, 0.09);
   --line-strong: rgba(27, 26, 24, 0.18);
   --line-focus: #2e63c9;
@@ -86,10 +97,10 @@
   --accent-soft: rgba(46, 99, 201, 0.1);
   --perf-strong-line: rgba(52, 140, 92, 0.6);
   --perf-strong-tint: rgba(52, 140, 92, 0.06);
-  --perf-strong-fg: #2f7f55;
+  --perf-strong-fg: #2b7550;
   --perf-attention-line: rgba(176, 128, 38, 0.62);
   --perf-attention-tint: rgba(176, 128, 38, 0.07);
-  --perf-attention-fg: #8f6a1a;
+  --perf-attention-fg: #856116;
   --perf-issue-line: rgba(178, 70, 62, 0.55);
   --perf-issue-tint: rgba(178, 70, 62, 0.05);
   --perf-issue-fg: #a8433b;
@@ -108,9 +119,9 @@
     --bg-sunken: #ebeae6;
     --bg-hover: rgba(0, 0, 0, 0.04);
     --fg: #1b1a18;
-    --fg-muted: #5f5e58;
-    --fg-subtle: #85837b;
-    --fg-faint: #b1afa7;
+    --fg-muted: #52514b;
+    --fg-subtle: #67665f;
+    --fg-faint: #87857d;
     --line: rgba(27, 26, 24, 0.09);
     --line-strong: rgba(27, 26, 24, 0.18);
     --line-focus: #2e63c9;
@@ -120,10 +131,10 @@
     --accent-soft: rgba(46, 99, 201, 0.1);
     --perf-strong-line: rgba(52, 140, 92, 0.6);
     --perf-strong-tint: rgba(52, 140, 92, 0.06);
-    --perf-strong-fg: #2f7f55;
+    --perf-strong-fg: #2b7550;
     --perf-attention-line: rgba(176, 128, 38, 0.62);
     --perf-attention-tint: rgba(176, 128, 38, 0.07);
-    --perf-attention-fg: #8f6a1a;
+    --perf-attention-fg: #856116;
     --perf-issue-line: rgba(178, 70, 62, 0.55);
     --perf-issue-tint: rgba(178, 70, 62, 0.05);
     --perf-issue-fg: #a8433b;

@@ -502,6 +502,23 @@ export const VALUE_WORD: Record<LensName, string> = {
   legacy_durability: "Something lasting",
 };
 
+/**
+ * What a read percentage is a percentage of, in one plain sentence. It goes wherever a read
+ * percentage is shown, because "Competence 45%" on its own invites the worst reading: a claim
+ * about the person (D: "The read is a suggested approach first").
+ */
+export const READ_MEASURE_SENTENCE =
+  "The percentage is how strongly we read this signal in the customer's own words. It is not a score for the person and not a judgment of their ability.";
+
+/** The kicker over the instruction on any surface that leads with the approach. */
+export const SUGGESTED_APPROACH_KICKER = "Suggested approach";
+
+/** The small line under the instruction: where it came from and how much it is worth. */
+export const APPROACH_TENTATIVE_SENTENCE = "A tentative suggestion read from an earlier conversation. It has not been checked against what happened.";
+
+/** What the brief says when no conversation has given us anything to suggest. */
+export const NO_APPROACH_WORD = "No suggestion yet";
+
 export type ConfidenceWord = "High" | "Medium" | "Low";
 
 /** High at 0.7 and above, Medium at 0.4 and above, Low below. */

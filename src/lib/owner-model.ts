@@ -36,7 +36,7 @@ import { evaluate, defaultBenchmarkFor } from "@/domain/performance";
 import { PERCEPTION_GAP_STAGE_ID, buildBottleneckCards, isPerceptionGapCard, type PerceptionGap } from "@/domain/coaching";
 import { DEFAULT_CAPACITY_POLICY, estimateLoad, type CapacityPolicy } from "@/domain/routing";
 import { playerState } from "@/domain/game";
-import { formatAsOf, formatMoneyMinor, formatRelativeTime } from "@/lib/format";
+import { formatAsOf, formatCount, formatMoneyMinor, formatRelativeTime } from "@/lib/format";
 
 // ---------- Cohort keys ----------
 
@@ -198,7 +198,111 @@ export function buildTrustItems(dataset: Dataset, now: ISODateTime): TrustItem[]
   return items;
 }
 
+// ---------- Saying the whole measurement ----------
+
+/**
+ * "Say the whole measurement" (docs/DECISIONS.md). A figure on a screen carries its
+ * full name with the denominator in words, the period it covers, the count behind it,
+ * and the word Provisional where it is read when the figure can still move.
+ */
+
+/** The window a figure covers: the earliest accountability start in the cohort, to the as-of stamp. */
+export interface PeriodView {
+  from: ISODateTime;
+  to: ISODateTime;
+  /** "Aug 5 to Sep 18, 2026" */
+  label: string;
+}
+
+const DAY_FMT = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const DAY_YEAR_FMT = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+
+export function periodOf(opps: { accountabilityStartedAt: ISODateTime }[], now: ISODateTime): PeriodView {
+  const starts = opps.map((o) => ms(o.accountabilityStartedAt)).filter((n) => Number.isFinite(n));
+  const from = new Date(starts.length > 0 ? Math.min(...starts) : ms(now));
+  const to = new Date(ms(now));
+  const sameYear = from.getUTCFullYear() === to.getUTCFullYear();
+  return {
+    from: from.toISOString(),
+    to: to.toISOString(),
+    label: `${sameYear ? DAY_FMT.format(from) : DAY_YEAR_FMT.format(from)} to ${DAY_YEAR_FMT.format(to)}`,
+  };
+}
+
+/** A figure that is not final yet, and the one reason it is not. Never color alone. */
+export interface ProvisionalNote {
+  /** The word, as it is read on the screen. */
+  label: string;
+  /** Short enough for one phone line under the number. */
+  reason: string;
+  /** The whole sentence, for the accessible name and the sheet. */
+  sentence: string;
+}
+
+/**
+ * Why a figure can still move: unreconciled payments first (they are the decisive
+ * exception), then any other unknown record, then a cohort still inside its maturity
+ * window. null means the figure is final for the period.
+ */
+export function provisionalFor(dataset: Dataset, metric: MetricPayload, filter: CohortFilter, now: ISODateTime): ProvisionalNote | null {
+  const currency = dataset.tenant.reportingCurrency;
+  if (metric.unknownCount > 0 || metric.dataState !== "complete") {
+    const unlinked = dataset.ledger.filter((e) => e.opportunityId === undefined);
+    if (unlinked.length > 0) {
+      const amount = formatMoneyMinor(
+        unlinked.reduce((s, e) => s + e.amount.amountMinor, 0),
+        currency,
+        { cents: true },
+      );
+      const noun = unlinked.length === 1 ? "a payment" : `${formatCount(unlinked.length)} payments`;
+      return {
+        label: "Provisional",
+        reason: `${amount} in ${noun} not linked yet`,
+        sentence: `Provisional: ${amount} collected is not linked to an opportunity yet, so this figure can still move.`,
+      };
+    }
+    const unknown = formatCount(metric.unknownCount);
+    return {
+      label: "Provisional",
+      reason: `${unknown} ${metric.unknownCount === 1 ? "record" : "records"} still unknown`,
+      sentence: `Provisional: ${unknown} ${metric.unknownCount === 1 ? "record is" : "records are"} still unknown, so this figure can still move.`,
+    };
+  }
+  const opps = selectOpportunities(dataset, filter, now);
+  const immature = opps.filter((o) => !opportunityMatured(o, dataset.tenant, now)).length;
+  if (immature > 0) {
+    const horizon = dataset.tenant.maturityHorizonDays;
+    return {
+      label: "Provisional",
+      reason: `${formatCount(immature)} of ${formatCount(opps.length)} still inside the ${horizon} day window`,
+      sentence: `Provisional: ${formatCount(immature)} of ${formatCount(opps.length)} assigned opportunities are still inside the ${horizon} day maturity window, so this figure can still move.`,
+    };
+  }
+  return null;
+}
+
+/** Everything a figure has to say about itself, in words, wherever it is read. */
+export interface MeasurementCopy {
+  /** The full name with its denominator spelled out. */
+  name: string;
+  /** What is counted and over how many, e.g. "Net collected cash over 90 assigned opportunities". */
+  over: string;
+  /** The period the figure covers. */
+  period: string;
+  /** null when the figure is final for the period. */
+  provisional: ProvisionalNote | null;
+}
+
+/** One sentence: the name, the value, what it is over, the period, and how sure it is. */
+export function measurementSentence(value: string, m: MeasurementCopy): string {
+  const parts = [`${m.name}, ${value}`, m.over, m.period];
+  if (m.provisional) parts.push(m.provisional.sentence.replace(/\.$/, ""));
+  return `${parts.join(". ")}.`;
+}
+
 // ---------- Economics ----------
+
+export type MeasurementKey = "perOpportunity" | "netCollected" | "contracted" | "outstanding" | "refunds";
 
 export interface EconomicsView {
   netCollected: MetricPayload;
@@ -209,6 +313,12 @@ export interface EconomicsView {
   /** M16, the primary efficiency metric. */
   perOpportunity: MetricPayload;
   perOpportunityVerdict: PerformanceVerdict;
+  /** The period every figure in this view covers. */
+  period: PeriodView;
+  /** Assigned opportunities behind the cohort. */
+  assigned: number;
+  /** What each figure says about itself where it is read. */
+  measurements: Record<MeasurementKey, MeasurementCopy>;
 }
 
 interface MoneyPayloadInput {
@@ -253,6 +363,18 @@ function isRefundLike(e: LedgerEntry): boolean {
   return e.kind === "refund" || e.kind === "dispute_debit";
 }
 
+/**
+ * The owner hero's metric name. The denominator is spelled out ("per assigned
+ * opportunity", never "per assigned"); the basis word, cash, is stated directly under
+ * the number. Four spec files outside this module pin the accessible name to this
+ * exact prefix, so the phrase is defined once, here.
+ */
+export const PER_OPPORTUNITY_NAME = "Net collected per assigned opportunity";
+
+function plural(n: number, one: string, many = `${one}s`): string {
+  return `${formatCount(n)} ${n === 1 ? one : many}`;
+}
+
 export function buildEconomics(dataset: Dataset, filter: CohortFilter, now: ISODateTime): EconomicsView {
   const currency = dataset.tenant.reportingCurrency;
   const opps = selectOpportunities(dataset, filter, now);
@@ -266,60 +388,101 @@ export function buildEconomics(dataset: Dataset, filter: CohortFilter, now: ISOD
   const refundMinor = refundEntries.reduce((s, e) => s + e.amount.amountMinor, 0);
   const signedContracts = dataset.contracts.filter((c) => ids.has(c.opportunityId) && c.state === "signed").length;
   const perOpportunity = computeMetric("M16", dataset, filter, now);
+  const period = periodOf(opps, now);
+
+  const netCollectedPayload = moneyPayload({
+    metricId: "M16",
+    label: "Net collected cash",
+    amountMinor: net.amountMinor,
+    denominator: opps.length,
+    currency,
+    basis: "net_collected_cash",
+    cohortId,
+    timeBasis: "ledger entries attributed by opportunity; refunds and disputes subtracted",
+    asOf: now,
+    dataState: unlinked > 0 ? "partial" : "complete",
+    unknownCount: unlinked,
+    evidenceQueryId: `query_net_collected_${cohortId}`,
+  });
+  const contractedPayload = moneyPayload({
+    metricId: "M15",
+    label: "Contracted value",
+    amountMinor: contracted.amountMinor,
+    denominator: signedContracts,
+    currency,
+    basis: "contracted_value",
+    cohortId,
+    timeBasis: "signed contracts; not cash",
+    asOf: now,
+    evidenceQueryId: `query_contracted_${cohortId}`,
+  });
+  const outstandingPayload = moneyPayload({
+    metricId: "M15",
+    label: "Outstanding",
+    amountMinor: contracted.amountMinor - net.amountMinor,
+    denominator: signedContracts,
+    currency,
+    basis: "contracted_value",
+    cohortId,
+    timeBasis: "contracted value minus net collected cash",
+    asOf: now,
+    dataState: unlinked > 0 ? "partial" : "complete",
+    unknownCount: unlinked,
+    evidenceQueryId: `query_outstanding_${cohortId}`,
+  });
+  const refundsPayload = moneyPayload({
+    metricId: "M16",
+    label: "Refunds and disputes",
+    amountMinor: refundMinor,
+    denominator: refundEntries.length,
+    currency,
+    basis: "net_collected_cash",
+    cohortId,
+    timeBasis: "refund and dispute debit entries; restate the original cohort",
+    asOf: now,
+    evidenceQueryId: `query_refunds_${cohortId}`,
+  });
+
+  const assignedPhrase = plural(opps.length, "assigned opportunity", "assigned opportunities");
+  const contractPhrase = plural(signedContracts, "signed contract");
+  const measurements: Record<MeasurementKey, MeasurementCopy> = {
+    perOpportunity: {
+      name: PER_OPPORTUNITY_NAME,
+      over: `Net collected cash over ${assignedPhrase}`,
+      period: period.label,
+      provisional: provisionalFor(dataset, perOpportunity, filter, now),
+    },
+    netCollected: {
+      name: "Net collected cash",
+      over: `Payments minus refunds and disputes, across ${assignedPhrase}`,
+      period: period.label,
+      provisional: provisionalFor(dataset, netCollectedPayload, filter, now),
+    },
+    contracted: {
+      name: "Contracted value",
+      over: `Signed value, not cash, from ${contractPhrase}`,
+      period: period.label,
+      provisional: provisionalFor(dataset, contractedPayload, filter, now),
+    },
+    outstanding: {
+      name: "Outstanding",
+      over: `Contracted minus collected, across ${contractPhrase}`,
+      period: period.label,
+      provisional: provisionalFor(dataset, outstandingPayload, filter, now),
+    },
+    refunds: {
+      name: "Refunds and disputes",
+      over: `Refunds and dispute debits, ${plural(refundEntries.length, "entry", "entries")}`,
+      period: period.label,
+      provisional: provisionalFor(dataset, refundsPayload, filter, now),
+    },
+  };
 
   return {
-    netCollected: moneyPayload({
-      metricId: "M16",
-      label: "Net collected cash",
-      amountMinor: net.amountMinor,
-      denominator: opps.length,
-      currency,
-      basis: "net_collected_cash",
-      cohortId,
-      timeBasis: "ledger entries attributed by opportunity; refunds and disputes subtracted",
-      asOf: now,
-      dataState: unlinked > 0 ? "partial" : "complete",
-      unknownCount: unlinked,
-      evidenceQueryId: `query_net_collected_${cohortId}`,
-    }),
-    contracted: moneyPayload({
-      metricId: "M15",
-      label: "Contracted value",
-      amountMinor: contracted.amountMinor,
-      denominator: signedContracts,
-      currency,
-      basis: "contracted_value",
-      cohortId,
-      timeBasis: "signed contracts; not cash",
-      asOf: now,
-      evidenceQueryId: `query_contracted_${cohortId}`,
-    }),
-    outstanding: moneyPayload({
-      metricId: "M15",
-      label: "Outstanding",
-      amountMinor: contracted.amountMinor - net.amountMinor,
-      denominator: signedContracts,
-      currency,
-      basis: "contracted_value",
-      cohortId,
-      timeBasis: "contracted value minus net collected cash",
-      asOf: now,
-      dataState: unlinked > 0 ? "partial" : "complete",
-      unknownCount: unlinked,
-      evidenceQueryId: `query_outstanding_${cohortId}`,
-    }),
-    refunds: moneyPayload({
-      metricId: "M16",
-      label: "Refunds and disputes",
-      amountMinor: refundMinor,
-      denominator: refundEntries.length,
-      currency,
-      basis: "net_collected_cash",
-      cohortId,
-      timeBasis: "refund and dispute debit entries; restate the original cohort",
-      asOf: now,
-      evidenceQueryId: `query_refunds_${cohortId}`,
-    }),
+    netCollected: netCollectedPayload,
+    contracted: contractedPayload,
+    outstanding: outstandingPayload,
+    refunds: refundsPayload,
     refundCount: refundEntries.length,
     perOpportunity,
     perOpportunityVerdict: {
@@ -327,6 +490,9 @@ export function buildEconomics(dataset: Dataset, filter: CohortFilter, now: ISOD
       label: "Descriptive",
       explanation: "Primary efficiency measure. Net collected cash over every assigned opportunity, DQ included. No target until the cash basis is reconciled.",
     },
+    period,
+    assigned: opps.length,
+    measurements,
   };
 }
 
@@ -501,6 +667,66 @@ export const OWNER_FUNCTION_LABEL: Record<BottleneckCard["responsibleFunction"],
   finance: "Finance",
   delivery: "Delivery",
 };
+
+/**
+ * The three things the fix-first card must keep visible: what is missing, who resolves
+ * it, and what it affects. Written short enough to wrap inside a 390px card rather than
+ * be clipped, so no clause is ever lost to an ellipsis.
+ */
+export interface FixFirstCopy {
+  /** What is missing. */
+  missing: string;
+  /** Who resolves it, and the one move that resolves it. */
+  resolver: string;
+  /** What stays provisional or held until then. */
+  affects: string;
+}
+
+/** What is missing, in the fewest words that still carry the amount and the shape of the gap. */
+function missingText(card: BottleneckCard): string {
+  const unlinked = card.observed.match(/^(\d+) payment\(s\) totaling (\S+) are not linked to an opportunity\.?$/);
+  if (unlinked) {
+    const count = Number(unlinked[1]);
+    return `${unlinked[2]} collected, not linked to an opportunity${count > 1 ? ` (${count} payments)` : ""}`;
+  }
+  return card.observed.replace(/\s*\(hypothesis[^)]*\)/g, "").replace(/\.$/, "");
+}
+
+/** One move per stage, in the present tense, so the sentence reads "Finance links each payment ...". */
+const FIX_ACTION: Record<string, string> = {
+  net_collected_cash: "links each payment to its opportunity, or records an audited exception",
+  attended: "adds attendance evidence for the matured appointments",
+  two_way_contact: "checks the contact attempts against the lead mix",
+  retained_booking: "checks booking retention and the reminder timing",
+  perceived_qualified: "compares fit criteria across reps on a matched sample",
+  won: "reviews the close step on a matched sample",
+  first_attempt: "checks how fast new leads are worked",
+  [PERCEPTION_GAP_STAGE_ID]: "compares fit criteria across reps on a matched sample",
+};
+
+/** What the gap holds. A held measurement never holds the person: name the limited effect. */
+const FIX_EFFECT: Record<string, string> = {
+  net_collected_cash: "cash per assigned opportunity, commission and standings stay provisional",
+  attended: "show rate and the stages after it stay a bound",
+  two_way_contact: "contact rate and everything downstream of it move with it",
+  retained_booking: "booked and attended counts move with it",
+  perceived_qualified: "fit evidence and the coaching built on it move with it",
+  won: "win rate and cash per assigned opportunity move with it",
+  first_attempt: "speed to first attempt and the contact rate move with it",
+  [PERCEPTION_GAP_STAGE_ID]: "fit evidence and the coaching built on it move with it",
+};
+
+export function fixFirstCopy(card: BottleneckCard, owner: BottleneckCard["responsibleFunction"]): FixFirstCopy {
+  const action = FIX_ACTION[card.stageId] ?? "runs the investigation and reports back";
+  const effect =
+    FIX_EFFECT[card.stageId] ??
+    card.verdict.explanation.replace(/\.$/, "").replace(/^./, (c) => c.toLowerCase());
+  return {
+    missing: `${missingText(card)}.`,
+    resolver: `${OWNER_FUNCTION_LABEL[owner]} ${action}.`,
+    affects: `Until then, ${effect}.`,
+  };
+}
 
 // ---------- Assembly ----------
 

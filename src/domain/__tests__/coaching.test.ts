@@ -4,6 +4,7 @@ import {
   RulesCoachingEngine,
   benchmarkOpportunityScenario,
   buildBottleneckCards,
+  coachingPlan,
   isPerceptionGapCard,
   isPerceptionGapRecommendation,
   libraryEntryByKey,
@@ -12,7 +13,8 @@ import {
   sensitivityTable,
 } from "@/domain/coaching";
 import { fromDollars } from "@/domain/money";
-import { computeM08 } from "@/domain/metrics";
+import { computeM08, type Dataset } from "@/domain/metrics";
+import type { LedgerEntry } from "@/domain/types";
 import { obaviaDataset, NOW } from "@/fixtures/obavia";
 import { NOW as H_NOW, emptyDataset, mkAssignment, mkInstance, mkOpp, mkUser } from "./helpers";
 
@@ -62,15 +64,20 @@ describe("SOS-16 earnings scenario", () => {
 });
 
 describe("rules coaching engine", () => {
-  it("suppresses attendance coaching while attendance evidence is unresolved", () => {
+  it("holds attendance coaching while attendance evidence is unresolved, and names the owner", () => {
     const show = computeM08(obaviaDataset, {}, NOW);
     expect(show.dataState).toBe("partial");
-    const recs = RulesCoachingEngine.recommend(obaviaDataset, null, NOW);
-    const attendance = recs.find((r) => r.metricIds.includes("M08"));
+    const plan = coachingPlan(obaviaDataset, null, NOW);
+    const attendance = plan.held.find((r) => r.metricIds.includes("M08"));
     expect(attendance?.suppressed?.reason).toMatch(/unresolved attendance/);
     expect(attendance?.action).toBe("resolve attendance evidence");
     expect(attendance?.scenario).toBeUndefined();
     expect(attendance?.ownerRole).toBe("sales_ops");
+    expect(attendance?.held?.ownerLabel).toBe("Sales ops");
+    expect(attendance?.held?.waitingOn).toMatch(/unresolved attendance outcome/);
+    expect(attendance?.dependsOn).toEqual(["attendance_outcome"]);
+    // Nothing in the standing list is waiting on anything.
+    expect(plan.standing.every((r) => r.held === undefined)).toBe(true);
   });
 
   it("every recommendation carries metric, evidence, owner, alternatives, and an action", () => {
@@ -269,5 +276,108 @@ describe("perception gap (perceived minus verified fit)", () => {
     expect(team.perceived.dataState).toBe("partial");
     expect(team.gapPoints).toBeNull();
     expect(buildBottleneckCards(obaviaDataset, NOW).find((c) => c.stageId === PERCEPTION_GAP_STAGE_ID)).toBeUndefined();
+  });
+});
+
+describe("a held measurement never holds the coaching", () => {
+  const closer = "usr_closer_a";
+
+  /** One closer, every opportunity attended, with a real perception gap read from assessments. */
+  function transcriptDataset(extra: Partial<Dataset> = {}) {
+    const ds = emptyDataset({ users: [mkUser(closer, ["closer"])], ...extra });
+    for (let i = 0; i < 20; i += 1) {
+      const id = `opp_${i}`;
+      const verified = i < 14;
+      ds.opportunities.push(
+        mkOpp(id, {
+          currentOwner: { closer },
+          contactState: "two_way_contact",
+          fitState: verified ? "verified" : "unlikely",
+          commercialStatus: i < 8 ? "won" : "open",
+        }),
+      );
+      ds.assignments.push(mkAssignment(id, closer, "closer"));
+      ds.appointmentInstances.push(mkInstance(`inst_${i}`, id, "attended"));
+      ds.assessments.push({
+        tenantId: "t_test",
+        assessmentId: `qa_${i}`,
+        opportunityId: id,
+        policyVersion: "fit-policy-test",
+        objective: {
+          rooftop_count_known: { value: "yes", evidenceRefs: [] },
+          budget_authority: { value: verified ? "yes" : "unknown", evidenceRefs: [] },
+        },
+        repPerceivedFit: i < 8 ? "likely" : "unlikely",
+        reviewState: "confirmed",
+        assessedAt: "2026-08-10T16:00:00Z",
+        assessedByUserId: closer,
+      });
+    }
+    return ds;
+  }
+
+  const unlinkedPayment: LedgerEntry = {
+    tenantId: "t_test",
+    entryId: "led_unlinked",
+    opportunityId: undefined,
+    kind: "payment_collected",
+    amount: fromDollars(4_000),
+    providerRef: "pi_unlinked",
+    idempotencyKey: "k:led_unlinked",
+    occurredAt: "2026-09-10T10:00:00Z",
+    receivedAt: "2026-09-10T10:00:05Z",
+    commercialCategory: "new_customer",
+  };
+
+  const clean = transcriptDataset();
+  const withUnlinked = transcriptDataset({ ledger: [unlinkedPayment] });
+
+  it("an unlinked payment does not hide the coaching read from the conversation", () => {
+    const before = coachingPlan(clean, closer, H_NOW);
+    const after = coachingPlan(withUnlinked, closer, H_NOW);
+    expect(after.standing.map((r) => r.recommendationId)).toEqual(before.standing.map((r) => r.recommendationId));
+    const gap = after.standing.find((r) => r.metricIds.includes("M10"));
+    expect(gap).toBeDefined();
+    expect(gap?.held).toBeUndefined();
+    expect(gap?.action).toMatch(/clarification question/);
+    expect(gap?.dependsOn).toEqual(["attendance_outcome"]);
+    expect(gap?.provisional).toBe(false);
+    // And the rep still gets a primary task, not a data chore.
+    expect(RulesCoachingEngine.recommend(withUnlinked, closer, H_NOW)[0].held).toBeUndefined();
+  });
+
+  it("an unlinked payment does make the commission and revenue recommendation wait, with its owner", () => {
+    const plan = coachingPlan(withUnlinked, closer, H_NOW);
+    const revenue = plan.held.find((r) => r.metricIds.includes("M16"));
+    expect(revenue).toBeDefined();
+    expect(revenue?.dependsOn).toEqual(["revenue_attribution"]);
+    expect(revenue?.held?.waitingOn).toMatch(/unlinked payment/);
+    expect(revenue?.held?.ownerLabel).toBe("Sales ops");
+    expect(revenue?.held?.owner).toBe("sales_ops");
+    expect(revenue?.action).toBe("verify payment mapping");
+    expect(revenue?.title).toMatch(/^Waiting on data:/);
+    expect(revenue?.suppressed?.reason).toBe(revenue?.held?.statement);
+    expect(revenue?.scenario).toBeUndefined();
+    // The same recommendation stands on its own when nothing is unlinked.
+    expect(coachingPlan(clean, closer, H_NOW).held.find((r) => r.metricIds.includes("M16"))).toBeUndefined();
+  });
+
+  it("a held recommendation never displaces valid coaching", () => {
+    const recs = RulesCoachingEngine.recommend(withUnlinked, closer, H_NOW);
+    const firstHeld = recs.findIndex((r) => r.held !== undefined);
+    const lastStanding = recs.map((r) => r.held === undefined).lastIndexOf(true);
+    expect(firstHeld).toBeGreaterThan(lastStanding);
+    expect(recs.filter((r) => r.held !== undefined)).toHaveLength(1);
+    expect(recs.filter((r) => r.held === undefined).length).toBeGreaterThan(0);
+  });
+
+  it("the plan is deterministic and pure", () => {
+    expect(JSON.stringify(coachingPlan(withUnlinked, closer, H_NOW))).toBe(JSON.stringify(coachingPlan(withUnlinked, closer, H_NOW)));
+  });
+
+  it("the owner's unlinked-payment card states the limited effect", () => {
+    const card = buildBottleneckCards(withUnlinked, H_NOW).find((c) => c.cardId === "bn_unlinked_payments");
+    expect(card?.verdict.explanation).toMatch(/Calling, appointments, XP, levels, and coaching read from conversations are unaffected/);
+    expect(card?.responsibleFunction).toBe("finance");
   });
 });

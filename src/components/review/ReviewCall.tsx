@@ -1,14 +1,17 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useReducedMotion } from "motion/react";
 import type { IconProps } from "@phosphor-icons/react";
 import {
   ArrowLeft,
+  ArrowRight,
   BookmarkSimple,
   CalendarCheck,
   Check,
   ChatCircleText,
+  ClockCounterClockwise,
+  Flag,
   Handshake,
   Lightbulb,
   ListBullets,
@@ -19,22 +22,39 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/Button";
-import type { TranscriptSpan } from "@/domain/callIntelligence";
+import type { FieldCorrection, TranscriptSpan } from "@/domain/callIntelligence";
 import { ConfidenceDot, ReadBlock } from "@/components/workspace/BriefSheet";
 import { DetailsRow } from "@/components/ui/DetailsRow";
 import { Sheet } from "@/components/ui/Sheet";
 import { Surface } from "@/components/ui/Surface";
+import { NOW } from "@/fixtures/obavia";
 import { cn } from "@/lib/cn";
 import {
   angleFor,
+  ASSESSMENT_KICKER,
+  assessmentFor,
+  CALIBRATION_LINE,
   coachingMoment,
+  correctionEventFor,
   describePolicy,
+  flagField,
+  FLAG_WORD,
+  FLAGGED_WORD,
   formatClock as clock,
   formatDuration,
-  heroCaption,
+  historyFor,
   isGoodExample,
+  KEEPS_ORIGINAL_LINE,
   NEVER_LINE,
-  policyWithDisputes,
+  NO_SUPPORT_WORD,
+  openFieldIds,
+  policyWithCorrections,
+  spanRefStartMs,
+  stageBandLine,
+  STAGE_MEANING,
+  SUPPORT_WORD,
+  withdrawFlag,
+  WITHDRAW_WORD,
   type Moment,
   type MomentKind,
   type Review,
@@ -42,8 +62,8 @@ import {
   type Viewer,
 } from "@/lib/review";
 import { formatDateTimeIn, TENANT_TZ } from "@/lib/workspace-setter";
+import { BAND_ICON, BAND_TEXT, StageStrip } from "./StageStrip";
 import { ReferenceCards } from "./ReferenceCards";
-import { ProbabilityRing, StageStrip } from "./StageStrip";
 import { Transcript } from "./Transcript";
 
 const MOMENT_ICON: Record<MomentKind, ComponentType<IconProps>> = {
@@ -63,17 +83,22 @@ function toggled(s: Set<string>, id: string): Set<string> {
 }
 
 /**
- * One call. One hero word, one ring, one caption; the compact stage bar; the transcript
- * with at most one Angle; what changed; coaching. Everything else (moments, their words,
- * feedback, every extracted field) lives in the Details sheet. The transcript decides;
- * the rep can only dispute (Wrong?). Owner sees the same.
+ * One call. The default view states the current assessment in words, names the next step, and
+ * offers the supporting conversation; the slim four-stage bar stays, because a stage is a
+ * legitimate thing to show as a stage. No ring and no bare percentage here: a percentage with no
+ * stated meaning, horizon, or track record reads as more certainty than the evidence carries
+ * (D: "A stage is a stage, a prediction is a prediction, a payment is a payment"). The numbers,
+ * what each one is a probability of, the band that moved the stage, the cited spans, and an
+ * honest line about calibration are all one tap in, inside Details. The transcript still decides;
+ * the rep can flag an issue, and flagging keeps the original reading and its citations.
  */
-export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer }) {
+export function ReviewCall({ review, viewer, span }: { review: Review; viewer: Viewer; span?: number }) {
   const reduce = useReducedMotion();
-  const [disputed, setDisputed] = useState<Set<string>>(() => new Set());
+  /** Append-only: a withdrawal adds an entry, it never removes the flag that came before. */
+  const [corrections, setCorrections] = useState<FieldCorrection[]>(() => []);
   const [pinned, setPinned] = useState<Set<string>>(() => new Set());
   const [rejected, setRejected] = useState<Set<string>>(() => new Set());
-  /** One span after a jump, or every span a vocabulary chip cites. */
+  /** One span after a jump, or every span an observation cites. */
   const [active, setActive] = useState<number | number[] | undefined>(undefined);
   const [activeStage, setActiveStage] = useState<string | undefined>(undefined);
   const [inspected, setInspected] = useState<number | undefined>(undefined);
@@ -84,13 +109,16 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
   const [shared, setShared] = useState(false);
   const spanRefs = useRef<Map<number, HTMLLIElement>>(new Map());
 
-  const { call, contact, transcript, hero, stages } = review;
-  const policy = useMemo(() => policyWithDisputes(review, disputed), [review, disputed]);
+  const { call, contact, transcript, stages } = review;
+  const flagged = useMemo(() => openFieldIds(corrections), [corrections]);
+  const policy = useMemo(() => policyWithCorrections(review, corrections), [review, corrections]);
   const changes = useMemo(() => describePolicy(policy), [policy]);
   const angle = useMemo(() => angleFor(review, rejected), [review, rejected]);
+  const assessment = useMemo(() => assessmentFor(review), [review]);
+  const disputeEvent = useMemo(() => (corrections.length > 0 ? correctionEventFor(review, corrections, viewer.userId, NOW) : undefined), [review, corrections, viewer.userId]);
   const moments = review.moments.filter((m) => m.kind !== "outcome");
   const coachMoment = review.coaching ? coachingMoment(review) : undefined;
-  const anyDisputed = disputed.size > 0;
+  const anyFlagged = flagged.size > 0;
 
   const jumpTo = useCallback(
     (i: number) => {
@@ -102,6 +130,26 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
     [reduce],
   );
 
+  /** Highlight every given span index, then scroll to the first. */
+  const showSpans = useCallback(
+    (idx: number[]) => {
+      if (idx.length === 0) return;
+      setInspected(undefined);
+      setActive(idx);
+      window.setTimeout(() => spanRefs.current.get(idx[0])?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" }), reduce ? 0 : 120);
+    },
+    [reduce],
+  );
+
+  /** A link from another surface (a cited word on the brief) lands on its own passage. */
+  useEffect(() => {
+    if (span === undefined) return;
+    const i = transcript.findIndex((t) => t.startMs === span);
+    if (i < 0) return;
+    const t = window.setTimeout(() => jumpTo(i), 60);
+    return () => window.clearTimeout(t);
+  }, [span, transcript, jumpTo]);
+
   /** From inside any sheet: close it, then go. */
   const jumpFromSheet = (i: number) => {
     setDetailsOpen(false);
@@ -109,19 +157,24 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
     window.setTimeout(() => jumpTo(i), reduce ? 0 : 120);
   };
 
-  /** Highlight every given span (a vocabulary chip), close the sheet, and scroll to the first. */
+  const spansFromSheet = (idx: number[]) => {
+    setDetailsOpen(false);
+    window.setTimeout(() => showSpans(idx), reduce ? 0 : 120);
+  };
+
+  /** Every span a vocabulary chip cites. */
   const selectSpans = (spans: TranscriptSpan[]) => {
     const idx = spans.map((sp) => transcript.findIndex((t) => t.startMs === sp.startMs && t.endMs === sp.endMs)).filter((i) => i >= 0);
-    if (idx.length === 0) return;
-    setDetailsOpen(false);
-    setInspected(undefined);
-    setActive(idx);
-    window.setTimeout(() => spanRefs.current.get(idx[0])?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" }), reduce ? 0 : 120);
+    spansFromSheet(idx);
   };
 
   const jumpToStage = (s: StageView) => {
     setActiveStage(s.key);
-    if (s.spanIndexes.length > 0) jumpTo(s.spanIndexes[0]);
+    if (s.spanIndexes.length > 0) showSpans(s.spanIndexes);
+  };
+
+  const flag = (fieldId: string) => {
+    setCorrections((h) => (openFieldIds(h).has(fieldId) ? withdrawFlag(review, h, fieldId, viewer.userId, NOW) : flagField(review, h, fieldId, viewer.userId, NOW)));
   };
 
   return (
@@ -138,19 +191,44 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
         <div className="tabular text-[12px] text-fg-subtle">{call.startedAt ? formatDateTimeIn(call.startedAt, TENANT_TZ) : "Unknown time"}</div>
       </div>
 
-      {/* ----- Hero: one word, one ring, one caption ----- */}
+      {/* ----- The assessment, in words. No ring, no percentage. ----- */}
       <Surface padding="md" className="flex flex-col gap-4">
-        <div className="flex items-center gap-4">
-          <ProbabilityRing percent={hero.percent} band={hero.band} />
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <div className="truncate text-[36px] font-semibold leading-none tracking-tight text-fg" data-testid="hero-outcome">
-              {hero.word}
-            </div>
-            <div className="tabular text-[12px] text-fg-muted" data-testid="hero-caption">
-              {heroCaption(hero)}
-            </div>
-            <button type="button" onClick={() => setDetailsOpen(true)} className={cn("self-start text-[12px] font-medium underline-offset-2 hover:underline", anyDisputed ? "text-perf-attention" : "text-fg-subtle")} data-testid="wrong">
-              {anyDisputed ? `Disputed ${disputed.size}` : "Wrong?"}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11px] text-fg-subtle" data-testid="assessment-kicker">
+            {ASSESSMENT_KICKER}
+          </span>
+          <div className="text-[30px] font-semibold leading-tight tracking-tight text-fg" data-testid="assessment">
+            {assessment.headline}
+          </div>
+          <div className="flex items-start gap-1.5 text-[14px] leading-snug text-fg-muted" data-testid="next-step">
+            <ArrowRight size={14} weight="bold" aria-hidden className="mt-[3px] shrink-0 text-fg-subtle" />
+            <span>Next step: {assessment.nextStep}</span>
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-4 gap-y-1">
+            {assessment.spanIndexes.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => showSpans(assessment.spanIndexes)}
+                className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent underline-offset-2 hover:underline"
+                data-testid="view-support"
+              >
+                <ChatCircleText size={14} weight="bold" aria-hidden />
+                {SUPPORT_WORD}
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[13px] text-fg-subtle" data-testid="no-support">
+                <WarningCircle size={14} weight="bold" aria-hidden />
+                {NO_SUPPORT_WORD}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setDetailsOpen(true)}
+              className={cn("inline-flex items-center gap-1.5 text-[13px] font-medium underline-offset-2 hover:underline", anyFlagged ? "text-perf-attention" : "text-fg-subtle")}
+              data-testid="flag-issue"
+            >
+              <Flag size={14} weight="bold" aria-hidden />
+              {anyFlagged ? `${FLAGGED_WORD} ${flagged.size}` : FLAG_WORD}
             </button>
           </div>
         </div>
@@ -188,9 +266,9 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
           <DetailsRow
             label="Changes"
             value={
-              <span className={cn("inline-flex items-center gap-1 font-medium", anyDisputed ? "text-perf-attention" : "text-perf-strong")} data-testid="policy-tag">
-                {anyDisputed ? <WarningCircle size={12} weight="bold" aria-hidden /> : <Check size={12} weight="bold" aria-hidden />}
-                {anyDisputed ? "Disputed" : "Applied"}
+              <span className={cn("inline-flex items-center gap-1 font-medium", anyFlagged ? "text-perf-attention" : "text-perf-strong")} data-testid="policy-tag">
+                {anyFlagged ? <WarningCircle size={12} weight="bold" aria-hidden /> : <Check size={12} weight="bold" aria-hidden />}
+                {anyFlagged ? "Held" : "Applied"}
               </span>
             }
             data-testid="changes-open"
@@ -210,7 +288,7 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
       </Surface>
 
       {/* ----- Sheet: what this changes ----- */}
-      <Sheet open={changesOpen} onClose={() => setChangesOpen(false)} title="What this changes" description={anyDisputed ? "Disputed" : "Applied"}>
+      <Sheet open={changesOpen} onClose={() => setChangesOpen(false)} title="What this changes" description={anyFlagged ? "Held for review" : "Applied"}>
         <div className="flex flex-col gap-3" aria-label="What this changes">
           <ul className="flex flex-col gap-1.5">
             {changes.map((c) => (
@@ -225,6 +303,14 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
             <ShieldCheck size={13} weight="bold" aria-hidden className="shrink-0" />
             {NEVER_LINE}
           </div>
+          {disputeEvent ? (
+            <div className="flex items-start gap-2 text-[12px] leading-snug text-fg-muted" data-testid="dispute-event">
+              <ClockCounterClockwise size={13} weight="bold" aria-hidden className="mt-0.5 shrink-0" />
+              <span>
+                {flagged.size === 1 ? "One field is held" : `${flagged.size} fields are held`} for review. The original extraction and the words it cited are kept; the correction was recorded as its own event.
+              </span>
+            </div>
+          ) : null}
           <dl className="tabular mt-2 flex flex-col gap-1 border-t border-line pt-3 text-[12px] text-fg-subtle">
             <div className="flex justify-between gap-3">
               <dt>Length</dt>
@@ -272,9 +358,55 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
         </Sheet>
       ) : null}
 
-      {/* ----- Details: moments, their words, feedback, every field ----- */}
-      <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} title="Details" description="Every field cites a span. Dispute any one; the transcript still decides the rest.">
+      {/* ----- Details: the numbers and what they measure, the moments, their words, every field ----- */}
+      <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} title="Details" description="Every reading cites a span. Flag any one; the transcript still decides the rest.">
         <div className="flex flex-col gap-6">
+          {/* ----- The numbers return here, each with the sentence that says what it is a probability of. ----- */}
+          <section className="flex flex-col gap-2" aria-label="The numbers behind the assessment" data-testid="numbers">
+            <span className="section-label">What the numbers are</span>
+            <ul className="flex flex-col divide-y divide-line">
+              {stages.map((s) => {
+                const Icon = BAND_ICON[s.band];
+                return (
+                  <li key={s.key} className="flex flex-col gap-1.5 py-3" data-testid="stage-number" data-stage={s.key}>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-[14px] font-semibold text-fg">{s.label}</span>
+                      <span className="tabular text-[20px] font-semibold leading-none text-fg" data-testid="stage-percent">
+                        {s.percent}%
+                      </span>
+                    </div>
+                    <p className="text-[13px] leading-snug text-fg-muted">{STAGE_MEANING[s.key]}</p>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+                      <span className={cn("inline-flex items-center gap-1 font-medium", BAND_TEXT[s.band])} data-testid="stage-band-word">
+                        <Icon size={12} weight="bold" aria-hidden />
+                        {s.bandLabel}
+                      </span>
+                      <span className="text-fg-subtle">{stageBandLine(s)}</span>
+                    </div>
+                    {s.spanIndexes.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {s.spanIndexes.slice(0, 4).map((i) => (
+                          <button key={i} type="button" onClick={() => jumpFromSheet(i)} className="tag tabular text-fg-muted hover:bg-hover hover:text-fg" aria-label={`Go to the words behind ${s.label.toLowerCase()} at ${clock(transcript[i]?.startMs ?? 0)}`}>
+                            {clock(transcript[i]?.startMs ?? 0)}
+                          </button>
+                        ))}
+                        <Button variant="ghost" size="sm" onClick={() => spansFromSheet(s.spanIndexes)} className="ml-auto">
+                          {SUPPORT_WORD}
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-[12px] text-fg-subtle">Nothing cited</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="flex items-start gap-2 text-[12px] leading-snug text-perf-attention" data-testid="calibration">
+              <WarningCircle size={13} weight="bold" aria-hidden className="mt-0.5 shrink-0" />
+              <span>{CALIBRATION_LINE}</span>
+            </div>
+          </section>
+
           <section className="flex flex-col gap-2" aria-label="Moments">
             <span className="section-label">Moments</span>
             {moments.length > 0 ? (
@@ -325,8 +457,21 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
             </section>
           ) : null}
 
-          {/* ----- Buyer mode: nine rows, the approach, the read. Labels, not sentences. ----- */}
+          {/* ----- Buyer mode: the approach, nine rows, and the read with what its percentage measures. ----- */}
           <section className="flex flex-col gap-2" aria-label="Buyer mode" data-testid="review-buyer-mode">
+            {review.buyerMode.approach.length > 0 ? (
+              <div className="flex flex-col gap-1">
+                <span className="section-label">Approach</span>
+                <ul className="flex flex-col gap-1" data-testid="review-approach">
+                  {review.buyerMode.approach.map((line) => (
+                    <li key={line} className="flex items-start gap-2 text-[13.5px] leading-snug text-fg">
+                      <Sparkle size={13} weight="bold" aria-hidden className="mt-[3px] shrink-0 text-fg-subtle" />
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <ReadBlock read={review.buyerMode.read} />
             <span className="section-label">Buyer mode</span>
             <ul className="flex flex-col">
@@ -352,34 +497,25 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
                 );
               })}
             </ul>
-            {review.buyerMode.approach.length > 0 ? (
-              <div className="flex flex-col gap-1">
-                <span className="section-label">Approach</span>
-                <ul className="flex flex-col gap-1" data-testid="review-approach">
-                  {review.buyerMode.approach.map((line) => (
-                    <li key={line} className="flex items-start gap-2 text-[13.5px] leading-snug text-fg">
-                      <Sparkle size={13} weight="bold" aria-hidden className="mt-[3px] shrink-0 text-fg-subtle" />
-                      {line}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
           </section>
 
           <section className="flex flex-col gap-1" aria-label="Extracted">
             <span className="section-label">Extracted</span>
+            <p className="text-[12px] leading-snug text-fg-subtle" data-testid="keeps-original">
+              {KEEPS_ORIGINAL_LINE}
+            </p>
             <ul className="flex flex-col divide-y divide-line">
               {review.fields.map((f) => {
                 const asserted = f.spanIndexes.length > 0;
-                const isDisputed = disputed.has(f.id);
+                const isFlagged = flagged.has(f.id);
+                const entries = historyFor(corrections, f.id);
                 return (
                   <li key={f.id} className="flex flex-col gap-1.5 py-3" data-testid="extracted-field">
                     <div className="flex items-center justify-between gap-2">
                       <span className="section-label">{f.label}</span>
-                      <span className={cn("inline-flex items-center gap-1 text-[11px]", isDisputed ? "font-medium text-perf-attention" : asserted ? "text-accent" : "text-fg-subtle")}>
-                        {isDisputed ? <WarningCircle size={10} weight="bold" aria-hidden /> : asserted ? <Sparkle size={10} weight="bold" aria-hidden /> : null}
-                        {isDisputed ? "Disputed" : asserted ? "From transcript" : "Not asserted"}
+                      <span className={cn("inline-flex items-center gap-1 text-[11px]", isFlagged ? "font-medium text-perf-attention" : asserted ? "text-accent" : "text-fg-subtle")}>
+                        {isFlagged ? <Flag size={10} weight="bold" aria-hidden /> : asserted ? <Sparkle size={10} weight="bold" aria-hidden /> : null}
+                        {isFlagged ? FLAGGED_WORD : asserted ? "From transcript" : "Not asserted"}
                       </span>
                     </div>
                     <p className={cn("text-[14px] leading-snug", asserted ? "text-fg" : "text-fg-muted")}>{f.value}</p>
@@ -390,10 +526,23 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
                             {clock(transcript[i]?.startMs ?? 0)}
                           </button>
                         ))}
-                        <Button variant="ghost" size="sm" onClick={() => setDisputed((s) => toggled(s, f.id))} className="ml-auto" aria-pressed={isDisputed}>
-                          {isDisputed ? "Withdraw" : "Dispute"}
+                        <Button variant="ghost" size="sm" onClick={() => flag(f.id)} className="ml-auto" aria-pressed={isFlagged}>
+                          {isFlagged ? WITHDRAW_WORD : FLAG_WORD}
                         </Button>
                       </div>
+                    ) : null}
+                    {entries.length > 0 ? (
+                      <ol className="flex flex-col gap-1 border-l border-line pl-2.5" data-testid="correction-history" aria-label={`Correction history for ${f.label}`}>
+                        {entries.map((c, i) => (
+                          <li key={`${c.fieldId}:${i}`} className="flex items-start gap-1.5 text-[11.5px] leading-snug text-fg-subtle" data-testid="correction-entry" data-kind={c.kind}>
+                            {c.kind === "flagged" ? <Flag size={11} weight="bold" aria-hidden className="mt-0.5 shrink-0" /> : <ClockCounterClockwise size={11} weight="bold" aria-hidden className="mt-0.5 shrink-0" />}
+                            <span>
+                              {c.kind === "flagged" ? "Flagged" : "Flag withdrawn"}. Original kept: &ldquo;{c.originalValue}&rdquo;
+                              {c.originalEvidenceRefs.length > 0 ? `, cited at ${c.originalEvidenceRefs.map((ref) => clock(spanRefStartMs(ref) ?? 0)).join(", ")}` : ", nothing cited"}.
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
                     ) : null}
                   </li>
                 );

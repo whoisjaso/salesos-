@@ -12,8 +12,9 @@ import { Funnel } from "@/components/metrics/Funnel";
 import { useMetricDefinition } from "@/components/metrics/MetricDefinitionProvider";
 import { cn } from "@/lib/cn";
 import { formatBasis, formatCount, formatMoneyMinor } from "@/lib/format";
-import type { EconomicsView, FlowView } from "@/lib/owner-model";
+import { PER_OPPORTUNITY_NAME, measurementSentence, type EconomicsView, type FlowView } from "@/lib/owner-model";
 import { HeroCard } from "./HeroCard";
+import { ProvisionalMark } from "./ProvisionalMark";
 
 const SHORT_LABEL: Record<string, string> = {
   assigned: "Assigned",
@@ -42,12 +43,14 @@ const SEGMENT_TONE: Record<PerformanceVerdict["state"], string> = {
   data_state: "border-dashed border-line-strong",
 };
 
-const FULL_LABEL = "Net collected per assigned opportunity";
+const FULL_LABEL = PER_OPPORTUNITY_NAME;
 
 export interface HeroTileProps {
   economics: EconomicsView;
   flow: FlowView;
   cohortLabel: string;
+  /** True when the cohort is narrower than every assigned opportunity; named in the qualifier. */
+  narrowed?: boolean;
   /** Present when the cohort can be changed; opens the Cohort sheet from inside Details. */
   onOpenCohort?: () => void;
 }
@@ -60,7 +63,7 @@ function capitalize(s: string): string {
  * One label, one number, one caption. The basis, the sum over sum, the data state, the six
  * funnel tiles, the definition and the cohort filter all live in the Details sheet.
  */
-export function HeroTile({ economics, flow, cohortLabel, onOpenCohort }: HeroTileProps) {
+export function HeroTile({ economics, flow, cohortLabel, narrowed = false, onOpenCohort }: HeroTileProps) {
   const sheet = useMetricDefinition();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [funnelOpen, setFunnelOpen] = useState(false);
@@ -68,26 +71,36 @@ export function HeroTile({ economics, flow, cohortLabel, onOpenCohort }: HeroTil
   const verdict = economics.perOpportunityVerdict;
   const currency = metric.currency ?? "USD";
   const valueText = metric.value === null ? "N/A" : formatMoneyMinor(Math.round(metric.value), currency, { cents: true });
+  const measure = economics.measurements.perOpportunity;
+  const over = narrowed ? `${measure.over}, ${cohortLabel}` : measure.over;
 
   return (
     <>
       <HeroCard
-        label="Per opportunity"
+        label={FULL_LABEL}
         value={metric.value === null ? <span className="text-fg-muted">N/A</span> : <CountUp value={metric.value} format={(v) => formatMoneyMinor(Math.round(v), currency, { cents: true })} />}
-        caption={capitalize(cohortLabel)}
-        ariaLabel={`${FULL_LABEL}, ${valueText}. Tap for details.`}
+        qualifiers={[
+          over,
+          measure.period,
+          ...(measure.provisional ? [<ProvisionalMark key="provisional" note={measure.provisional} />] : []),
+        ]}
+        ariaLabel={`${measurementSentence(valueText, { ...measure, over })} Tap for details.`}
         onClick={() => setDetailsOpen(true)}
         data-testid="owner-hero"
       />
 
       <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} title="Per opportunity" description={FULL_LABEL} width={480}>
         <div className="flex flex-col gap-5">
-          <div className="flex flex-wrap items-center gap-2">
-            {metric.basis ? <span className="inline-flex h-6 items-center rounded-sm bg-accent-soft px-2 text-[12px] font-medium text-accent">{formatBasis(metric.basis)}</span> : null}
-            <span className="tabular text-[12px] text-fg-subtle">
-              {formatMoneyMinor(metric.numerator, currency)} over {formatCount(metric.denominator)}
-            </span>
-            {metric.dataState !== "complete" ? <StateChip state={metric.dataState} /> : null}
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {metric.basis ? <span className="inline-flex h-6 items-center rounded-sm bg-accent-soft px-2 text-[12px] font-medium text-accent">{formatBasis(metric.basis)}</span> : null}
+              <span className="tabular text-[12px] text-fg-muted">
+                {formatMoneyMinor(metric.numerator, currency)} over {formatCount(metric.denominator)} assigned opportunities
+              </span>
+              {metric.dataState !== "complete" ? <StateChip state={metric.dataState} explain /> : null}
+            </div>
+            <div className="tabular text-[12px] text-fg-muted">{measure.period}</div>
+            {measure.provisional ? <p className="text-[12px] leading-snug text-fg-muted">{measure.provisional.sentence}</p> : null}
           </div>
 
           <FunnelTiles

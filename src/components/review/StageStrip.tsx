@@ -37,10 +37,11 @@ export const BAND_STROKE: Record<Band, string> = {
 };
 
 /**
- * One slim bar, four segments, each filled to its score in the band hue, with a tiny
- * label under each. The percent shows only on tap (and in the accessible name, with
- * the band word, so the bar never carries meaning by color alone). No borders, no icons.
- * Tapping a segment goes to the stage's first cited span when there is one.
+ * One slim bar, four segments, each filled to its score in the band hue, with a tiny label
+ * under each. A stage is a legitimate thing to show as a stage, so the strip stays on the
+ * default view; the percent does not. Tapping a segment names its band in words with an icon,
+ * never color alone, and goes to the stage's first cited span when there is one. The number
+ * behind the segment lives in Details (D: "A stage is a stage, a prediction is a prediction").
  */
 export function StageStrip({ stages, active, onSelect, className }: { stages: StageView[]; active?: string; onSelect?: (stage: StageView) => void; className?: string }) {
   return (
@@ -49,6 +50,7 @@ export function StageStrip({ stages, active, onSelect, className }: { stages: St
         const cited = s.spanIndexes.length > 0;
         const isActive = active === s.key;
         const tappable = Boolean(onSelect);
+        const Icon = BAND_ICON[s.band];
         return (
           <button
             key={s.key}
@@ -56,8 +58,7 @@ export function StageStrip({ stages, active, onSelect, className }: { stages: St
             onClick={() => onSelect?.(s)}
             disabled={!tappable}
             aria-pressed={tappable ? isActive : undefined}
-            aria-label={`${s.label} ${s.percent} percent, ${s.bandLabel}${cited ? ", see moment" : ""}`}
-            title={`${s.percent}%`}
+            aria-label={`${s.label}, ${s.bandLabel}${cited ? ", see supporting conversation" : ""}`}
             data-testid="stage-segment"
             data-stage={s.key}
             data-band={s.band}
@@ -66,44 +67,18 @@ export function StageStrip({ stages, active, onSelect, className }: { stages: St
             <span className="block h-2 w-full overflow-hidden rounded-full bg-line" aria-hidden>
               <span className="block h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none" style={{ width: `${s.percent}%`, background: BAND_STROKE[s.band] }} />
             </span>
-            <span className={cn("flex items-baseline gap-1 truncate text-[11px] leading-none", isActive ? "font-medium text-fg" : "text-fg-subtle")}>
+            <span className={cn("flex items-center gap-1 truncate text-[11px] leading-none", isActive ? "font-medium text-fg" : "text-fg-subtle")}>
               <span className="truncate">{s.label}</span>
               {isActive ? (
-                <span className="tabular shrink-0 text-fg-muted" data-testid="stage-percent">
-                  {s.percent}%
+                <span className={cn("inline-flex shrink-0 items-center gap-0.5", BAND_TEXT[s.band])} data-testid="stage-band">
+                  <Icon size={10} weight="bold" aria-hidden />
+                  {s.bandLabel}
                 </span>
               ) : null}
             </span>
           </button>
         );
       })}
-    </div>
-  );
-}
-
-/** A probability ring: one arc, the percent inside, the band color on the stroke. */
-export function ProbabilityRing({ percent, band, size = 72 }: { percent: number; band: Band; size?: number }) {
-  const stroke = 6;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const filled = (Math.max(0, Math.min(100, percent)) / 100) * c;
-  return (
-    <div className="relative shrink-0" style={{ width: size, height: size }} data-testid="probability-ring" aria-hidden>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line)" strokeWidth={stroke} />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke={BAND_STROKE[band]}
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          strokeDasharray={`${filled} ${c - filled}`}
-          className="transition-[stroke-dasharray] duration-500 ease-out motion-reduce:transition-none"
-        />
-      </svg>
-      <span className="tabular absolute inset-0 grid place-items-center text-[15px] font-semibold text-fg">{percent}%</span>
     </div>
   );
 }

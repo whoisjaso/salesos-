@@ -67,6 +67,25 @@ export function formatFraction(numerator: number, denominator: number): string {
   return `${formatCount(numerator)} of ${formatCount(denominator)}`;
 }
 
+/**
+ * The words for money that is not there. A verified zero reads "$0" and never
+ * borrows these words; a missing figure never borrows the shape of a zero
+ * (D "Say the whole measurement").
+ */
+export const MONEY_NOT_AVAILABLE = "Payment data not available";
+
+/** "5 attended appointments", "1 attended appointment". Denominators are said in full, never "per assigned". */
+export function formatUnits(count: number, singular: string, plural = `${singular}s`): string {
+  return `${formatCount(count)} ${count === 1 ? singular : plural}`;
+}
+
+/** "September" from an ISO date, in UTC so the label never drifts with the reader's zone. */
+export function formatMonthName(iso: string, locale = "en-US"): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "this month";
+  return new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(d);
+}
+
 const RELATIVE_STEPS: { limit: number; divisor: number; unit: Intl.RelativeTimeFormatUnit }[] = [
   { limit: 60, divisor: 1, unit: "second" },
   { limit: 3600, divisor: 60, unit: "minute" },

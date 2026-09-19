@@ -29,13 +29,16 @@ export function CashRace({ entries, meId, seasonName, currency = "USD" }: CashRa
   const { openCard } = useRepCard();
   return (
     <Surface padding="none" as="section" aria-label="Cash race">
-      <Link href="/team" className="flex items-center justify-between rounded-t-[inherit] px-4 pt-4 pb-1 transition-colors hover:bg-hover motion-reduce:transition-none">
-        <span className="flex items-baseline gap-2">
-          <span className="text-[14px] font-semibold text-fg">Race</span>
-          <span className="text-[12px] text-fg-subtle">{seasonName}</span>
+      <Link href="/team" className="flex items-start justify-between gap-3 rounded-t-[inherit] px-4 pt-4 pb-1 transition-colors hover:bg-hover motion-reduce:transition-none">
+        <span className="min-w-0">
+          <span className="flex items-baseline gap-2">
+            <span className="text-[14px] font-semibold text-fg">Race</span>
+            <span className="text-[12px] text-fg-subtle">{seasonName}</span>
+          </span>
+          <span className="mt-0.5 block text-[12px] text-fg-subtle">Net collected cash on the opportunities each rep owns. No commission is shown for anyone.</span>
         </span>
-        <span className="inline-flex items-center gap-1 text-[12px] text-fg-subtle">
-          Net collected
+        <span className="inline-flex shrink-0 items-center gap-1 pt-0.5 text-[12px] text-fg-subtle">
+          Board
           <CaretRight size={12} weight="bold" aria-hidden />
         </span>
       </Link>
@@ -54,7 +57,7 @@ export function CashRace({ entries, meId, seasonName, currency = "USD" }: CashRa
               <span className="tabular mt-2 text-[12.5px] font-semibold leading-none text-fg">{compactMoney(e.netCollectedMinor, currency)}</span>
               <span className="mt-1 max-w-full truncate text-[10.5px] text-fg-subtle">{me ? "You" : e.displayName.split(" ")[0]}</span>
               <span className="sr-only">
-                Rank {e.rank}, {e.role}, {e.tier.label} tier
+                Rank {e.rank}, {e.role}, {e.tier.label} tier, net collected cash in {seasonName}
               </span>
             </motion.li>
           );

@@ -9,8 +9,14 @@ import {
   ModelCallIntelligence,
   RuleBasedCallIntelligence,
   StubCallIntelligence,
+  MAX_CORRECTION_NOTE,
+  appendCorrection,
   applyExtractionPolicy,
   bandFor,
+  correctionEvent,
+  correctionsFor,
+  openCorrections,
+  validateCorrection,
   modelOutputFrom,
   validateExtraction,
   type CallExtraction,
@@ -555,5 +561,74 @@ describe("applyExtractionPolicy, confirm mode (opt-in)", () => {
     expect(types(r)).toEqual(["call.extraction_recorded"]);
     const invalid = applyExtractionPolicy({ ...stub, schemaVersion: 2 as unknown as 1 }, call(), opp, confirmPolicy);
     expect(invalid).toMatchObject({ proposedEvents: [], requiresRepConfirmation: true });
+  });
+});
+
+describe("corrections (D: \"Every correction keeps the original\")", () => {
+  const x = extractionOf(conversation);
+  const opp = mkOpp("o1");
+  const flagged = {
+    fieldId: "stage:buying",
+    kind: "flagged" as const,
+    originalValue: "65%, Likely",
+    originalEvidenceRefs: ["call_1:span:25000-29000"],
+    at: NOW,
+    by: "s1",
+  };
+
+  it("keeps the original reading and its cited spans, and a withdrawal appends instead of erasing", () => {
+    const first = appendCorrection([], flagged);
+    expect(first).toHaveLength(1);
+    expect(openCorrections(first)).toEqual(new Set(["stage:buying"]));
+
+    const withdrawn = appendCorrection(first, { ...flagged, kind: "withdrawn" });
+    // The flag is still in the record: nothing was removed or rewritten.
+    expect(withdrawn).toHaveLength(2);
+    expect(withdrawn[0]).toEqual(flagged);
+    expect(withdrawn[0].originalValue).toBe("65%, Likely");
+    expect(withdrawn[0].originalEvidenceRefs).toEqual(["call_1:span:25000-29000"]);
+    expect(openCorrections(withdrawn).size).toBe(0);
+
+    // Flagging again after a withdrawal holds it once more, and the history keeps all three.
+    const again = appendCorrection(withdrawn, { ...flagged, note: "the customer never said Thursday" });
+    expect(again).toHaveLength(3);
+    expect(correctionsFor(again, "stage:buying")).toHaveLength(3);
+    expect(openCorrections(again)).toEqual(new Set(["stage:buying"]));
+    // The input arrays are never mutated.
+    expect(first).toHaveLength(1);
+  });
+
+  it("the dispute event extends the recorded extraction and never replaces it", () => {
+    const history = appendCorrection([], flagged);
+    const e = correctionEvent({ extraction: x, call: call(), opportunity: opp, history, now: NOW, by: "s1" });
+    expect(e.eventType).toBe("call.extraction_disputed");
+    expect(e.actorType).toBe("user");
+    expect(e.actorId).toBe("s1");
+    // It points at the extraction event rather than superseding it.
+    expect(e.payload.extractionEventId).toBe("call_1:extraction");
+    expect(e.payload.extractionReplaced).toBe(false);
+    expect(e.supersedesEventId).toBeUndefined();
+    expect(e.payload.corrections).toEqual([flagged]);
+    expect(e.payload.open).toEqual(["stage:buying"]);
+    // The original spans travel with the event, so the citation survives the correction.
+    expect(e.evidenceRefs).toContain("call_1:span:25000-29000");
+    // The extraction itself still carries the model's own reading.
+    const recorded = applyExtractionPolicy(x, call(), opp, policy).proposedEvents.find((ev) => ev.eventType === "call.extraction_recorded");
+    expect((recorded?.payload as { extraction: CallExtraction }).extraction.stageScores).toEqual(x.stageScores);
+    // And a correction is never a money, consent, or attendance event.
+    expect(FORBIDDEN_AI_EVENT_TYPE.test(e.eventType)).toBe(false);
+  });
+
+  it("refuses a correction that would touch money, consent, or attendance", () => {
+    for (const fieldId of ["fit:price_agreed", "consent_sms", "attendance", "payment:1"]) {
+      expect(validateCorrection({ ...flagged, fieldId }).join(" ")).toMatch(/money, consent, and attendance/);
+      expect(() => appendCorrection([], { ...flagged, fieldId })).toThrow(/money, consent, and attendance/);
+    }
+    // A replacement value may not establish one either.
+    expect(validateCorrection({ ...flagged, correctedValue: "they paid $4,800" }).join(" ")).toMatch(/may not establish it/);
+    // A plain correction is fine.
+    expect(validateCorrection({ ...flagged, correctedValue: "Callback, not a booking" })).toEqual([]);
+    expect(validateCorrection({ ...flagged, note: "x".repeat(MAX_CORRECTION_NOTE + 1) }).join(" ")).toMatch(/longer than/);
+    expect(() => correctionEvent({ extraction: x, call: call(), opportunity: opp, history: [], now: NOW, by: "s1" })).toThrow(/at least one correction/);
   });
 });

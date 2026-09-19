@@ -252,6 +252,105 @@ export function commissionSummary(
   };
 }
 
+/**
+ * The status of a commission figure, in the words the rep is owed (D "Game
+ * words for the game, money words for money"). A tier name is never one of
+ * these: a tier is a badge, this is the state of the money.
+ */
+export type CommissionStatusId = "none" | "pending" | "payable" | "paid" | "mixed";
+
+export interface CommissionStatus {
+  id: CommissionStatusId;
+  /** One word for the state of the money. */
+  word: string;
+  /** The whole line that sits beside the figure. Never a tier name. */
+  label: string;
+  /** What that state means, in plain words, for the Details sheet. */
+  meaning: string;
+}
+
+/** "pending", "pending and payable", "pending, payable and paid". */
+function joinWords(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+/**
+ * The status that applies to a commission total. Buckets map to the words a
+ * rep can act on: accrued is pending (calculated, not approved), eligible is
+ * payable (approved, waiting for the payout), paid is paid. When more than one
+ * bucket carries money the total is earned and the line names each state, so
+ * nobody has to guess which part they can expect in their bank.
+ */
+export function commissionStatus(summary: Pick<CommissionSummary, "accruedMinor" | "eligibleMinor" | "paidMinor">): CommissionStatus {
+  const parts: { word: string; id: Exclude<CommissionStatusId, "none" | "mixed"> }[] = [];
+  if (summary.accruedMinor > 0) parts.push({ word: "pending", id: "pending" });
+  if (summary.eligibleMinor > 0) parts.push({ word: "payable", id: "payable" });
+  if (summary.paidMinor > 0) parts.push({ word: "paid", id: "paid" });
+
+  if (parts.length === 0) {
+    return {
+      id: "none",
+      word: "None",
+      label: "No commission yet",
+      meaning: "No cash has been collected on your opportunities in this period, so no commission has been calculated.",
+    };
+  }
+  if (parts.length === 1) {
+    const only = parts[0]!.id;
+    if (only === "pending") {
+      return {
+        id: "pending",
+        word: "Pending",
+        label: "Pending commission, not yet approved",
+        meaning: "Calculated from collected cash under the commission policy. It has not been approved for payout yet.",
+      };
+    }
+    if (only === "payable") {
+      return {
+        id: "payable",
+        word: "Payable",
+        label: "Payable commission, not yet paid",
+        meaning: "Approved under the commission policy and waiting for the next payout run. It has not been paid yet.",
+      };
+    }
+    return {
+      id: "paid",
+      word: "Paid",
+      label: "Paid commission",
+      meaning: "Already paid out for this period.",
+    };
+  }
+  return {
+    id: "mixed",
+    word: "Earned",
+    label: `Earned commission: ${joinWords(parts.map((p) => p.word))}`,
+    meaning: "Different parts of this total are at different stages. The amount in each state is listed below.",
+  };
+}
+
+/**
+ * Why a figure is provisional, in words, and what it is waiting on. A data
+ * incident freezes only what it makes unreliable and says so where the figure
+ * is read (D "A held measurement never holds the person", "Say the whole
+ * measurement").
+ *
+ * Field names deliberately match the hold record the incident scope model in
+ * `src/domain/incidents.ts` produces, so wiring is a pass-through and this
+ * module never has to import it. Every component that can show one takes it as
+ * a prop and defaults to null, so nothing reads as held by accident.
+ */
+export interface ProvisionalNotice {
+  /** One sentence, ready to render: the limited effect, in plain words. */
+  statement: string;
+  /** The clause that completes "provisional until ...". "1 refund is settled". */
+  waitingOn?: string;
+  /** Which measurement is held, in words. "Commission". */
+  label?: string;
+  /** Who resolves it. "Finance". */
+  ownerLabel?: string;
+}
+
 export interface CashRaceEntry {
   userId: Id;
   displayName: string;

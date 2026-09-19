@@ -1,21 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { CaretRight } from "@phosphor-icons/react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
+import { ArrowRight, CaretRight, CheckCircle, CircleDashed, CircleHalf, Clock, Hourglass, Question, Warning, type IconProps } from "@phosphor-icons/react";
 import { motion, useReducedMotion } from "motion/react";
 import {
   DEFAULT_TIER_POLICY,
+  commissionStatus,
   nextTier,
   tierFor,
   type CashTierId,
+  type CommissionStatusId,
   type CommissionSummary,
+  type ProvisionalNotice,
   type TierPolicy,
+  type TierRole,
 } from "@/domain/cashTiers";
 import { Button } from "@/components/ui/Button";
 import { CountUp } from "@/components/ui/CountUp";
 import { Sheet } from "@/components/ui/Sheet";
+import { StateChip } from "@/components/ui/StateChip";
 import { Surface } from "@/components/ui/Surface";
-import { formatCount, formatMoneyMinor } from "@/lib/format";
+import { MONEY_NOT_AVAILABLE, formatMoneyMinor, formatUnits } from "@/lib/format";
 import { DROP_ICON, TierBadge } from "./TierBadge";
 
 /**
@@ -27,9 +32,47 @@ export const TIER_PREVIEW_KEY = "sos-tier-demo";
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
+/** Tiers are the game. This line says so wherever the mark appears. */
+export const TIER_DISPLAY_NOTE = "Tiers are display only and never change pay";
+
+/** Every money status has a word and a mark; colour is never the only signal. */
+const STATUS_ICON: Record<CommissionStatusId, ComponentType<IconProps>> = {
+  none: CircleDashed,
+  pending: Hourglass,
+  payable: Clock,
+  paid: CheckCircle,
+  mixed: CircleHalf,
+};
+
+export interface CashHeroAction {
+  href: string;
+  /** Names the destination. "Collect more" is not a destination. */
+  label: string;
+}
+
+/** What Today actually opens for each role, so the primary action can say it. */
+export const HERO_ACTION: Record<TierRole, CashHeroAction> = {
+  setter: { href: "/", label: "Open call queue" },
+  closer: { href: "/", label: "Open today's appointments" },
+};
+
+const DEFAULT_ACTION: CashHeroAction = { href: "/", label: "Open Today" };
+
 export interface CashHeroProps {
   summary: CommissionSummary;
   policy?: TierPolicy;
+  /** Whose bracket this is. Sets the default action, nothing else. */
+  role?: TierRole;
+  /** The period every figure on this card covers, in words. The kicker. */
+  period?: string;
+  /** Where the primary action goes and what it says it opens. */
+  action?: CashHeroAction;
+  /**
+   * Set when a data incident makes these figures provisional. Rendered in
+   * words on the hero and in Details, with what it is waiting on. Defaults to
+   * null so the card is never provisional by accident.
+   */
+  provisional?: ProvisionalNotice | null;
   /** Extra sections for the Details sheet, after the commission figures. */
   details?: ReactNode;
 }
@@ -72,14 +115,26 @@ export function HypotheticalChip({ className }: { className?: string }) {
 }
 
 /**
- * The rep's own money this month: one tier mark, one number, one bar with one caption, one action.
- * Tapping the hero opens Details: the hypothetical-policy notice, accrued, eligible and paid,
- * the next tier's threshold, commission per attended appointment, and whatever the caller adds.
+ * The rep's own commission for the period: the period as the kicker, one money
+ * figure, the status of that money in words, and one action that names where it
+ * goes. The tier mark, the bar and the threshold are the game and say so.
+ * Tapping opens Details: the hypothetical-policy notice, accrued, eligible and
+ * paid, commission per attended appointment, every tier threshold, and whatever
+ * the caller adds.
  */
-export function CashHero({ summary, policy = DEFAULT_TIER_POLICY, details }: CashHeroProps) {
+export function CashHero({
+  summary,
+  policy = DEFAULT_TIER_POLICY,
+  role,
+  period = "This month",
+  action,
+  provisional = null,
+  details,
+}: CashHeroProps) {
   const reduce = useReducedMotion();
   const preview = usePreviewTier(policy);
   const [open, setOpen] = useState(false);
+  const go = action ?? (role ? HERO_ACTION[role] : DEFAULT_ACTION);
 
   const shown = useMemo<CommissionSummary>(() => {
     if (!preview) return summary;
@@ -91,8 +146,11 @@ export function CashHero({ summary, policy = DEFAULT_TIER_POLICY, details }: Cas
   const currency = shown.currency;
   const tier = tierFor(total, policy);
   const next = nextTier(total, policy);
+  const status = commissionStatus(shown);
+  const StatusIcon = STATUS_ICON[status.id];
   const money = (n: number) => formatMoneyMinor(Math.round(n), currency);
-  const caption = next ? `${money(next.remainingMinor)} to ${next.tier.label}` : "Top tier";
+  const tierLine = next ? `${tier.label} tier. Next: ${next.tier.label}` : `${tier.label} tier. Top tier`;
+  const progressLabel = next ? `${money(next.remainingMinor)} of ${tier.label} to ${next.tier.label}, a display badge` : `${tier.label}, the top display badge`;
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const [drops, setDrops] = useState<Drop[]>([]);
@@ -122,10 +180,14 @@ export function CashHero({ summary, policy = DEFAULT_TIER_POLICY, details }: Cas
 
   const DropIcon = DROP_ICON[tier.id];
   const perAttended = shown.perAttended;
+  const attendedDetail =
+    perAttended.denominator === 0
+      ? `${period}, no attended appointments to divide by yet`
+      : `${period}, ${money(perAttended.numerator)} over ${formatUnits(perAttended.denominator, "attended appointment")}`;
 
   return (
     <>
-      <Surface padding="none" as="section" aria-label="This month" className="overflow-hidden">
+      <Surface padding="none" as="section" aria-label={`Commission, ${period}`} className="overflow-hidden">
         <div ref={bodyRef} className="relative p-4 sm:p-5">
           {drops.length > 0 ? (
             <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -171,7 +233,8 @@ export function CashHero({ summary, policy = DEFAULT_TIER_POLICY, details }: Cas
             <button
               type="button"
               onClick={() => setOpen(true)}
-              className="-m-2 flex flex-col gap-4 rounded-md p-2 text-left transition-colors hover:bg-hover active:bg-hover motion-reduce:transition-none"
+              aria-label={`${period} commission, ${money(total)}. ${status.label}.${provisional ? " Provisional." : ""} ${tierLine}. ${TIER_DISPLAY_NOTE}. Open details`}
+              className="-m-2 flex flex-col gap-3.5 rounded-md p-2 text-left transition-colors hover:bg-hover active:bg-hover motion-reduce:transition-none"
             >
               <span className="flex items-center gap-4">
                 <motion.span
@@ -182,14 +245,26 @@ export function CashHero({ summary, policy = DEFAULT_TIER_POLICY, details }: Cas
                   <TierBadge tier={tier} size={64} />
                 </motion.span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[12px] font-medium" style={{ color: tier.hue }}>
-                    {tier.label}
-                  </span>
-                  <span className="tabular mt-1 block text-[38px] font-semibold leading-none tracking-tight text-fg sm:text-[44px]">
+                  <span className="block text-[12px] font-medium text-fg-subtle">{period}</span>
+                  <span className="tabular mt-0.5 block text-[38px] font-semibold leading-none tracking-tight text-fg sm:text-[44px]">
                     <CountUp value={total} format={money} delay={0.1} />
+                  </span>
+                  <span className="mt-2 flex items-start gap-1.5 text-[12.5px] leading-snug text-fg-muted">
+                    <StatusIcon size={14} weight="bold" aria-hidden className="mt-[1px] shrink-0" />
+                    <span>{status.label}</span>
                   </span>
                 </span>
               </span>
+
+              {provisional ? (
+                <span className="flex items-start gap-1.5 text-[12px] leading-snug text-fg-muted">
+                  <Warning size={13} weight="bold" aria-hidden className="mt-[2px] shrink-0 text-perf-attention" />
+                  <span>
+                    <span className="font-medium text-perf-attention">Provisional </span>
+                    {provisional.waitingOn ? `until ${provisional.waitingOn}.` : provisional.statement}
+                  </span>
+                </span>
+              ) : null}
 
               <span className="block">
                 <span
@@ -197,7 +272,7 @@ export function CashHero({ summary, policy = DEFAULT_TIER_POLICY, details }: Cas
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={Math.round((next ? next.progress : 1) * 100)}
-                  aria-label={caption}
+                  aria-label={progressLabel}
                   className="block h-1.5 w-full overflow-hidden rounded-full bg-sunken"
                 >
                   <motion.span
@@ -208,55 +283,125 @@ export function CashHero({ summary, policy = DEFAULT_TIER_POLICY, details }: Cas
                     transition={{ duration: 0.8, delay: 0.2, ease }}
                   />
                 </span>
-                <span className="tabular mt-1.5 flex items-center justify-between text-[12px] text-fg-subtle">
-                  <span>{caption}</span>
-                  <span className="inline-flex items-center gap-0.5">
+                <span className="mt-1.5 flex items-center justify-between gap-3 text-[12px] text-fg-subtle">
+                  <span className="min-w-0 truncate">{tierLine}</span>
+                  <span className="inline-flex shrink-0 items-center gap-0.5">
                     Details
                     <CaretRight size={12} weight="bold" aria-hidden />
                   </span>
                 </span>
+                <span className="mt-0.5 block text-[12px] text-fg-faint">{TIER_DISPLAY_NOTE}</span>
               </span>
             </button>
 
-            <Button href="/" className="w-full sm:w-auto sm:self-start">
-              Collect more
+            <Button href={go.href} className="w-full sm:w-auto sm:self-start" trailing={<ArrowRight size={16} weight="bold" />}>
+              {go.label}
             </Button>
           </motion.div>
         </div>
       </Surface>
 
-      <Sheet open={open} onClose={() => setOpen(false)} title="This month" description={`${tier.label} tier, ${money(total)}`} width={480}>
+      <Sheet open={open} onClose={() => setOpen(false)} title={`${period} commission`} description={status.label} width={480}>
         <div className="flex flex-col gap-5">
-          {shown.hypothetical || preview ? (
-            <p className="flex flex-wrap items-center gap-1.5 text-[13px] text-fg-muted">
-              {preview ? <span className="inline-flex h-5 items-center rounded-[4px] border border-dashed border-line-strong px-1.5 text-[11px] font-medium text-fg-muted">Preview</span> : null}
-              {shown.hypothetical ? <span>Hypothetical policy: rates are placeholders until a real commission agreement lands.</span> : null}
-            </p>
+          {provisional ? (
+            <Surface padding="md" state="attention" className="flex flex-col gap-2">
+              <StateChip state="attention" label={provisional.label ? `${provisional.label} is provisional` : "Provisional"} className="self-start" />
+              <p className="text-[13px] text-fg">{provisional.statement}</p>
+              {provisional.waitingOn ? <p className="text-[13px] text-fg-muted">Provisional until {provisional.waitingOn}.</p> : null}
+              <p className="text-[13px] text-fg-muted">
+                {provisional.ownerLabel ? `${provisional.ownerLabel} owns that. ` : ""}
+                Everything else on this screen is verified and keeps running.
+              </p>
+            </Surface>
           ) : null}
 
-          <section aria-label="Commission by state" className="surface">
+          <div className="flex flex-col gap-2">
+            <p className="flex items-start gap-1.5 text-[13px] text-fg">
+              <StatusIcon size={14} weight="bold" aria-hidden className="mt-[3px] shrink-0" />
+              <span>{status.meaning}</span>
+            </p>
+            {shown.hypothetical || preview ? (
+              <p className="flex flex-wrap items-center gap-1.5 text-[13px] text-fg-muted">
+                {preview ? <span className="inline-flex h-5 items-center rounded-[4px] border border-dashed border-line-strong px-1.5 text-[11px] font-medium text-fg-muted">Preview</span> : null}
+                {shown.hypothetical ? <span>Hypothetical policy: rates are placeholders until a real commission agreement lands. No figure here is a promise to pay.</span> : null}
+              </p>
+            ) : null}
+          </div>
+
+          <section aria-label="Commission by status" className="surface">
             <dl className="divide-y divide-line">
-              <FigureRow label="Accrued" value={money(shown.accruedMinor)} hypothetical={shown.hypothetical} />
-              <FigureRow label="Eligible" value={money(shown.eligibleMinor)} hypothetical={shown.hypothetical} />
-              <FigureRow label="Paid" value={money(shown.paidMinor)} hypothetical={shown.hypothetical} />
+              <FigureRow
+                label="Commission"
+                amountMinor={total}
+                currency={currency}
+                detail={`${period}, accrued plus eligible plus paid`}
+                hypothetical={shown.hypothetical}
+              />
+              <FigureRow
+                label="Accrued"
+                amountMinor={shown.accruedMinor}
+                currency={currency}
+                detail={`${period}, calculated on collected cash and not yet approved`}
+                hypothetical={shown.hypothetical}
+              />
+              <FigureRow
+                label="Eligible"
+                amountMinor={shown.eligibleMinor}
+                currency={currency}
+                detail={`${period}, approved and waiting for the next payout`}
+                hypothetical={shown.hypothetical}
+              />
+              <FigureRow
+                label="Paid"
+                amountMinor={shown.paidMinor}
+                currency={currency}
+                detail={`${period}, already paid out`}
+                hypothetical={shown.hypothetical}
+              />
               <FigureRow
                 label="Per attended appointment"
-                value={perAttended.value === null ? "N/A" : formatMoneyMinor(Math.round(perAttended.value), currency, { cents: true })}
-                detail={`${formatMoneyMinor(perAttended.numerator, currency)} over ${formatCount(perAttended.denominator)} attended`}
+                amountMinor={perAttended.value === null ? null : Math.round(perAttended.value)}
+                currency={currency}
+                cents
+                absent={perAttended.denominator === 0 ? "No attended appointments yet" : MONEY_NOT_AVAILABLE}
+                detail={attendedDetail}
                 hypothetical={shown.hypothetical}
               />
             </dl>
           </section>
 
-          <section aria-label="Tier" className="surface">
-            <dl className="divide-y divide-line">
-              <FigureRow label="Tier" value={<span className="inline-flex items-center gap-1.5"><TierBadge tier={tier} size={16} />{tier.label}</span>} />
-              {next ? (
-                <FigureRow label="Next tier" value={<span className="inline-flex items-center gap-1.5"><TierBadge tier={next.tier} size={16} />{`${next.tier.label} at ${money(next.tier.minMinor)}`}</span>} detail={caption} />
-              ) : (
-                <FigureRow label="Next tier" value="Top tier" />
-              )}
-            </dl>
+          <section aria-label="Tier thresholds" className="surface">
+            <div className="px-4 pt-3.5 pb-2">
+              <p className="text-[14px] font-semibold text-fg">Tiers</p>
+              <p className="mt-0.5 text-[12px] text-fg-subtle">
+                Set by your {period} commission. {TIER_DISPLAY_NOTE}.
+              </p>
+            </div>
+            <ul className="divide-y divide-line">
+              {[...policy.tiers]
+                .sort((a, b) => a.minMinor - b.minMinor)
+                .map((t) => {
+                  const mine = t.id === tier.id;
+                  const isNext = next?.tier.id === t.id;
+                  return (
+                    <li key={t.id} className="flex min-h-11 items-center gap-3 px-4 py-2">
+                      <TierBadge tier={t} size={20} />
+                      <span className="min-w-0 flex-1">
+                        <span className={`block text-[14px] ${mine ? "font-semibold text-fg" : "text-fg"}`}>
+                          {t.label}
+                          {mine ? " (yours now)" : isNext ? " (next)" : ""}
+                        </span>
+                      </span>
+                      <span className="tabular shrink-0 text-[13px] text-fg-muted">{money(t.minMinor)} and up</span>
+                    </li>
+                  );
+                })}
+            </ul>
+            <p className="px-4 pt-1 pb-3.5 text-[12px] text-fg-subtle">
+              {next
+                ? `${money(next.remainingMinor)} more commission in ${period} reaches ${next.tier.label}. Your pay does not change when it does.`
+                : `${tier.label} is the top tier. Your pay does not change with a tier.`}
+            </p>
           </section>
 
           {details}
@@ -266,17 +411,45 @@ export function CashHero({ summary, policy = DEFAULT_TIER_POLICY, details }: Cas
   );
 }
 
-function FigureRow({ label, value, detail, hypothetical }: { label: string; value: ReactNode; detail?: string; hypothetical?: boolean }) {
+interface FigureRowProps {
+  label: string;
+  /** Integer minor units, or null when the figure is genuinely absent. */
+  amountMinor: number | null;
+  currency: string;
+  cents?: boolean;
+  /** Words for the absent case. A verified zero never uses them. */
+  absent?: string;
+  detail?: string;
+  hypothetical?: boolean;
+}
+
+function FigureRow({ label, amountMinor, currency, cents, absent, detail, hypothetical }: FigureRowProps) {
   return (
-    <div className="flex min-h-12 items-center gap-3 px-4 py-2.5">
+    <div className="flex min-h-12 items-start gap-3 px-4 py-2.5">
       <dt className="min-w-0 flex-1">
         <span className="block text-[14px] text-fg">{label}</span>
-        {detail ? <span className="tabular block text-[12px] text-fg-subtle">{detail}</span> : null}
+        {detail ? <span className="mt-0.5 block text-[12px] leading-snug text-fg-subtle">{detail}</span> : null}
       </dt>
-      <dd className="flex shrink-0 items-center gap-2">
+      <dd className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
+        <MoneyValue amountMinor={amountMinor} currency={currency} cents={cents} absent={absent} />
         {hypothetical ? <HypotheticalChip /> : null}
-        <span className="tabular text-[15px] font-medium text-fg">{value}</span>
       </dd>
     </div>
   );
+}
+
+/**
+ * A verified zero reads "$0.00" in the money face; a figure that is not there
+ * reads as words in a lighter face with its own mark. The two never look alike.
+ */
+function MoneyValue({ amountMinor, currency, cents, absent }: { amountMinor: number | null; currency: string; cents?: boolean; absent?: string }) {
+  if (amountMinor === null) {
+    return (
+      <span className="inline-flex max-w-[168px] items-start gap-1 text-right text-[12.5px] leading-snug font-normal text-fg-muted">
+        <Question size={13} weight="bold" aria-hidden className="mt-[2px] shrink-0" />
+        <span>{absent ?? MONEY_NOT_AVAILABLE}</span>
+      </span>
+    );
+  }
+  return <span className="tabular text-[15px] font-medium text-fg">{formatMoneyMinor(amountMinor, currency, { cents })}</span>;
 }

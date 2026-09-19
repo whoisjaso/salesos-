@@ -180,7 +180,17 @@ test.describe("Team and Me: Renata", () => {
     // First view: identity row, money hero, one group of rows. Level, streak, coaching and
     // the commission split are all behind a tap.
     await expect(page.getByRole("button", { name: /^Renata Solís/ })).toBeVisible();
-    await expect(page.getByRole("region", { name: "This month" })).toBeVisible();
+    const hero = page.getByRole("region", { name: "Commission, September" });
+    await expect(hero).toBeVisible();
+    // Money words for the money: the period, the figure, and the status of that money.
+    // The tier name never labels the dollar figure, and the tier line says what a tier is.
+    await expect(hero.getByText("September", { exact: true })).toBeVisible();
+    await expect(hero.getByText("Payable commission, not yet paid")).toBeVisible();
+    await expect(hero.getByText(/^Cash tier\. Next: Stacks$/)).toBeVisible();
+    await expect(hero.getByText("Tiers are display only and never change pay")).toBeVisible();
+    // The action names where it goes. "Collect more" named nothing.
+    await expect(hero.getByRole("link", { name: "Open today's appointments" })).toBeVisible();
+    await expect(page.getByText("Collect more")).toHaveCount(0);
     const rows = page.getByRole("region", { name: "Details" });
     await expect(rows.getByRole("button", { name: /Level/ })).toBeVisible();
     await expect(page.getByText(/XP to next|Max level/)).toHaveCount(0);
@@ -198,17 +208,22 @@ test.describe("Team and Me: Renata", () => {
     await expect(level.getByText(/day streak|No streak/)).toBeVisible();
     await closeSheet(page);
 
-    // The money hero opens Details: accrued, eligible, paid, per attended, per opportunity, cash in.
-    await page.getByRole("region", { name: "This month" }).getByRole("button", { name: /Details$/ }).click();
+    // The money hero opens Details: every figure with its period, the denominator in full
+    // words, every tier threshold, per opportunity and the cash ledger.
+    await hero.getByRole("button", { name: /Open details$/ }).click();
     const money = page.getByRole("dialog");
-    await expect(money.getByRole("heading", { level: 2, name: "This month" })).toBeVisible();
-    await expect(money.getByText("Accrued")).toBeVisible();
-    await expect(money.getByText("Eligible")).toBeVisible();
-    await expect(money.getByText("Paid")).toBeVisible();
-    await expect(money.getByText("Per attended appointment")).toBeVisible();
+    await expect(money.getByRole("heading", { level: 2, name: "September commission" })).toBeVisible();
+    await expect(money.getByText("Accrued", { exact: true })).toBeVisible();
+    await expect(money.getByText("Eligible", { exact: true })).toBeVisible();
+    await expect(money.getByText("Paid", { exact: true })).toBeVisible();
+    await expect(money.getByText("Per attended appointment", { exact: true })).toBeVisible();
+    await expect(money.getByText(/September, \$[\d,.]+ over \d+ attended appointments/)).toBeVisible();
     await expect(money.getByText("Hypothetical policy").first()).toBeVisible();
+    await expect(money.getByRole("region", { name: "Tier thresholds" })).toBeVisible();
+    await expect(money.getByText("Cash (yours now)")).toBeVisible();
+    await expect(money.getByText("Net collected cash per assigned opportunity, September", { exact: false })).toBeVisible();
     await expect(money.getByText("Per opportunity")).toBeVisible();
-    await expect(money.getByText("Cash in")).toBeVisible();
+    await expect(money.getByText("Cash collected", { exact: true })).toBeVisible();
     await closeSheet(page);
 
     // Coach row opens exactly one coaching card: a proposal with Why and Premise is wrong.

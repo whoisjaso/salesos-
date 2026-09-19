@@ -3,8 +3,36 @@
  * - economic_output: total eligible revenue on the declared basis and raw RPL. Not a skill ranking.
  * - comparable_performance: same role + lead tier + matured sample >= minimum; else provisional.
  * - personal_progress: the rep against their own prior period. No public rank.
+ *
+ * Standings (docs/DECISIONS.md, "Never show a list that looks ranked when ranking
+ * is not established" and "A held measurement never holds the person"):
+ * - When ranking is not established the result is a roster in a stated order, and
+ *   no rank number is produced anywhere, so a rep's own rank and the team board
+ *   cannot contradict each other. Both read `standingsHold` for the same basis.
+ * - The hold is scoped to the basis: an unlinked payment holds a net-collected-cash
+ *   board, not a contracted-value one, and unresolved attendance marks the attended
+ *   count as a lower bound without touching the money ranking.
+ * - A verified zero and a missing figure are different facts: `revenueState`.
  */
-import type { ISODateTime, Id, LeaderboardRow, LeaderboardView, MetricPayload, RevenueBasis, User } from "./types";
+import type {
+  AffectedSurface,
+  ISODateTime,
+  Id,
+  LeaderboardRow,
+  LeaderboardView,
+  MetricPayload,
+  RevenueBasis,
+  Role,
+  User,
+} from "./types";
+import {
+  BASIS_SURFACES,
+  type IncidentScope,
+  type SurfaceStatus,
+  holdFor,
+  scopeIncidents,
+  standingsHold,
+} from "./incidents";
 import {
   type CohortFilter,
   type Dataset,
@@ -33,7 +61,12 @@ export interface LeaderboardPolicy {
   priorPeriodTo?: ISODateTime;
   /** Roles ranked. */
   roles?: ("setter" | "closer")[];
-  /** Pause consequential ranking while attendance is unresolved or payments are unlinked (SOS-14). */
+  /**
+   * Hold consequential ranking while a surface the basis depends on is unreliable
+   * (SOS-14). Scoped: only the incidents that touch this basis hold it, and the
+   * list then reads as a roster instead of a silent ranking. Set false to rank on
+   * the figures as they stand.
+   */
   pauseOnUnresolvedData?: boolean;
 }
 
@@ -65,10 +98,17 @@ function rplFor(dataset: Dataset, filter: CohortFilter, basis: RevenueBasis, now
 
 interface RowDraft extends LeaderboardRow {
   rankKey: number;
-  unresolvedAttendance: number;
 }
 
-function buildRow(dataset: Dataset, user: User, role: "setter" | "closer", policy: LeaderboardPolicy, now: ISODateTime): RowDraft {
+function buildRow(
+  dataset: Dataset,
+  user: User,
+  role: "setter" | "closer",
+  policy: LeaderboardPolicy,
+  now: ISODateTime,
+  revenueHold: SurfaceStatus | null,
+  attendanceHold: SurfaceStatus | null,
+): RowDraft {
   const filter: CohortFilter = { userId: user.userId, role, from: policy.periodFrom, to: policy.periodTo };
   const opps = selectOpportunities(dataset, filter, now);
   const ids = new Set(opps.map((o) => o.opportunityId));
@@ -88,6 +128,32 @@ function buildRow(dataset: Dataset, user: User, role: "setter" | "closer", polic
     prior = rplFor(dataset, { ...filter, from: policy.priorPeriodFrom, to: policy.priorPeriodTo }, policy.basis, now).value;
   }
 
+  // A verified zero and a missing figure are different facts, and never render alike.
+  const revenueHeld = revenueHold !== null;
+  const noAmount = total.amountMinor === 0;
+  const revenueState: LeaderboardRow["revenueState"] = revenueHeld
+    ? noAmount
+      ? "unavailable"
+      : "amount"
+    : noAmount
+      ? "verified_zero"
+      : "amount";
+
+  const unresolvedAttendance = show.unknownCount;
+  const attendanceHeldHere = attendanceHold !== null && unresolvedAttendance > 0;
+  const heldSurfaces: AffectedSurface[] = [
+    ...(revenueHeld ? [revenueHold.surface] : []),
+    ...(attendanceHeldHere ? [attendanceHold.surface] : []),
+  ];
+  const heldStatement = [
+    revenueHeld ? revenueHold.statement : null,
+    attendanceHeldHere
+      ? `${attendedLabel(attended, unresolvedAttendance)}; ${attendanceHold.waitingOn} before the count is final.`
+      : null,
+  ]
+    .filter((s): s is string => s !== null)
+    .join(" ");
+
   return {
     userId: user.userId,
     displayName: user.displayName,
@@ -105,44 +171,137 @@ function buildRow(dataset: Dataset, user: User, role: "setter" | "closer", polic
     wins,
     refundCount: refunds,
     priorPeriodRevenuePerLead: prior,
+    revenueState,
+    revenueProvisional: revenueHeld,
+    attendedState: attendanceHeldHere ? "at_least" : "verified",
+    unresolvedAttendanceCount: unresolvedAttendance,
+    heldSurfaces: heldSurfaces.length ? heldSurfaces : undefined,
+    heldStatement: heldStatement.length ? heldStatement : undefined,
     rankKey: rpl.value ?? Number.NEGATIVE_INFINITY,
-    unresolvedAttendance: show.unknownCount,
   };
 }
 
-export function buildLeaderboard(
+function attendedLabel(attended: number, unresolved: number): string {
+  return `At least ${attended} attended, with ${unresolved} attendance outcome${unresolved === 1 ? "" : "s"} unresolved`;
+}
+
+/** What a standings hold means for the list, in words the screen can render. */
+export interface StandingsHold {
+  surface: AffectedSurface;
+  /** What has to happen before ranks can be produced. */
+  waitingOn: string;
+  owner: SurfaceStatus["owner"];
+  ownerLabel: SurfaceStatus["ownerLabel"];
+  /** One sentence: the limited effect. */
+  statement: string;
+  incidentIds: Id[];
+}
+
+export interface Standings {
+  view: LeaderboardView;
+  /** "roster" means no rank number is produced anywhere in this result. */
+  kind: "ranked" | "roster";
+  /** The order the list is in, stated in words. Always shown above the list. */
+  orderLabel: string;
+  /** Set when ranking is held by an incident. Absent when no cohort is simply eligible yet. */
+  heldBy?: StandingsHold;
+  rows: LeaderboardRow[];
+  scope: IncidentScope;
+}
+
+function toStandingsHold(status: SurfaceStatus): StandingsHold {
+  return {
+    surface: status.surface,
+    waitingOn: status.waitingOn ?? "",
+    owner: status.owner,
+    ownerLabel: status.ownerLabel,
+    statement: status.statement,
+    incidentIds: status.incidents.map((i) => i.incidentId),
+  };
+}
+
+function byName(a: LeaderboardRow, b: LeaderboardRow): number {
+  return a.role.localeCompare(b.role) || a.displayName.localeCompare(b.displayName);
+}
+
+/**
+ * The full standings result: the rows, whether they are ranked at all, the order
+ * they are in, and what holds the ranking when it is held. `buildLeaderboard`
+ * returns the rows from this.
+ */
+export function buildStandings(
   dataset: Dataset,
   view: LeaderboardView,
   policy: LeaderboardPolicy,
   now: ISODateTime,
-): LeaderboardRow[] {
+  scope?: IncidentScope,
+): Standings {
+  const resolved = scope ?? scopeIncidents(dataset, { now });
+  const scoped = policy.pauseOnUnresolvedData === false;
+  // Scoped to the basis: contracted value does not rest on payment attribution.
+  const revenueHold = scoped ? null : holdFor(resolved, BASIS_SURFACES[policy.basis]);
+  const attendanceHold = holdFor(resolved, ["attendance_outcome"]);
+  const rankHold = scoped ? null : standingsHold(resolved, policy.basis);
+
   const roles = policy.roles ?? ["setter", "closer"];
   const drafts: RowDraft[] = [];
   for (const user of dataset.users) {
     if (!user.active) continue;
     for (const role of roles) {
       if (!user.roles.includes(role)) continue;
-      const row = buildRow(dataset, user, role, policy, now);
+      const row = buildRow(dataset, user, role, policy, now, revenueHold, attendanceHold);
       if (row.assignedOpportunities === 0) continue;
       drafts.push(row);
     }
   }
 
-  const unlinkedPayments = dataset.ledger.filter((e) => e.opportunityId === undefined).length;
+  const heldBy = rankHold ? toStandingsHold(rankHold) : undefined;
 
   if (view === "economic_output") {
-    // Descriptive output: rank by total revenue on the declared basis. Not a skill ranking.
-    const sorted = [...drafts].sort((a, b) => b.totalRevenue.amountMinor - a.totalRevenue.amountMinor || a.displayName.localeCompare(b.displayName));
-    return sorted.map((row, i) => finish({
-      ...row,
-      rank: i + 1,
-      provisional: false,
-      movementReason: `Economic output on ${basisLabel(row.basis)} basis; describes allocation and output, not isolated skill.`,
-    }));
+    if (heldBy) {
+      // The figures are shown and labeled, but a position in this order would read as a rank.
+      const rows = drafts
+        .map((row) =>
+          finish({
+            ...row,
+            rank: null,
+            provisional: true,
+            provisionalReason: heldBy.statement,
+            movementReason: `Roster, not a ranking: ${heldBy.statement}`,
+          }),
+        )
+        .sort(byName);
+      return {
+        view,
+        kind: "roster",
+        orderLabel: `Roster in alphabetical order, not a ranking. ${heldBy.statement}`,
+        heldBy,
+        rows,
+        scope: resolved,
+      };
+    }
+    // Descriptive output: order by total revenue on the declared basis. Not a skill ranking.
+    const sorted = [...drafts].sort(
+      (a, b) => b.totalRevenue.amountMinor - a.totalRevenue.amountMinor || a.displayName.localeCompare(b.displayName),
+    );
+    return {
+      view,
+      kind: "ranked",
+      orderLabel: `Ordered by total ${basisLabel(policy.basis)} for the period. Describes allocation and output, not isolated skill.`,
+      rows: sorted.map((row, i) =>
+        finish({
+          ...row,
+          rank: i + 1,
+          provisional: false,
+          movementReason: `Economic output on ${basisLabel(row.basis)} basis; describes allocation and output, not isolated skill.`,
+        }),
+      ),
+      scope: resolved,
+    };
   }
 
   if (view === "personal_progress") {
-    return drafts
+    const rows = drafts
       .sort((a, b) => a.displayName.localeCompare(b.displayName))
       .map((row) => {
         const current = row.revenuePerLead.value;
@@ -156,9 +315,17 @@ export function buildLeaderboard(
         }
         return finish({ ...row, rank: null, provisional: false, movementReason });
       });
+    return {
+      view,
+      kind: "roster",
+      orderLabel: "Each rep against their own prior period, in alphabetical order. No rank.",
+      heldBy,
+      rows,
+      scope: resolved,
+    };
   }
 
-  // comparable_performance: group by role + lead tier; eligibility needs matured sample and reconciled data.
+  // comparable_performance: group by role + lead tier; eligibility needs a matured sample and a basis that holds up.
   const groups = new Map<string, RowDraft[]>();
   for (const row of drafts) {
     const key = `${row.role}:tier=${row.leadTier ?? "unknown"}`;
@@ -172,12 +339,7 @@ export function buildLeaderboard(
         reasons.push(`${row.assignedOpportunities} assigned opportunities, minimum ${policy.minMaturedSample} for eligible rank (${row.maturedSample} matured)`);
       }
       if (row.leadTier === undefined) reasons.push("lead tier unknown; comparison group undefined");
-      if (policy.pauseOnUnresolvedData && row.unresolvedAttendance > 0) {
-        reasons.push(`${row.unresolvedAttendance} unresolved attendance outcome(s); consequential ranking paused`);
-      }
-      if (policy.pauseOnUnresolvedData && policy.basis === "net_collected_cash" && unlinkedPayments > 0) {
-        reasons.push(`${unlinkedPayments} unlinked payment(s) awaiting reconciliation; ranking paused`);
-      }
+      if (heldBy) reasons.push(heldBy.statement);
       if (row.revenuePerLead.value === null) reasons.push("revenue per lead is N/A");
       row.provisional = reasons.length > 0;
       row.provisionalReason = reasons.length ? reasons.join("; ") : undefined;
@@ -195,7 +357,74 @@ export function buildLeaderboard(
       out.push(finish(r));
     }
   }
-  return out.sort((a, b) => a.role.localeCompare(b.role) || (a.leadTier ?? 99) - (b.leadTier ?? 99) || (a.rank ?? 999) - (b.rank ?? 999) || a.displayName.localeCompare(b.displayName));
+  const ranked = out.some((r) => r.rank !== null);
+  const sorted = ranked
+    ? out.sort(
+        (a, b) =>
+          a.role.localeCompare(b.role) ||
+          (a.leadTier ?? 99) - (b.leadTier ?? 99) ||
+          (a.rank ?? 999) - (b.rank ?? 999) ||
+          a.displayName.localeCompare(b.displayName),
+      )
+    : out.sort(byName);
+  return {
+    view,
+    kind: ranked ? "ranked" : "roster",
+    orderLabel: ranked
+      ? `Ranked by ${basisLabel(policy.basis)} per assigned opportunity, within role and lead tier. Provisional rows are listed with their reason and carry no rank.`
+      : `Roster in alphabetical order, not a ranking. ${heldBy ? heldBy.statement : `No cohort has reached the ${policy.minMaturedSample} matured opportunities an eligible rank needs.`}`,
+    heldBy,
+    rows: sorted,
+    scope: resolved,
+  };
+}
+
+export function buildLeaderboard(
+  dataset: Dataset,
+  view: LeaderboardView,
+  policy: LeaderboardPolicy,
+  now: ISODateTime,
+): LeaderboardRow[] {
+  return buildStandings(dataset, view, policy, now).rows;
+}
+
+export interface OwnStanding {
+  /** Null whenever the board produces no rank. The two can never disagree: same rows. */
+  rank: number | null;
+  of: number;
+  kind: Standings["kind"];
+  row?: LeaderboardRow;
+  /** Why there is no rank, when there is none. */
+  statement: string;
+}
+
+/**
+ * A rep's own standing, read from the same rows the team board shows, so the
+ * personal view and the board can never contradict each other.
+ */
+export function ownStanding(standings: Standings, userId: Id, role?: Role): OwnStanding {
+  const row = standings.rows.find((r) => r.userId === userId && (role === undefined || r.role === role));
+  const peers = row ? standings.rows.filter((r) => r.role === row.role && r.leadTier === row.leadTier) : [];
+  const ranked = peers.filter((r) => r.rank !== null).length;
+  if (!row) {
+    return { rank: null, of: 0, kind: standings.kind, statement: "No assigned opportunities in this period, so there is nothing to place." };
+  }
+  if (row.rank === null) {
+    return {
+      rank: null,
+      of: ranked,
+      kind: standings.kind,
+      row,
+      statement: standings.heldBy ? standings.heldBy.statement : (row.provisionalReason ?? standings.orderLabel),
+    };
+  }
+  return {
+    rank: row.rank,
+    of: ranked,
+    kind: standings.kind,
+    row,
+    statement: `Rank ${row.rank} of ${ranked} in ${row.role === "setter" ? "setter" : "closer"} lead tier ${row.leadTier ?? "unknown"}, on ${basisLabel(row.basis)} per assigned opportunity.`,
+  };
 }
 
 function basisLabel(basis: RevenueBasis): string {
@@ -210,9 +439,8 @@ function basisLabel(basis: RevenueBasis): string {
 }
 
 function finish(row: RowDraft): LeaderboardRow {
-  const { rankKey: _rankKey, unresolvedAttendance: _u, ...rest } = row;
+  const { rankKey: _rankKey, ...rest } = row;
   void _rankKey;
-  void _u;
   return rest;
 }
 
