@@ -2,8 +2,24 @@
  * Pure helpers for the Team and Coach pages. No React, no fixtures baked in:
  * every function takes the dataset and `now` so the pages stay deterministic.
  */
-import type { CoachingRecommendation, ISODateTime, Id, LeaderboardRow, MetricId, Mission, SkillPath } from "@/domain/types";
+import type { CoachingRecommendation, CommissionPolicy, ISODateTime, Id, LeaderboardRow, MetricId, Mission, Pair, SkillPath } from "@/domain/types";
 import type { Dataset } from "@/domain/metrics";
+import {
+  activePairs,
+  pairContribution,
+  pairDiagnostic,
+  pairFunnel,
+  pairLeaderboard,
+  pairOpportunities,
+  pairSideOf,
+  pairsOf,
+  type PairContribution,
+  type PairDiagnostic,
+  type PairFunnel,
+  type PairLeaderboardRow,
+  type PairSide,
+} from "@/domain/pairs";
+import type { SeasonWindow } from "@/domain/cashTiers";
 import { computeMetric } from "@/domain/metrics";
 import { DEFAULT_LEADERBOARD_POLICY, type LeaderboardPolicy } from "@/domain/leaderboard";
 import { COACHING_ENGINE_VERSION, STAGE_ACTION_LIBRARY, sensitivityTable, type StageAction } from "@/domain/coaching";
@@ -304,3 +320,148 @@ export const OWNER_LABEL: Record<CoachingRecommendation["ownerRole"], string> = 
   finance: "Finance",
   delivery: "Delivery",
 };
+
+// ---------- Pairs (Batman and Robin) ----------
+
+export const CHOSEN_BY_LABEL: Record<Pair["chosenBy"], string> = {
+  owner: "Owner picked",
+  closer: "Closer picked",
+  setter: "Setter picked",
+};
+
+export const PAIR_SIDE_LABEL: Record<PairSide, string> = {
+  setter: "Setter side",
+  handoff: "Handoff",
+  closer: "Closer side",
+};
+
+export const PAIR_OWNER_LABEL: Record<PairDiagnostic["suggestedOwner"], string> = {
+  setter: "Setter side",
+  closer: "Closer side",
+  both: "Both sides",
+  sales_ops: "Sales ops",
+};
+
+/** One-word stage names for the slim pair bar. */
+export const PAIR_STAGE_SHORT: Record<string, string> = {
+  two_way_contact: "Contact",
+  booked: "Booked",
+  retained_booking: "Retained",
+  attended: "Show",
+  perceived_qualified: "Fit",
+  won: "Won",
+  net_collected_cash: "Cash",
+};
+
+/** Setter-side bar stages (fed by connectors) and closer-side bar stages, in order. */
+export const PAIR_BAR_SETTER = ["two_way_contact", "booked", "retained_booking", "attended"] as const;
+export const PAIR_BAR_CLOSER = ["perceived_qualified", "won", "net_collected_cash"] as const;
+
+export function firstName(displayName: string): string {
+  return displayName.split(/\s+/).filter(Boolean)[0] ?? displayName;
+}
+
+/** "Priya and Renata": setter first, closer second. */
+export function pairTitle(setterDisplayName: string, closerDisplayName: string): string {
+  return `${firstName(setterDisplayName)} and ${firstName(closerDisplayName)}`;
+}
+
+export interface PairView {
+  pair: Pair;
+  setterDisplayName: string;
+  closerDisplayName: string;
+  /** Absent when the pair carried no opportunity in the season (the board skips it). */
+  row?: PairLeaderboardRow;
+  funnel: PairFunnel;
+  diagnostic: PairDiagnostic;
+  contribution: PairContribution;
+}
+
+export interface PairViewOptions {
+  minMaturedSample: number;
+  policies: CommissionPolicy[];
+}
+
+export function buildPairView(dataset: Dataset, pairs: Pair[], pair: Pair, season: SeasonWindow, now: ISODateTime, options: PairViewOptions, rows?: PairLeaderboardRow[]): PairView {
+  const names = new Map(dataset.users.map((u) => [u.userId, u.displayName]));
+  const board = rows ?? pairLeaderboard(dataset, pairs, season, { minMaturedSample: options.minMaturedSample }, now);
+  return {
+    pair,
+    setterDisplayName: names.get(pair.setterUserId) ?? pair.setterUserId,
+    closerDisplayName: names.get(pair.closerUserId) ?? pair.closerUserId,
+    row: board.find((r) => r.pairId === pair.pairId),
+    funnel: pairFunnel(dataset, pairs, pair.pairId, {}, now),
+    diagnostic: pairDiagnostic(dataset, pairs, pair.pairId, now),
+    contribution: pairContribution(dataset, pairs, pair.pairId, season, options.policies),
+  };
+}
+
+/**
+ * The pair board: active pairs in pairLeaderboard order (ranked first, then
+ * provisional by value), followed by active pairs with nothing in the season.
+ * Pairs only; never merged with an individual board.
+ */
+export function buildPairViews(dataset: Dataset, pairs: Pair[], season: SeasonWindow, now: ISODateTime, options: PairViewOptions): PairView[] {
+  const active = activePairs(pairs, now);
+  const rows = pairLeaderboard(dataset, active, season, { minMaturedSample: options.minMaturedSample }, now);
+  const byId = new Map(active.map((p) => [p.pairId, p]));
+  const ordered: Pair[] = [];
+  for (const r of rows) {
+    const p = byId.get(r.pairId);
+    if (p) ordered.push(p);
+  }
+  for (const p of active) if (!rows.some((r) => r.pairId === p.pairId)) ordered.push(p);
+  return ordered.map((p) => buildPairView(dataset, pairs, p, season, now, options, rows));
+}
+
+/** The rep's active pair. With several, the one carrying the most opportunities. */
+export function pairForRep(dataset: Dataset, pairs: Pair[], userId: Id, now: ISODateTime): Pair | undefined {
+  const mine = activePairs(pairsOf(pairs, userId), now);
+  if (mine.length === 0) return undefined;
+  return [...mine].sort((a, b) => pairOpportunities(dataset, b.pairId).length - pairOpportunities(dataset, a.pairId).length || a.pairId.localeCompare(b.pairId))[0];
+}
+
+/** A connector rate from the pair funnel: 0..1, or null when the rate is refused or undefined. */
+export function pairStageRate(funnel: PairFunnel, toStageId: string): number | null {
+  const c = funnel.connectors.find((x) => x.toStageId === toStageId);
+  if (!c?.metric || c.metric.refusalReason || c.metric.value === null || c.metric.value === undefined) return null;
+  return Math.max(0, Math.min(1, c.metric.value));
+}
+
+export interface PairStageGap {
+  pair: Pair;
+  side: PairSide;
+  /** Pair rate minus pooled rate, ratio points (negative is behind). */
+  gap: number;
+}
+
+/**
+ * For one stage, the pair furthest behind the pooled pair rate (sum over sum),
+ * ignoring pair denominators under `minDenominator`. Undefined when no pair is
+ * behind or the stage has no pair connector. Names a side, never a person.
+ */
+export function pairGapForStage(dataset: Dataset, pairs: Pair[], stageId: string, now: ISODateTime, minDenominator = 5, tolerance = 0.02): PairStageGap | undefined {
+  const active = activePairs(pairs, now);
+  if (active.length === 0) return undefined;
+  const parts: { pair: Pair; side: PairSide; numerator: number; denominator: number }[] = [];
+  let pooledN = 0;
+  let pooledD = 0;
+  for (const pair of active) {
+    const funnel = pairFunnel(dataset, pairs, pair.pairId, {}, now);
+    const c = funnel.connectors.find((x) => x.toStageId === stageId);
+    if (!c?.metric || c.metric.refusalReason) continue;
+    parts.push({ pair, side: pairSideOf(c), numerator: c.metric.numerator, denominator: c.metric.denominator });
+    pooledN += c.metric.numerator;
+    pooledD += c.metric.denominator;
+  }
+  if (pooledD === 0) return undefined;
+  const pooled = pooledN / pooledD;
+  let worst: PairStageGap | undefined;
+  for (const p of parts) {
+    if (p.denominator < minDenominator) continue;
+    const gap = p.numerator / p.denominator - pooled;
+    if (gap >= -tolerance) continue;
+    if (!worst || gap < worst.gap) worst = { pair: p.pair, side: p.side, gap };
+  }
+  return worst;
+}
