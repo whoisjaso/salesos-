@@ -65,7 +65,7 @@ export function PairCard({ view, onOpen, meId, className }: PairCardProps) {
         <span className="flex items-center gap-3">
           <PairAvatars setterDisplayName={setterDisplayName} closerDisplayName={closerDisplayName} meSide={meSide} />
           <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="truncate text-[15px] font-semibold leading-tight text-fg">{title}</span>
+            <span className="min-w-0 text-[15px] font-semibold leading-tight text-fg">{title}</span>
             <span className="tag text-fg-muted">{CHOSEN_BY_LABEL[pair.chosenBy]}</span>
           </span>
           {row?.rank !== null && row?.rank !== undefined ? (

@@ -29,7 +29,8 @@ test.describe("Team and Me: Renata", () => {
     const banner = page.getByText(/^Ranking paused: /);
     await expect(banner).toBeVisible();
     await expect(banner).toContainText("unlinked payment");
-    const rankCells = board.locator("li > button > span.tabular.w-5");
+    // The rank cell sits in the row regardless of how the avatar and button are nested.
+    const rankCells = board.locator("li span.tabular.w-5");
     await expect(rankCells).toHaveCount(0);
     await expect(board.getByLabel("Provisional").first()).toBeVisible();
 
