@@ -264,9 +264,7 @@ export function SetterWorkspace() {
           <>
             <UserSwitcher users={setters} value={userId} onChange={selectUser} />
             <div className="relative">
-              <Button variant="ghost" size="sm" aria-label="Debug" aria-expanded={debugOpen} onClick={() => setDebugOpen((v) => !v)} className="w-8 px-0">
-                <Bug size={15} aria-hidden />
-              </Button>
+              <Button variant="ghost" size="sm" aria-label="Debug" aria-expanded={debugOpen} onClick={() => setDebugOpen((v) => !v)} className="w-8 px-0" leading={<Bug size={16} />} />
               {debugOpen ? (
                 <Surface tier="overlay" padding="sm" className="absolute right-0 top-9 z-40 w-56 shadow-md">
                   <label className="flex cursor-pointer items-center gap-2 text-[13px] text-fg">
