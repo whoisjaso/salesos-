@@ -15,3 +15,4 @@ export * from "./callIntelligence"; export * from "./dialer";
 export * from "./intake";
 export * from "./integrations";
 export * from "./migration";
+export * from "./crmSync";
