@@ -12,3 +12,5 @@ export * from "./leaderboard";
 export * from "./gamification";
 export * from "./game";
 export * from "./callIntelligence"; export * from "./dialer";
+export * from "./intake";
+export * from "./integrations";
