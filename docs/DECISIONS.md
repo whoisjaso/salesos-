@@ -16,4 +16,8 @@ Owner decisions made during the build, in order. Each one updates the relevant s
 
 **Native by role.** A person signs in as who they are and never sees another role's world. Reps: Today, Team, Me. Owner: Business, Team, Me. Three tabs, no role switcher, no page headers or subtitles, no persona pickers. Learning the app should take zero explanation. Applies to the shell and every route.
 
+**Test from every angle.** Automated journeys per role, not page screenshots: setter lead to handoff, closer join to verbal yes with zero collected, owner business to bottleneck assignment, rep blocked from owner routes. Run on every build.
+
+**Leads from anywhere, one intake.** A universal intake layer normalizes any source (Meta and Google lead forms, VSL and landing page webhooks, calendar bookings, share links for organic and DMs, manual, Zapier and Make, email forward, CSV) into one LeadSubmission with source and entry path stamped, central dedupe and consent capture. Owner gets a Sources screen with per-source health and a three-step add flow. Implemented in `src/domain/intake.ts`.
+
 **Personality routing signals.** Customer's own words and texting style: allowed as hypotheses that a real exchange must confirm (SOS-07 lens library). One explicit question in the funnel ("Numbers first, or see how it works?") is the primary pairing signal. Profile-picture or appearance inference: rejected. Unreliable and a legal exposure; the spec already excludes it (SOS-07, SOS-23).
