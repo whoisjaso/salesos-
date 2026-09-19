@@ -106,8 +106,12 @@ export function standingsLines(standings: Standings, descriptive = false): Stand
         ? `${measure}, in alphabetical order.`
         : sentence
       : sentence.replace(/^Ranked by /, "By ");
+  // One short line on the screen, never the whole statement: what it waits on in
+  // full, and the limited effect, belong in the sheet this row opens
+  // (docs/DECISIONS.md, "The front end is the product").
+  const holdCount = held ? held.incidentIds.length : 0;
   const holdLine = held
-    ? `Waits until ${held.waitingOn}. ${held.ownerLabel ?? "The owner"} owns that.`
+    ? `${formatUnits(holdCount, "item", "items")} to settle, ${held.ownerLabel ?? "the owner"} owns them`
     : standings.kind === "roster"
       ? restAfterFirstSentence(standings.orderLabel) || null
       : null;

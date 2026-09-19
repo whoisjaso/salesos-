@@ -18,15 +18,16 @@ const roster = () => buildStandings(obaviaDataset, "comparable_performance", sea
 const ranked = () => buildStandings(obaviaDataset, "comparable_performance", descriptivePolicy(NOW), NOW);
 
 describe("standingsLines", () => {
-  it("says the list is a roster, states the order, and names what ranking waits on and who owns it", () => {
+  it("says the list is a roster, states the order, and names how much is outstanding and who owns it", () => {
     const lines = standingsLines(roster());
     expect(lines.kind).toBe("roster");
     expect(lines.kindLabel).toBe("Roster, not a ranking");
     expect(lines.orderLine).toBe("Net collected cash per assigned opportunity, in alphabetical order.");
     expect(lines.holdLabel).toBe("Ranking on hold");
-    expect(lines.holdLine).toMatch(/^Waits until /);
-    expect(lines.holdLine).toContain("unlinked payment");
-    expect(lines.holdLine).toContain("Finance owns that.");
+    // One short line on the screen: the count and the owner. What it waits on in
+    // full lives in the sheet the row opens.
+    expect(lines.holdLine).toMatch(/^\d+ items? to settle, Finance owns them$/);
+    expect(lines.holdLine!.length).toBeLessThanOrEqual(48);
   });
 
   it("says the list is ranked, and marks the descriptive override as not a standing", () => {

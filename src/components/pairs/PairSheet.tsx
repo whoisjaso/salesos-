@@ -9,7 +9,7 @@ import { Sheet } from "@/components/ui/Sheet";
 import { StateChip } from "@/components/ui/StateChip";
 import { Surface } from "@/components/ui/Surface";
 import type { SessionRole } from "@/lib/session";
-import { formatMoneyMinor } from "@/lib/format";
+import { formatMoneyMinor, formatUnits } from "@/lib/format";
 import { CHOSEN_BY_LABEL, PAIR_OWNER_LABEL, PAIR_SIDE_LABEL, PAIR_STAGE_SHORT, hoursWord, pairTitle, type PairView } from "@/lib/team-data";
 import { PAIR_HUE, PairBar } from "./PairBar";
 import { PairAvatars } from "./PairCard";
@@ -142,9 +142,9 @@ export function PairSheet({ open, onClose, view, viewer, rates }: PairSheetProps
                 {shared.map((s) => (
                   <div key={s.label} className="flex items-baseline justify-between gap-3 py-2">
                     <dt className="text-[13.5px] text-fg">{s.label}</dt>
-                    <dd className="tabular text-right text-[13.5px] font-medium text-fg">
-                      {s.value}
-                      {s.label === "Handoff" ? <span className="block text-[12px] font-normal text-fg-subtle">{formatHours(funnel.handoff.avgHoursToAccept)}</span> : null}
+                    <dd className="tabular flex flex-col items-end text-right text-[13.5px] font-medium text-fg">
+                      <span>{s.value}</span>
+                      {s.label === "Handoff" ? <span className="text-[12px] font-normal text-fg-subtle">{formatHours(funnel.handoff.avgHoursToAccept)}</span> : null}
                     </dd>
                   </div>
                 ))}
@@ -179,7 +179,7 @@ export function PairSheet({ open, onClose, view, viewer, rates }: PairSheetProps
             <dt className="text-fg-muted">Standing</dt>
             <dd className="text-fg">
               {row?.rank !== null && row?.rank !== undefined ? (
-                `#${row.rank}, ${row.assignedOpportunities} assigned`
+                `#${row.rank}, ${formatUnits(row.assignedOpportunities, "assigned opportunity", "assigned opportunities")}`
               ) : (
                 <span className="flex items-start gap-1.5 text-right">
                   <Hourglass size={12} weight="bold" aria-hidden className="mt-1 shrink-0 text-fg-subtle" />

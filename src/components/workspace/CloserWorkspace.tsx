@@ -203,7 +203,7 @@ export function CloserWorkspace({ userId }: { userId: string }) {
         at lg the first becomes the call column and the second a standing rail that holds
         the customer beside the call, so opening anything never costs the rep their context.
       */}
-      <div className="mx-auto flex max-w-[640px] flex-col gap-4 lg:grid lg:max-w-[1180px] lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-5">
+      <div className="mx-auto flex max-w-[640px] flex-col gap-4 lg:grid lg:max-w-[1180px] lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-5">
         <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-4">
         <Surface padding="md" className="order-1 flex flex-col">
           <div className="min-h-[96px]">

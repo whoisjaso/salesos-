@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { Fragment, useMemo, useState, useEffect } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { obaviaCommissionPolicies, obaviaDataset, obaviaDatasetWithPairs, obaviaPairs, NOW } from "@/fixtures/obavia";
 import { commissionPolicyFor } from "@/domain/cashTiers";
@@ -166,18 +166,27 @@ export function TeamView() {
                   control={<Segmented options={ROLES} value={role} onChange={setRole} label="Role" />}
                 />
                 <ol className="surface px-4" aria-label={standings.kind === "ranked" ? "Board" : "Roster"}>
-                  {visible.map((r) => {
+                  {visible.map((r, i) => {
                     const key = `${r.userId}:${r.role}`;
+                    // Ranks restart inside each lead tier, so the tier is named above its
+                    // own block: two number ones never sit in a list without their reason.
+                    const opensTier = standings.kind === "ranked" && (i === 0 || visible[i - 1].leadTier !== r.leadTier);
                     return (
-                      <LeaderboardRow
-                        key={key}
-                        row={r}
-                        descriptive={descriptive}
-                        isMe={r.userId === meId}
-                        funnel={funnels[key] ?? []}
-                        correctionSent={Boolean(corrections[key])}
-                        onRequestCorrection={() => setCorrections((c) => ({ ...c, [key]: true }))}
-                      />
+                      <Fragment key={key}>
+                        {opensTier ? (
+                          <li className="-mx-4 border-b border-line px-4 pb-1.5 pt-3 text-[11px] font-medium uppercase tracking-wide text-fg-subtle">
+                            {r.leadTier === undefined ? "Lead tier unknown" : `Lead tier ${r.leadTier}`}, ranked within this tier only
+                          </li>
+                        ) : null}
+                        <LeaderboardRow
+                          row={r}
+                          descriptive={descriptive}
+                          isMe={r.userId === meId}
+                          funnel={funnels[key] ?? []}
+                          correctionSent={Boolean(corrections[key])}
+                          onRequestCorrection={() => setCorrections((c) => ({ ...c, [key]: true }))}
+                        />
+                      </Fragment>
                     );
                   })}
                   <li className="-mx-4 border-t border-line">

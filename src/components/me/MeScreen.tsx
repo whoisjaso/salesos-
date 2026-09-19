@@ -181,14 +181,16 @@ function RepMe({
     [plan],
   );
   const recHold = rec?.held;
-  /** The incidents behind a held recommendation, named as short titles a rep can act on. */
-  const holdTitles = useMemo(() => {
+  /**
+   * The incidents behind a held recommendation, named the way the row can carry
+   * them: the first one in full, the rest counted. The whole list is one tap away.
+   */
+  const holdSummary = useMemo(() => {
     if (!recHold) return "";
     const ids = new Set(recHold.incidentIds);
-    return plan.scope.incidents
-      .filter((i) => ids.has(i.incidentId))
-      .map((i) => i.title)
-      .join(" and ");
+    const titles = plan.scope.incidents.filter((i) => ids.has(i.incidentId)).map((i) => i.title);
+    if (titles.length === 0) return recHold.waitingOn;
+    return titles.length === 1 ? titles[0] : `${titles[0]} and ${formatCount(titles.length - 1)} more`;
   }, [recHold, plan]);
   const metric = useMemo(() => (rec ? computeMetric(rec.metricIds[0], dataset, { userId }, NOW) : null), [rec, userId]);
   const season = useMemo(() => ({ from: data.season.from, to: data.season.to }), [data.season.from, data.season.to]);
@@ -297,12 +299,10 @@ function RepMe({
           <DetailsRow
             label="Coach"
             leading={<GraduationCap size={18} weight="regular" aria-hidden className="text-fg-subtle" />}
-            hint={recHold ? holdTitles || recHold.waitingOn : undefined}
-            value={
-              <span className="block max-w-[150px] truncate">
-                {recHold ? `Waiting on ${recHold.ownerLabel}` : rec.title}
-              </span>
-            }
+            // Held coaching names what it waits on and who owns it, across the row rather
+            // than squeezed into the value. Standing coaching shows its own title.
+            hint={recHold ? `Waiting on ${recHold.ownerLabel}: ${holdSummary}` : undefined}
+            value={recHold ? undefined : <span className="block max-w-[180px] truncate">{rec.title}</span>}
             ariaLabel={recHold ? `Coach. ${rec.title}. ${recHold.statement}` : `Coach. ${rec.title}`}
             onClick={() => setSheet("coach")}
           />

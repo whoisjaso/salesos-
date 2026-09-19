@@ -24,7 +24,7 @@
 import type { Dataset } from "@/domain/metrics";
 import type { AppointmentInstance, ISODateTime, Id } from "@/domain/types";
 import { coachingPlan, type CoachingPlan } from "@/domain/coaching";
-import { buildReview, coachingMoment, formatClock, reviewableCalls } from "@/lib/review";
+import { buildReview, canReview, coachingMoment, formatClock, reviewableCalls } from "@/lib/review";
 import { sameDayIn, TENANT_TZ } from "@/lib/workspace-setter";
 
 export type RepRole = "setter" | "closer";
@@ -190,6 +190,10 @@ export function latestReviewedCallId(userId: Id, role: RepRole, now: ISODateTime
 export function nextImprovement(dataset: Dataset, userId: Id, role: RepRole, now: ISODateTime, callId: Id, plan?: CoachingPlan): TodayImprovement | undefined {
   const review = buildReview(callId);
   if (!review) return undefined;
+  // Never point a person at a conversation they are not allowed to open, and never call
+  // somebody else's call theirs. A teammate's call on the same opportunity is not this
+  // person's coaching.
+  if (!canReview({ userId, role }, review.call)) return undefined;
   const feedback = review.feedback[0];
   const moment = coachingMoment(review);
   const spanIndex = feedback?.spanIndex ?? moment?.spanIndex;

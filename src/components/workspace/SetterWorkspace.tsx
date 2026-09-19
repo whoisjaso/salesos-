@@ -295,7 +295,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
         at lg they become the call column and a standing rail, and the order classes keep
         each element where the phone put it.
       */}
-      <div className="mx-auto flex max-w-[640px] flex-col gap-4 lg:grid lg:max-w-[1180px] lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-5">
+      <div className="mx-auto flex max-w-[640px] flex-col gap-4 lg:grid lg:max-w-[1180px] lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-5">
         <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-4">
         {/* ----- Hero: a name, one muted line, one action. Everything else is behind Details. ----- */}
         <Surface padding="md" className="order-1 flex flex-col">
