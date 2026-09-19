@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BookOpenText, CaretRight, HandCoins } from "@phosphor-icons/react";
+import { BookOpenText, CaretRight, HandCoins, PlugsConnected } from "@phosphor-icons/react";
+import { SEED_CONNECTED_COUNT } from "@/components/connect/connect-model";
 import type { SopModule } from "@/content/sops";
 import type { CoachingRecommendation } from "@/domain/types";
 import { RulesCoachingEngine } from "@/domain/coaching";
@@ -50,10 +52,18 @@ export function MeScreen({ data, sops, boundaries }: MeScreenProps) {
       {session.role === "owner" ? <OwnerMe /> : <RepMe key={session.userId} userId={session.userId} role={session.role} data={data} />}
       <PlaybookRow sops={sops} boundaries={boundaries} />
       {session.role === "owner" ? (
-        <Surface padding="none" className="flex h-14 items-center justify-between px-4">
-          <span className="text-[15px] font-medium text-fg">Theme</span>
-          <ThemeToggle />
-        </Surface>
+        <>
+          <Link href="/connect" className="surface flex h-14 w-full items-center gap-3 px-4 text-left transition-colors hover:bg-hover motion-reduce:transition-none">
+            <PlugsConnected size={20} weight="regular" aria-hidden className="shrink-0 text-accent" />
+            <span className="flex-1 text-[15px] font-medium text-fg">Connect</span>
+            <span className="tabular text-[13px] text-fg-subtle">{SEED_CONNECTED_COUNT} connected</span>
+            <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
+          </Link>
+          <Surface padding="none" className="flex h-14 items-center justify-between px-4">
+            <span className="text-[15px] font-medium text-fg">Theme</span>
+            <ThemeToggle />
+          </Surface>
+        </>
       ) : null}
       <button type="button" onClick={signOut} className="mx-auto mt-2 inline-flex h-10 items-center rounded-sm px-4 text-[14px] font-medium text-fg-muted hover:bg-hover hover:text-fg">
         Not you?
