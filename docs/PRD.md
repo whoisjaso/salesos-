@@ -62,6 +62,23 @@ D01 to D16 remain open. The build proceeds under labeled working assumptions:
 - D08: 30-day maturity horizon as a pilot default, configurable.
 - D09: stage targets are tenant policy, default targets are marked "pilot hypothesis".
 
+## 10. Automatic stage capture
+
+| Transition | Automatic evidence | Rep confirms |
+|---|---|---|
+| Lead to assigned | Form or ad webhook, dedupe, routing record | Never |
+| Assigned to contacted | Dialer connect event plus call analysis says a real exchange happened | Only if analysis is unsure |
+| Contacted to booked | Calendar booking event | Never |
+| Booked to retained | Pre-call review or DQ reason code | On DQ |
+| Retained to show | Meeting participant join and overlap time | Phone and in-person only |
+| Show to qualified | Call analysis extracts fit facts against the offer rules | Rep records perceived fit separately |
+| Qualified to won | Signed contract event | Never |
+| Won to cash | Payment ledger event | Never |
+
+## 11. Design law
+
+One hero, one number, one action above the fold. Everything else behind a segmented control or a Sheet. Labels, not sentences. See `docs/DECISIONS.md`.
+
 ## 9. Definition of done for the product concept (SOS-00)
 
 The same opportunity can be traced from source to owner to conversation to appointment to outcome to cash without spreadsheet guesswork. A failed provider or uncertain AI conclusion is visible and recoverable. An ordinary rep completes the common workflow without editing a large record form.

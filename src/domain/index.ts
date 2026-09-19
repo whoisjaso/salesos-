@@ -10,3 +10,4 @@ export * from "./routing";
 export * from "./coaching";
 export * from "./leaderboard";
 export * from "./gamification";
+export * from "./game";
