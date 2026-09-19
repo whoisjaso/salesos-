@@ -1,0 +1,138 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - alert [ref=e2]
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - banner [ref=e5]:
+        - generic [ref=e6]: Obavia
+        - button "Switch to dark theme" [ref=e7]:
+          - img [ref=e8]
+      - main [ref=e10]:
+        - generic [ref=e11]:
+          - generic [ref=e12]:
+            - radiogroup "View" [ref=e13]:
+              - radio "Now" [checked] [ref=e14]:
+                - generic [ref=e16]: Now
+              - radio "Money" [ref=e17]:
+                - generic [ref=e18]: Money
+              - radio "Source" [ref=e19]:
+                - generic [ref=e20]: Source
+            - button "Cohort filter, all. Open." [ref=e21]:
+              - img [ref=e22]
+          - generic [ref=e25]:
+            - generic [ref=e26]:
+              - button "Net collected revenue per lead. Open definition." [ref=e27]:
+                - generic [ref=e28]:
+                  - generic [ref=e29]: Net collected per assigned opportunity
+                  - img [ref=e30]
+                - generic [ref=e32]: $315.00
+                - generic [ref=e33]:
+                  - generic [ref=e34]: Net collected cash
+                  - generic [ref=e35]: $28,350 over 90
+                  - generic [ref=e36]:
+                    - img [ref=e37]
+                    - generic [ref=e39]: Partial
+              - generic [ref=e40]:
+                - list "Funnel stages, tap for the full funnel" [ref=e41]:
+                  - listitem [ref=e42]:
+                    - button "Assigned opportunities, 90. Open funnel." [ref=e43]:
+                      - generic [ref=e46]: Leads
+                      - generic [ref=e47]: "90"
+                  - listitem [ref=e48]:
+                    - button "Two-way contact, 59, On target. Open funnel." [ref=e49]:
+                      - generic [ref=e52]: Contact
+                      - generic [ref=e53]: "59"
+                  - listitem [ref=e54]:
+                    - button "Retained bookings, 55, On target. Open funnel." [ref=e55]:
+                      - generic [ref=e58]: Booked
+                      - generic [ref=e59]: "55"
+                  - listitem [ref=e60]:
+                    - 'button "Attended, 35, 4 unknown, Data state: partial. Open funnel." [ref=e61]':
+                      - generic [ref=e64]: Shows
+                      - generic [ref=e65]:
+                        - text: "35"
+                        - generic [ref=e66]: +4?
+                  - listitem [ref=e67]:
+                    - 'button "Perceived qualified, 25, 4 unknown, Data state: partial. Open funnel." [ref=e68]':
+                      - generic [ref=e71]: Fit
+                      - generic [ref=e72]:
+                        - text: "25"
+                        - generic [ref=e73]: +4?
+                  - listitem [ref=e74]:
+                    - button "Won, 7, Needs attention. Open funnel." [ref=e75]:
+                      - generic [ref=e78]: Won
+                      - generic [ref=e79]: "7"
+                - generic [ref=e80]:
+                  - generic [ref=e81]: all assigned opportunities
+                  - generic [ref=e82]: Sum over sum
+            - region "Fix this first" [ref=e83]:
+              - generic [ref=e84]:
+                - heading "Fix this first" [level=2] [ref=e85]
+                - button "See all 4" [ref=e86]:
+                  - text: See all 4
+                  - img [ref=e87]
+              - article [ref=e89]:
+                - generic [ref=e90]:
+                  - heading "Net collected cash" [level=3] [ref=e91]
+                  - generic [ref=e92]:
+                    - img [ref=e93]
+                    - generic [ref=e95]: "Data state: partial"
+                - generic [ref=e96]:
+                  - generic [ref=e97]:
+                    - term [ref=e98]:
+                      - generic [ref=e99]: Observed
+                    - definition [ref=e100]: 1 payment(s) totaling $4,800 are not linked to an opportunity.
+                  - generic [ref=e101]:
+                    - term [ref=e102]:
+                      - generic [ref=e103]: Comparator
+                    - definition [ref=e104]: "Policy: zero unreconciled payments before ranking or commission."
+                - generic [ref=e105]:
+                  - generic [ref=e106]: Candidate explanations
+                  - list [ref=e107]:
+                    - listitem [ref=e108]:
+                      - generic [ref=e110]: Provider mapping gap
+                    - listitem [ref=e111]:
+                      - generic [ref=e113]: Payment made under a different contact name
+                    - listitem [ref=e114]:
+                      - generic [ref=e116]: Manual invoice outside the workflow
+                - generic [ref=e117]:
+                  - generic [ref=e118]: Investigate
+                  - paragraph [ref=e119]: Map each payment to its opportunity or record an audited exception; then restate affected cohorts.
+                - generic [ref=e120]:
+                  - generic [ref=e121]: Owner
+                  - generic [ref=e122]:
+                    - combobox "Assign owner function" [ref=e123]:
+                      - option "Rep"
+                      - option "Marketing"
+                      - option "Sales ops"
+                      - option "Product"
+                      - option "Finance" [selected]
+                      - option "Delivery"
+                    - img
+            - button "Data trust. Open details." [ref=e125]:
+              - generic [ref=e126]:
+                - img [ref=e127]
+                - generic [ref=e129]: 20m
+              - generic [ref=e130]:
+                - img [ref=e131]
+                - generic [ref=e133]: "4"
+              - generic [ref=e134]:
+                - img [ref=e135]
+                - generic [ref=e137]: "1"
+    - navigation "Primary, compact" [ref=e138]:
+      - generic [ref=e139]:
+        - link "Business" [ref=e140] [cursor=pointer]:
+          - /url: /
+          - img [ref=e141]
+          - text: Business
+        - link "Team" [ref=e143] [cursor=pointer]:
+          - /url: /team
+          - img [ref=e144]
+          - text: Team
+        - link "Me" [ref=e146] [cursor=pointer]:
+          - /url: /me
+          - img [ref=e147]
+          - text: Me
+```

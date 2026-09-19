@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CaretRight } from "@phosphor-icons/react";
+import { CaretRight, UploadSimple } from "@phosphor-icons/react";
 import { CATEGORY_LABEL, PROVIDERS, providerById, disconnect, type IntegrationProvider, type ProviderConnection } from "@/domain/integrations";
 import { useSession } from "@/lib/session";
 import { formatCount } from "@/lib/format";
@@ -70,6 +71,21 @@ function ConnectBody() {
           <span>{formatCount(leads)} leads, 7 days</span>
         </p>
       </header>
+
+      <section aria-label="Move in your data">
+        <Surface padding="none">
+          <Link href="/import" className="flex min-h-[64px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-hover motion-reduce:transition-none">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[12px] bg-accent-soft text-accent">
+              <UploadSimple size={22} weight="bold" aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-medium leading-tight text-fg">Import</span>
+              <span className="mt-0.5 block truncate text-[12.5px] text-fg-subtle">CSV, Excel, or your old CRM</span>
+            </span>
+            <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
+          </Link>
+        </Surface>
+      </section>
 
       {connected.length ? (
         <section aria-label="Connected" className="flex flex-col gap-2">

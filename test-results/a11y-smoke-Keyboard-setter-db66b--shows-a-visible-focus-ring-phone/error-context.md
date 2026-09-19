@@ -1,0 +1,113 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - alert [ref=e2]
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - banner [ref=e5]:
+        - generic [ref=e6]: Obavia
+        - button "Switch to dark theme" [ref=e7]:
+          - img [ref=e8]
+      - main [ref=e10]:
+        - generic [ref=e12]:
+          - generic [ref=e13]:
+            - generic [ref=e16]:
+              - generic [ref=e17]:
+                - generic [ref=e18]: LO
+                - generic [ref=e19]: Lucero Ostrowski
+              - radiogroup "DQ reason" [ref=e20]:
+                - generic [ref=e21]: Reason code
+                - radio "Spam, test, or duplicate spam_test_duplicate" [ref=e22]:
+                  - text: Spam, test, or duplicate
+                  - generic [ref=e23]: spam_test_duplicate
+                - radio "Wrong service wrong_service" [ref=e24]:
+                  - text: Wrong service
+                  - generic [ref=e25]: wrong_service
+                - radio "Ineligible product need ineligible_need" [ref=e26]:
+                  - text: Ineligible product need
+                  - generic [ref=e27]: ineligible_need
+                - radio "Contact request withdrawn request_withdrawn" [ref=e28]:
+                  - text: Contact request withdrawn
+                  - generic [ref=e29]: request_withdrawn
+                - radio "Unreachable after approved attempts unreachable_after_attempts" [ref=e30]:
+                  - text: Unreachable after approved attempts
+                  - generic [ref=e31]: unreachable_after_attempts
+                - radio "Timing, nurture timing_nurture" [ref=e32]:
+                  - text: Timing, nurture
+                  - generic [ref=e33]: timing_nurture
+            - generic [ref=e34]:
+              - button "Submit DQ" [disabled]:
+                - generic:
+                  - img
+                - text: Submit DQ
+          - generic "Next up" [ref=e35]:
+            - generic [ref=e36]: Next
+            - generic [ref=e37]:
+              - button "OL Olamide 25 minutes ago" [ref=e38]:
+                - generic [ref=e39]: OL
+                - generic [ref=e40]:
+                  - generic [ref=e41]: Olamide
+                  - generic [ref=e42]:
+                    - img [ref=e43]
+                    - text: 25 minutes ago
+              - button "DC Desmond attempt 2" [ref=e45]:
+                - generic [ref=e46]: DC
+                - generic [ref=e47]:
+                  - generic [ref=e48]: Desmond
+                  - generic [ref=e49]:
+                    - img [ref=e50]
+                    - text: attempt 2
+              - button "TK Thaddeus attempt 2" [ref=e52]:
+                - generic [ref=e53]: TK
+                - generic [ref=e54]:
+                  - generic [ref=e55]: Thaddeus
+                  - generic [ref=e56]:
+                    - img [ref=e57]
+                    - text: attempt 2
+          - generic [ref=e59]:
+            - generic [ref=e60]:
+              - button "Paused" [ref=e62]:
+                - img [ref=e63]
+                - text: Paused
+              - tooltip "1 refund or dispute under review" [ref=e65]
+            - generic [ref=e66]: Quality gate
+          - tablist [ref=e67]:
+            - tab "Now" [selected] [ref=e68]: Now
+            - tab "Queue 7" [ref=e70]
+          - generic [ref=e71]:
+            - generic [ref=e72]:
+              - generic [ref=e73]:
+                - generic [ref=e74]: "2"
+                - generic [ref=e75]: Dials
+              - generic [ref=e77]:
+                - generic [ref=e78]: "0"
+                - generic [ref=e79]: Two-way
+              - generic [ref=e81]:
+                - generic [ref=e82]: "0"
+                - generic [ref=e83]: Booked
+            - region "Stopped" [ref=e84]:
+              - generic [ref=e85]:
+                - img [ref=e86]
+                - text: Stopped
+              - list [ref=e88]:
+                - listitem [ref=e89]:
+                  - img [ref=e91]
+                  - generic [ref=e93]:
+                    - generic [ref=e94]: Cormac Ferreira
+                    - generic [ref=e95]: Opted out, all channels
+    - navigation "Primary, compact" [ref=e96]:
+      - generic [ref=e97]:
+        - link "Today" [ref=e98] [cursor=pointer]:
+          - /url: /
+          - img [ref=e99]
+          - text: Today
+        - link "Team" [ref=e101] [cursor=pointer]:
+          - /url: /team
+          - img [ref=e102]
+          - text: Team
+        - link "Me" [ref=e104] [cursor=pointer]:
+          - /url: /me
+          - img [ref=e105]
+          - text: Me
+```
