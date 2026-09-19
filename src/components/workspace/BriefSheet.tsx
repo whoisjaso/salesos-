@@ -5,7 +5,7 @@ import { ArrowRight, CaretRight, Question, ShuffleAngular } from "@phosphor-icon
 import type { BuyerModeBriefRow, CloserBrief, UpcomingAppointment } from "@/lib/workspace-closer";
 import { NO_SIGNAL_WORD } from "@/lib/workspace-closer";
 import { READ_CAPTION } from "@/lib/review";
-import { LENS_NAMES, VALUE_WORD, confidenceWordFor } from "@/domain/buyerMode";
+import { VALUE_WORD, confidenceWordFor } from "@/domain/buyerMode";
 import type { LensName } from "@/domain/types";
 import { lensByName, lenses } from "@/content/lenses";
 import { Button } from "@/components/ui/Button";
