@@ -117,7 +117,8 @@ describe("RuleBasedCallIntelligence", () => {
     expect(x.fitFacts.dms_compatible.value).toBe("yes");
     expect(x.fitFacts.budget_authority.value).toBe("unknown");
     expect(x.fitFacts.budget_authority.spans).toEqual([]);
-    expect(x.unknowns).toEqual([]);
+    // Missing evidence becomes an unknown and a question, never an inferred yes (SOS-13).
+    expect(x.unknowns).toEqual(["budget_authority"]);
   });
 
   it("voicemail from the keyword, or from a transcript with no customer turns", () => {
