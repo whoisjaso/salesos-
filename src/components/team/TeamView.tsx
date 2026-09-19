@@ -37,6 +37,8 @@ import { StageChampions } from "./StageChampions";
 import { MeTab } from "./MeTab";
 import { InfoSheet } from "./InfoSheet";
 import { SourceSheetList } from "./SourceSheetList";
+import { useTenantData } from "@/lib/onboarding";
+import { InviteButton, TeamRoster } from "@/components/onboarding/TeamRoster";
 
 type Segment = "board" | "pairs" | "stages" | "missions";
 type RoleFilter = "closer" | "setter";
@@ -72,6 +74,7 @@ export function TeamView() {
   }, [ready, session, router]);
   const isOwner = session?.role === "owner";
   const meId = !isOwner && session ? session.userId : null;
+  const tenantData = useTenantData();
   const [segment, setSegment] = useState<Segment>("board");
   const [role, setRole] = useState<RoleFilter>(session?.role === "setter" ? "setter" : "closer");
   const [descriptive, setDescriptive] = useState(false);
@@ -122,6 +125,9 @@ export function TeamView() {
   const fade = reduce ? {} : { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -4 }, transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] as const } };
   const segments = isOwner ? OWNER_SEGMENTS : REP_SEGMENTS;
 
+  // A business created through onboarding: roster only, no ranks, until its own sample matures.
+  if (session && !tenantData.demo) return <TeamRoster data={tenantData} viewer={{ userId: session.userId, role: session.role }} />;
+
   return (
     <>
       <div className="flex flex-col gap-4">
@@ -134,6 +140,7 @@ export function TeamView() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Segmented options={segments} value={segment} onChange={setSegment} label="View" />
           <div className="flex items-center gap-1">
+            {isOwner && session ? <InviteButton data={tenantData} by={session.userId} /> : null}
             {segment === "board" || segment === "stages" ? <Segmented options={ROLES} value={role} onChange={setRole} label="Role" /> : null}
             <button type="button" onClick={() => setInfoOpen(true)} aria-label="Rules" className="inline-grid h-8 w-8 shrink-0 place-items-center rounded-sm text-fg-muted hover:bg-hover hover:text-fg">
               <Info size={18} weight="regular" aria-hidden />

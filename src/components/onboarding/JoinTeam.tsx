@@ -100,6 +100,7 @@ export function JoinTeam({ initial = "", identity, onBack }: JoinTeamProps) {
           </>
         ) : (
           <form
+            noValidate
             className="flex flex-col gap-4"
             onSubmit={(e) => {
               e.preventDefault();

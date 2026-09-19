@@ -100,6 +100,7 @@ export function CreateBusiness({ identity, onCancel }: CreateBusinessProps) {
           <motion.div key={step} initial={reduce ? false : { opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={reduce ? undefined : { opacity: 0, x: -12 }} transition={{ duration: 0.22, ease }}>
             {step === "business" ? (
               <form
+                noValidate
                 className="flex flex-col gap-4"
                 onSubmit={(e) => {
                   e.preventDefault();

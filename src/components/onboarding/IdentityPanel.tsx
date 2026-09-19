@@ -107,6 +107,7 @@ export function IdentityPanel({ onIdentity, intro }: IdentityPanelProps) {
 
           {step === "google" ? (
             <form
+              noValidate
               className="flex flex-col gap-3"
               onSubmit={(e) => {
                 e.preventDefault();
@@ -139,6 +140,7 @@ export function IdentityPanel({ onIdentity, intro }: IdentityPanelProps) {
 
           {step === "email" ? (
             <form
+              noValidate
               className="flex flex-col gap-3"
               onSubmit={(e) => {
                 e.preventDefault();
@@ -186,6 +188,7 @@ export function IdentityPanel({ onIdentity, intro }: IdentityPanelProps) {
 
           {step === "phone" ? (
             <form
+              noValidate
               className="flex flex-col gap-3"
               onSubmit={(e) => {
                 e.preventDefault();
@@ -210,6 +213,7 @@ export function IdentityPanel({ onIdentity, intro }: IdentityPanelProps) {
 
           {step === "phone_code" ? (
             <form
+              noValidate
               className="flex flex-col gap-3"
               onSubmit={(e) => {
                 e.preventDefault();

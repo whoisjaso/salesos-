@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { isComplete } from "@/domain/profile";
 import type { Identity } from "@/domain/onboarding";
@@ -26,19 +26,19 @@ export function EnterBusiness({ identity, tenantId, to = "/" }: EnterBusinessPro
   const { state, ready } = useOnboarding();
   const profiles = useProfiles();
   const { setSession } = useSession();
-  const [seeded, setSeeded] = useState(false);
   const memberships = state.memberships;
   const identityId = identity.identityId;
   // Stable per membership set, so the effects below run once, not on every render.
   const session = useMemo(() => (ready ? sessionFor({ ...EMPTY_STATE, memberships }, { ...identity, identityId }, tenantId) : null), [ready, memberships, identity, identityId, tenantId]);
   const profile = session ? profiles.get(session.userId) : undefined;
   const complete = isComplete(profile);
+  // Seeded once the profile store holds this person; the save below notifies the store and re-renders.
+  const seeded = Boolean(session) && profiles.ready && profiles.list().some((p) => p.userId === session?.userId);
 
   useEffect(() => {
-    if (!session || !profiles.ready) return;
+    if (!session || !profiles.ready || seeded) return;
     seedProfile(profiles, session.userId, session.displayName);
-    setSeeded(true);
-  }, [session, profiles]);
+  }, [session, profiles, seeded]);
 
   useEffect(() => {
     if (!session || !seeded || !complete) return;

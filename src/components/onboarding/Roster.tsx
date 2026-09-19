@@ -25,8 +25,11 @@ export interface RosterListProps {
 export function RosterList({ tenantId, members, by, className }: RosterListProps) {
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const { list } = useProfiles();
-  const known = new Set(list().map((p) => p.userId));
-  const sorted = [...members].sort((a, b) => Number(b.membership.active) - Number(a.membership.active) || ROLE_ORDER[a.membership.role] - ROLE_ORDER[b.membership.role] || a.user.displayName.localeCompare(b.user.displayName));
+  const profiles = new Map(list().map((p) => [p.userId, p]));
+  const known = new Set(profiles.keys());
+  // The name they go by, once they set one; the account name until then.
+  const nameOf = (m: Member) => profiles.get(m.user.userId)?.displayName || m.user.displayName;
+  const sorted = [...members].sort((a, b) => Number(b.membership.active) - Number(a.membership.active) || ROLE_ORDER[a.membership.role] - ROLE_ORDER[b.membership.role] || nameOf(a).localeCompare(nameOf(b)));
 
   return (
     <Surface padding="none" as="section" aria-label="Roster" className={className}>
@@ -40,9 +43,9 @@ export function RosterList({ tenantId, members, by, className }: RosterListProps
           return (
             <li key={membership.userId} className="flex flex-col">
               <div className={cn("flex items-center gap-3 px-4 py-3", !membership.active && "opacity-70")}>
-                <Avatar userId={known.has(user.userId) ? user.userId : undefined} name={user.displayName} size={40} />
+                <Avatar userId={known.has(user.userId) ? user.userId : undefined} name={nameOf(m)} size={40} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-medium text-fg">{user.displayName}</span>
+                  <span className="block truncate text-[15px] font-medium text-fg">{nameOf(m)}</span>
                   <span className="block truncate text-[12px] text-fg-subtle">
                     {ROLE_WORD[membership.role as keyof typeof ROLE_WORD] ?? membership.role}
                     {membership.active ? "" : ", removed"}
@@ -57,7 +60,7 @@ export function RosterList({ tenantId, members, by, className }: RosterListProps
                     type="button"
                     onClick={() => setMenuFor(open ? null : membership.userId)}
                     aria-expanded={open}
-                    aria-label={`Options, ${user.displayName}`}
+                    aria-label={`Options, ${nameOf(m)}`}
                     className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-sm text-fg-muted hover:bg-hover hover:text-fg"
                   >
                     <DotsThree size={20} weight="bold" aria-hidden />

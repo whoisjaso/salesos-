@@ -36,7 +36,6 @@ function useTick(active: boolean, ms = 1000): string {
   const [now, setNow] = useState(clientNow);
   useEffect(() => {
     if (!active) return;
-    setNow(clientNow());
     const t = window.setInterval(() => setNow(clientNow()), ms);
     return () => window.clearInterval(t);
   }, [active, ms]);
@@ -74,9 +73,8 @@ export function InviteSheet({ open, onClose, tenantId, by, members, invites }: I
     return members.filter((m) => m.membership.active && m.membership.role === opposite);
   }, [members, role]);
 
-  useEffect(() => {
-    if (!partners.some((p) => p.membership.userId === partner)) setPartner("");
-  }, [partners, partner]);
+  // A partner picked for one role is not valid for the other; derive instead of resetting.
+  const partnerValue = partners.some((p) => p.membership.userId === partner) ? partner : "";
 
   const code = pendingTeamCode(state, tenantId, now);
   const link = created ? inviteLink(created, origin()) : "";
@@ -84,7 +82,7 @@ export function InviteSheet({ open, onClose, tenantId, by, members, invites }: I
   const send = () => {
     setError(null);
     try {
-      const invite = sendInvite({ tenantId, kind: tab as InviteKind, target, role, pairWithUserId: partner || undefined, createdBy: by });
+      const invite = sendInvite({ tenantId, kind: tab as InviteKind, target, role, pairWithUserId: partnerValue || undefined, createdBy: by });
       setCreated(invite);
       setTarget("");
     } catch (e) {
@@ -128,6 +126,7 @@ export function InviteSheet({ open, onClose, tenantId, by, members, invites }: I
 
         {tab !== "team_code" ? (
           <form
+            noValidate
             className="flex flex-col gap-4"
             onSubmit={(e) => {
               e.preventDefault();
@@ -157,7 +156,7 @@ export function InviteSheet({ open, onClose, tenantId, by, members, invites }: I
               <label htmlFor={ids.partner} className={LABEL}>
                 Partner, optional
               </label>
-              <select id={ids.partner} value={partner} onChange={(e) => setPartner(e.target.value)} className={cn(INPUT, "appearance-none")} disabled={partners.length === 0}>
+              <select id={ids.partner} value={partnerValue} onChange={(e) => setPartner(e.target.value)} className={cn(INPUT, "appearance-none")} disabled={partners.length === 0}>
                 <option value="">{partners.length === 0 ? `No active ${role === "setter" ? "closers" : "setters"} yet` : "None"}</option>
                 {partners.map((p) => (
                   <option key={p.membership.userId} value={p.membership.userId}>

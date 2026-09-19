@@ -42,6 +42,8 @@ import {
   type SetterQueueItem,
 } from "@/lib/workspace-setter";
 import { computeGame } from "@/lib/workspace-game";
+import { useTenantData } from "@/lib/onboarding";
+import { SetterEmptyToday } from "@/components/onboarding/SetterEmptyToday";
 import { reviewHref } from "@/lib/review";
 import { BookingSheet, type Booking } from "./BookingSheet";
 import { HandoffSheet } from "./HandoffSheet";
@@ -97,6 +99,7 @@ function pad(n: number): string {
 /** Today for a setter. Renders for the signed-in person. */
 export function SetterWorkspace({ userId }: { userId: string }) {
   const reduce = useReducedMotion();
+  const tenantData = useTenantData();
   const [completed, setCompleted] = useState<Set<string>>(() => new Set());
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   const [call, setCall] = useState<CallState>(IDLE);
@@ -238,6 +241,9 @@ export function SetterWorkspace({ userId }: { userId: string }) {
 
   const inFlow = call.phase !== "idle";
   const nextUp = queue.filter((q) => q.id !== active?.id).slice(0, 3);
+
+  // A business created through onboarding has its own rows (zero on day one), not the fixture's.
+  if (!tenantData.demo) return <SetterEmptyToday data={tenantData} userId={userId} />;
 
   return (
     <>

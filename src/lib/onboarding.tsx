@@ -35,7 +35,8 @@ import {
   type TenantSession,
 } from "@/domain/onboarding";
 import { contactIdFor, DEFAULT_OFFER_ID, DEFAULT_WORKFLOW_VERSION, normalizePhone, opportunityIdFor, submissionIdFor, trackingSnippet } from "@/domain/intake";
-import type { Contact, Dataset, DomainEvent, Id, ISODateTime, LeadSubmission, Opportunity, Pair, Role, Tenant, User } from "@/domain/types";
+import type { Contact, DomainEvent, Id, ISODateTime, LeadSubmission, Opportunity, Pair, Role, Tenant, User } from "@/domain/types";
+import type { Dataset } from "@/domain/metrics";
 import { SimulatedAuthAdapter } from "@/data/auth";
 import { obaviaDataset, TENANT_ID as DEMO_TENANT_ID } from "@/fixtures/obavia";
 import { SEED_CONNECTED_COUNT } from "@/components/connect/connect-model";
@@ -59,6 +60,8 @@ export const auth = new SimulatedAuthAdapter({ now: clientNow });
 export interface ManualLead {
   tenantId: Id;
   createdBy: Id;
+  /** E.164, for the dial button. Contacts carry consent, not numbers, in this dataset. */
+  phone: string;
   contact: Contact;
   submission: LeadSubmission;
   opportunity: Opportunity;
@@ -411,7 +414,7 @@ export function addLead(tenantId: Id, setterUserId: Id, input: AddLeadInput): Ma
     contractState: "none",
     paymentState: "none",
   };
-  const lead: ManualLead = { tenantId, createdBy: setterUserId, contact, submission, opportunity };
+  const lead: ManualLead = { tenantId, createdBy: setterUserId, phone, contact, submission, opportunity };
   update((s) => ({ ...s, leads: [...s.leads, lead] }));
   return lead;
 }

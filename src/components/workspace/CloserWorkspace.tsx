@@ -40,6 +40,8 @@ import {
   type UpcomingAppointment,
 } from "@/lib/workspace-closer";
 import { computeGame } from "@/lib/workspace-game";
+import { useTenantData } from "@/lib/onboarding";
+import { CloserEmptyToday } from "@/components/onboarding/CloserEmptyToday";
 import { BriefSheet } from "./BriefSheet";
 import { CloserQueue } from "./CloserQueue";
 import { FinancialLadder } from "./FinancialLadder";
@@ -73,6 +75,7 @@ function pad(n: number): string {
 /** Today for a closer. Renders for the signed-in person. */
 export function CloserWorkspace({ userId }: { userId: string }) {
   const reduce = useReducedMotion();
+  const tenantData = useTenantData();
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   const [completed, setCompleted] = useState<Set<string>>(() => new Set());
   const [phase, setPhase] = useState<Phase>("idle");
@@ -183,6 +186,9 @@ export function CloserWorkspace({ userId }: { userId: string }) {
     ...upcoming.filter((u) => u.instance.instanceId !== active?.instance.instanceId).map((u) => ({ id: u.instance.instanceId, name: u.contact.displayName, icon: u.appointment.modality === "video" ? VideoCamera : Phone, hint: u.unresolved ? "unresolved" : formatTimeIn(u.instance.scheduledStart, TENANT_TZ) })),
     ...queue.filter((q) => q.type !== "commitments" || !q.id.startsWith("apt_")).map((q) => ({ id: `q:${q.id}`, name: q.contact.displayName, icon: QUEUE_ICON[q.type], hint: q.when ? formatDayIn(q.when, TENANT_TZ) : q.type })),
   ].slice(0, 3);
+
+  // A business created through onboarding has its own rows (zero on day one), not the fixture's.
+  if (!tenantData.demo) return <CloserEmptyToday data={tenantData} />;
 
   return (
     <>

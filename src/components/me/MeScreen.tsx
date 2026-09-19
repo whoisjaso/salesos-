@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BookOpenText, CaretRight, PlugsConnected, SignOut } from "@phosphor-icons/react";
-import { SEED_CONNECTED_COUNT } from "@/components/connect/connect-model";
 import type { SopModule } from "@/content/sops";
 import type { CoachingRecommendation } from "@/domain/types";
 import { RulesCoachingEngine } from "@/domain/coaching";
@@ -12,6 +11,8 @@ import { cashRace, commissionPolicyFor, commissionSummary, recentCashDrops, tier
 import { computeMetric } from "@/domain/metrics";
 import { obaviaCommissionPolicies, obaviaDataset, obaviaDatasetWithPairs, obaviaPairs, NOW } from "@/fixtures/obavia";
 import { useSession } from "@/lib/session";
+import { useTenantData } from "@/lib/onboarding";
+import { CoachEmpty, MeEmpty } from "@/components/onboarding/MeEmpty";
 import { formatCount, formatMoneyMinor } from "@/lib/format";
 import { buildPairView, OWNER_LABEL, pairForRep, type PairView, type RecommendationUiState } from "@/lib/team-data";
 import { DEFAULT_LEADERBOARD_POLICY } from "@/domain/leaderboard";
@@ -49,6 +50,7 @@ export interface MeScreenProps {
 export function MeScreen({ data, sops, boundaries }: MeScreenProps) {
   const router = useRouter();
   const { session, ready, clear } = useSession();
+  const tenantData = useTenantData();
 
   useEffect(() => {
     if (ready && !session) router.replace("/");
@@ -64,7 +66,13 @@ export function MeScreen({ data, sops, boundaries }: MeScreenProps) {
   return (
     <div className="mx-auto flex w-full max-w-[720px] flex-col gap-3 sm:gap-4">
       <ProfileRow />
-      {session.role === "owner" ? <OwnerMe /> : <RepMe key={session.userId} userId={session.userId} role={session.role} data={data} />}
+      {session.role === "owner" ? (
+        tenantData.demo ? <OwnerMe /> : <CoachEmpty data={tenantData} />
+      ) : tenantData.demo ? (
+        <RepMe key={session.userId} userId={session.userId} role={session.role} data={data} />
+      ) : (
+        <MeEmpty key={session.userId} data={tenantData} userId={session.userId} role={session.role} />
+      )}
       <PlaybookRow sops={sops} boundaries={boundaries} />
       <EditProfileButton />
       {session.role === "owner" ? (
@@ -72,7 +80,7 @@ export function MeScreen({ data, sops, boundaries }: MeScreenProps) {
           <Link href="/connect" className="surface flex h-14 w-full items-center gap-3 px-4 text-left transition-colors hover:bg-hover motion-reduce:transition-none">
             <PlugsConnected size={18} weight="regular" aria-hidden className="shrink-0 text-accent" />
             <span className="flex-1 text-[15px] font-medium text-fg">Connect</span>
-            <span className="tabular text-[12px] text-fg-subtle">{SEED_CONNECTED_COUNT} connected</span>
+            <span className="tabular text-[12px] text-fg-subtle">{tenantData.counts.sources} connected</span>
             <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
           </Link>
           <Surface padding="none" className="flex h-14 items-center justify-between px-4">

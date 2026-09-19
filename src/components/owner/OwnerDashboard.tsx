@@ -14,6 +14,8 @@ import type { CoachingOwner } from "@/domain/types";
 import { TrustLine } from "./TrustLine";
 import { MoneyView } from "./MoneyView";
 import { SourceView } from "./SourceView";
+import { useTenantData } from "@/lib/onboarding";
+import { OwnerEmptyBusiness } from "@/components/onboarding/OwnerEmptyBusiness";
 
 type ViewId = "now" | "money" | "source";
 
@@ -34,9 +36,13 @@ export function OwnerDashboard({ view }: OwnerDashboardProps) {
   const [tab, setTab] = useState<ViewId>("now");
   const [cohortKey, setCohortKey] = useState<CohortKey>({ path: "all", tier: "all" });
   const [cohortOpen, setCohortOpen] = useState(false);
+  const tenantData = useTenantData();
   const cohort = view.cohorts[cohortKeyId(cohortKey)];
   const filtered = cohortKey.path !== "all" || cohortKey.tier !== "all";
   const summary = `${formatCount(cohort.assigned)} assigned`;
+
+  // A business created through onboarding has its own rows (zero on day one), not the fixture's.
+  if (!tenantData.demo) return <OwnerEmptyBusiness data={tenantData} />;
 
   const enter = reduce
     ? {}
