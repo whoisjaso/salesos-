@@ -8,5 +8,5 @@ export const metadata: Metadata = { title: "Today" };
 /** Today: one hero, one number, one action. Fixture data until live sync (SOS-20 design law). */
 export default function TodayPage() {
   const data = buildTodayData(obaviaDataset, NOW);
-  return <TodayScreen data={data} defaultUserId="usr_closer_marcus" />;
+  return <TodayScreen data={data} defaultUserId="usr_closer_renata" />;
 }

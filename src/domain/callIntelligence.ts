@@ -264,8 +264,8 @@ export class RuleBasedCallIntelligence implements CallIntelligence {
       fitFacts[key] = { value: negated ? "no" : "yes", spans: hits };
     }
 
-    if (conversational && unknowns.length > 0 && uncertainty === "low") uncertainty = "medium";
-
+    // Unknown fit facts and an unknown next step are honest unknowns, not doubt about the
+    // outcome. Uncertainty describes how sure the outcome assertion is.
     return {
       callId: input.callId,
       opportunityId: input.opportunityId,

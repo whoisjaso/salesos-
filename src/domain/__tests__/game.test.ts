@@ -29,12 +29,12 @@ describe("levelFor", () => {
 
 describe("deriveGameEvents on the synthetic dataset", () => {
   const events = deriveGameEvents(obaviaDataset);
-  const byId = <T extends { [k: string]: unknown }>(rows: T[], key: keyof T) => new Map(rows.map((r) => [r[key] as string, r]));
-  const calls = byId(obaviaDataset.calls, "callId");
-  const contracts = byId(obaviaDataset.contracts, "contractId");
-  const ledger = byId(obaviaDataset.ledger, "entryId");
-  const instances = byId(obaviaDataset.appointmentInstances, "instanceId");
-  const assessments = byId(obaviaDataset.assessments, "assessmentId");
+  const byId = <T>(rows: T[], key: (r: T) => string) => new Map(rows.map((r) => [key(r), r]));
+  const calls = byId(obaviaDataset.calls, (c) => c.callId);
+  const contracts = byId(obaviaDataset.contracts, (c) => c.contractId);
+  const ledger = byId(obaviaDataset.ledger, (e) => e.entryId);
+  const instances = byId(obaviaDataset.appointmentInstances, (i) => i.instanceId);
+  const assessments = byId(obaviaDataset.assessments, (a) => a.assessmentId);
 
   it("yields only evidence-backed kinds, sorted by time", () => {
     expect(events.length).toBeGreaterThan(0);

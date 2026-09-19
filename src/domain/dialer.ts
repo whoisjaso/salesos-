@@ -370,9 +370,10 @@ export class WarmLeadDialer {
 
     // Recheck state after the lease is ours: a customer reply or cancellation may have landed.
     const fresh = input.refreshTask ? input.refreshTask(task.taskId) : task;
+    const freshState = fresh?.state ?? "missing";
     if (!actionable(fresh) || fresh.opportunityId !== task.opportunityId) {
       leases.release(lease);
-      return { ok: false, code: "task_not_actionable", reason: `task ${task.taskId} is ${fresh?.state ?? "missing"} after recheck` };
+      return { ok: false, code: "task_not_actionable", reason: `task ${task.taskId} is ${freshState} after recheck` };
     }
     if (fresh.leaseHolderUserId && fresh.leaseHolderUserId !== user.userId && fresh.leaseExpiresAt && Date.parse(fresh.leaseExpiresAt) > Date.parse(now)) {
       leases.release(lease);
