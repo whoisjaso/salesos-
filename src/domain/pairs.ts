@@ -384,7 +384,11 @@ export function pairDiagnostic(dataset: Dataset, pairs: Pair[], pairId: Id, now:
     observed: `${side === "handoff" ? "Handoff" : side === "setter" ? "Setter side" : "Closer side"}, ${stageId.replace(/_/g, " ")}: ${worst.parts.numerator} of ${worst.parts.denominator} ${fromLabel.toLowerCase()} ${noun} (${pct(worst.parts.numerator, worst.parts.denominator)}).`,
     comparator: `Team pairs: ${worst.pool.numerator} of ${worst.pool.denominator} (${pct(worst.pool.numerator, worst.pool.denominator)}), pooled sum over sum across ${tenantPairs.length} pair(s).`,
     dataState,
-    alternativeExplanations: dataProblem ? ["Data state is not complete for this stage; fix the data before coaching", ...ALTERNATIVES[side]] : ALTERNATIVES[side],
+    // Never "fix the data": an alternative explanation names the specific gap and
+    // what would close it (docs/DECISIONS.md, "A held measurement never holds the person").
+    alternativeExplanations: dataProblem
+      ? [`Some records for this stage are missing their evidence, so the rate can still move. Sales ops completes them.`, ...ALTERNATIVES[side]]
+      : ALTERNATIVES[side],
     suggestedOwner: dataProblem ? "sales_ops" : side === "handoff" ? "both" : side,
     gap: worst.gap,
   };
