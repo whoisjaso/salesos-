@@ -252,7 +252,7 @@ export function route(input: RoutingInput): RoutingDecision {
 
   // Step 2: relationship continuity.
   let chosen: RoutingCandidate | undefined;
-  let reasonParts: string[] = [];
+  const reasonParts: string[] = [];
   const existing = input.existingRelationship
     ? eligible.find((c) => c.user.userId === input.existingRelationship?.userId)
     : undefined;
@@ -308,7 +308,8 @@ export function route(input: RoutingInput): RoutingDecision {
     const sorted = [...allocationPool].sort((a, b) => b.load.openIntakeSlots - a.load.openIntakeSlots || a.user.userId.localeCompare(b.user.userId));
     const top = sorted.filter((c) => c.load.openIntakeSlots === sorted[0].load.openIntakeSlots);
     chosen = top[seq % top.length];
-    reasonParts.push(developmentTurn ? "development pool allocation" : "capacity-weighted round robin");
+    if (developmentTurn) reasonParts.push("development pool allocation");
+    else if (allocationPool.length > 1) reasonParts.push(`capacity-weighted round robin among ${allocationPool.length}`);
   }
 
   const selectionProbability = (() => {

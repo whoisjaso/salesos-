@@ -149,7 +149,7 @@ export function buildLeaderboard(
         const prior = row.priorPeriodRevenuePerLead;
         let movementReason: string;
         if (prior === undefined) movementReason = "No prior period configured; showing current period only.";
-        else if (prior === null || current === null) movementReason = "Prior or current period has no computable revenue per lead (N/A).";
+        else if (prior === null || current === null) movementReason = "No computable revenue per lead in the prior period or the current period (N/A); nothing to compare yet.";
         else {
           const delta = current - prior;
           movementReason = `${delta >= 0 ? "+" : "-"}${formatMinorPerUnit(Math.abs(delta), row.revenuePerLead.currency)} per lead versus own prior period (${formatMinorPerUnit(prior, row.revenuePerLead.currency)} -> ${formatMinorPerUnit(current, row.revenuePerLead.currency)}).`;

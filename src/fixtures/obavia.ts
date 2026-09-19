@@ -196,7 +196,9 @@ export function generateObaviaDataset(seed = 20260918): Dataset {
     const dayOffset = Math.floor((i * 30) / OPP_COUNT); // 0..29 -> Aug 20 .. Sep 18
     const receivedMs = BASE + dayOffset * DAY + (8 + Math.floor(rng() * 10)) * HOUR + Math.floor(rng() * 60) * 60_000;
     const isLast = i === OPP_COUNT - 1; // opted-out contact
-    const entryPath: EntryPath = isLast ? "form_entry" : rng() < 0.6 ? "form_entry" : "booked_entry";
+    const isLineage = i === 7; // reschedule lineage lives on a booked-entry opportunity
+    const pathRoll = rng();
+    const entryPath: EntryPath = isLast ? "form_entry" : isLineage ? "booked_entry" : pathRoll < 0.6 ? "form_entry" : "booked_entry";
     const leadTier = weighted(rng, [[1, 0.3], [2, 0.45], [3, 0.25]]);
     const displayName = `${FIRST_NAMES[i % FIRST_NAMES.length]} ${LAST_NAMES[(i * 7 + 3) % LAST_NAMES.length]}`;
     const preferredLanguage = i % 11 === 5 ? "es" : "en";
@@ -495,7 +497,7 @@ export function generateObaviaDataset(seed = 20260918): Dataset {
     });
     const startMs = receivedMs + (1 + Math.floor(rng() * 5)) * DAY + 3 * HOUR;
     const retained = rng() < 0.85;
-    if (i === 7) {
+    if (isLineage) {
       // Reschedule lineage: first instance superseded before cutoff, second attended.
       const first = addInstance(`apt_${pad(n)}`, startMs, true, undefined, "superseded_before_cutoff");
       first.matured = true;
