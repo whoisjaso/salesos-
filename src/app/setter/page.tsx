@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { SetterWorkspace } from "@/components/workspace/SetterWorkspace";
+import { RoleGate } from "@/components/shell/RoleGate";
 
-export const metadata: Metadata = { title: "Setter" };
-
-export default function SetterPage() {
-  return <SetterWorkspace />;
+/** Legacy deep link. Home renders by role. */
+export default function Page() {
+  return <RoleGate to="/" />;
 }

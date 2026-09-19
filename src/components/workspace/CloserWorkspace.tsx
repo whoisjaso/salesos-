@@ -22,9 +22,7 @@ import {
   VideoCamera,
   X,
 } from "@phosphor-icons/react";
-import type { User } from "@/domain/types";
-import { obaviaDataset, NOW, CLOSERS } from "@/fixtures/obavia";
-import { PageHeader } from "@/components/shell/PageHeader";
+import { obaviaDataset, NOW } from "@/fixtures/obavia";
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
 import { cn } from "@/lib/cn";
@@ -43,17 +41,15 @@ import {
 } from "@/lib/workspace-closer";
 import { computeGame } from "@/lib/workspace-game";
 import { BriefSheet } from "./BriefSheet";
-import { CloserMe } from "./CloserMe";
 import { CloserQueue } from "./CloserQueue";
 import { FinancialLadder } from "./FinancialLadder";
 import { GameStrip } from "./GameStrip";
 import { NextUp, initials } from "./NextUp";
 import { Segmented } from "./Segmented";
-import { UserSwitcher } from "./UserSwitcher";
 
 type Phase = "idle" | "live" | "outcome" | "result";
 type Outcome = "verbal_yes" | "no_sale" | "conditional";
-type Segment = "now" | "queue" | "me";
+type Segment = "now" | "queue";
 type Recover = "none" | "dropped" | "reconnecting" | "unknown_participant";
 
 const STAGES = ["Restate problem", "Confirm participants", "Present approved scope", "Explain limitations", "Price and options", "Ask for the next voluntary decision"];
@@ -68,16 +64,15 @@ const QUEUE_ICON: Record<CloserQueueType, ComponentType<IconProps>> = {
 };
 
 const dataset = obaviaDataset;
-const closers: User[] = dataset.users.filter((u) => CLOSERS.includes(u.userId));
 const offer = dataset.offers?.[0];
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-export function CloserWorkspace() {
+/** Today for a closer. Renders for the signed-in person. */
+export function CloserWorkspace({ userId }: { userId: string }) {
   const reduce = useReducedMotion();
-  const [userId, setUserId] = useState(CLOSERS[0]);
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   const [completed, setCompleted] = useState<Set<string>>(() => new Set());
   const [phase, setPhase] = useState<Phase>("idle");
@@ -129,13 +124,6 @@ export function CloserWorkspace() {
     setOutcome(undefined);
     setNoSaleReason(undefined);
     setConditional("");
-  };
-
-  const selectUser = (id: string) => {
-    setUserId(id);
-    setActiveId(undefined);
-    setCreatedTasks([]);
-    resetFlow();
   };
 
   const selectItem = (id: string) => {
@@ -198,8 +186,6 @@ export function CloserWorkspace() {
 
   return (
     <>
-      <PageHeader title="Closer" actions={<UserSwitcher users={closers} value={userId} onChange={selectUser} />} />
-
       <div className="mx-auto flex max-w-[640px] flex-col gap-4">
         <Surface padding="lg" className="flex flex-col">
           <div className="min-h-[168px]">
@@ -432,7 +418,6 @@ export function CloserWorkspace() {
           items={[
             { id: "now", label: "Now" },
             { id: "queue", label: `Queue ${queue.length}` },
-            { id: "me", label: "Me" },
           ]}
           value={segment}
           onChange={setSegment}
@@ -466,8 +451,6 @@ export function CloserWorkspace() {
         ) : null}
 
         {segment === "queue" ? <CloserQueue items={queue} /> : null}
-
-        {segment === "me" ? <CloserMe dataset={dataset} userId={userId} now={NOW} /> : null}
       </div>
 
       {active && brief ? <BriefSheet key={active.instance.instanceId} open={briefOpen} onClose={() => setBriefOpen(false)} item={active} brief={brief} /> : null}

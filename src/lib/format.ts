@@ -118,3 +118,13 @@ export const REVENUE_BASIS_LABEL: Record<RevenueBasis, string> = {
 export function formatBasis(basis: RevenueBasis): string {
   return REVENUE_BASIS_LABEL[basis];
 }
+
+/** Up to two initials from a display name. */
+export function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]!.toUpperCase())
+    .join("");
+}

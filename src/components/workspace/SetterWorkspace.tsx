@@ -5,7 +5,6 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { IconProps } from "@phosphor-icons/react";
 import {
   ArrowCounterClockwise,
-  Bug,
   CalendarCheck,
   ChatText,
   Check,
@@ -19,8 +18,7 @@ import {
   UserSound,
 } from "@phosphor-icons/react";
 import type { CallInterpretedOutcome, Contact, ConsentState, User } from "@/domain/types";
-import { obaviaDataset, NOW, SETTERS, CLOSERS } from "@/fixtures/obavia";
-import { PageHeader } from "@/components/shell/PageHeader";
+import { obaviaDataset, NOW, CLOSERS } from "@/fixtures/obavia";
 import { Button } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
 import { Surface } from "@/components/ui/Surface";
@@ -49,11 +47,9 @@ import { HandoffSheet } from "./HandoffSheet";
 import { GameStrip } from "./GameStrip";
 import { NextUp, initials } from "./NextUp";
 import { Segmented } from "./Segmented";
-import { SetterMe } from "./SetterMe";
-import { UserSwitcher } from "./UserSwitcher";
 
 type Phase = "idle" | "reserving" | "ringing" | "connected" | "summary" | "logging" | "next" | "dq" | "done" | "provider_failed";
-type Segment = "now" | "queue" | "me";
+type Segment = "now" | "queue";
 
 interface CallState {
   phase: Phase;
@@ -79,7 +75,6 @@ const ACTION_ICON: Record<QueueAction, ComponentType<IconProps>> = {
 };
 
 const dataset = obaviaDataset;
-const setters: User[] = dataset.users.filter((u) => SETTERS.includes(u.userId));
 const closers: User[] = dataset.users.filter((u) => CLOSERS.includes(u.userId));
 
 function ConsentChip({ channel, state, icon: Icon }: { channel: string; state: ConsentState; icon: ComponentType<IconProps> }) {
@@ -102,14 +97,13 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-export function SetterWorkspace() {
+/** Today for a setter. Renders for the signed-in person. */
+export function SetterWorkspace({ userId }: { userId: string }) {
   const reduce = useReducedMotion();
-  const [userId, setUserId] = useState(SETTERS[0]);
   const [completed, setCompleted] = useState<Set<string>>(() => new Set());
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   const [call, setCall] = useState<CallState>(IDLE);
-  const [providerDown, setProviderDown] = useState(false);
-  const [debugOpen, setDebugOpen] = useState(false);
+  const providerDown = false;
   const [expanded, setExpanded] = useState(false);
   const [segment, setSegment] = useState<Segment>("now");
   const [bookingOpen, setBookingOpen] = useState(false);
@@ -146,14 +140,6 @@ export function SetterWorkspace() {
     const t = window.setInterval(() => setCall((c) => ({ ...c, seconds: c.seconds + 1 })), 1000);
     return () => window.clearInterval(t);
   }, [call.phase]);
-
-  const selectUser = (id: string) => {
-    clearTimers();
-    setUserId(id);
-    setActiveId(undefined);
-    setCall(IDLE);
-    setExpanded(false);
-  };
 
   const selectItem = (id: string) => {
     if (call.phase !== "idle" && call.phase !== "done") return; // never swap the hero under a live call
@@ -258,26 +244,6 @@ export function SetterWorkspace() {
 
   return (
     <>
-      <PageHeader
-        title="Setter"
-        actions={
-          <>
-            <UserSwitcher users={setters} value={userId} onChange={selectUser} />
-            <div className="relative">
-              <Button variant="ghost" size="sm" aria-label="Debug" aria-expanded={debugOpen} onClick={() => setDebugOpen((v) => !v)} className="w-8 px-0" leading={<Bug size={16} />} />
-              {debugOpen ? (
-                <Surface tier="overlay" padding="sm" className="absolute right-0 top-9 z-40 w-56 shadow-md">
-                  <label className="flex cursor-pointer items-center gap-2 text-[13px] text-fg">
-                    <input type="checkbox" checked={providerDown} onChange={(e) => setProviderDown(e.target.checked)} className="accent-[var(--accent)]" />
-                    Provider unavailable
-                  </label>
-                </Surface>
-              ) : null}
-            </div>
-          </>
-        }
-      />
-
       <div className="mx-auto flex max-w-[640px] flex-col gap-4">
         {/* ----- Hero ----- */}
         <Surface padding="lg" className="flex flex-col">
@@ -319,7 +285,6 @@ export function SetterWorkspace() {
           items={[
             { id: "now", label: "Now" },
             { id: "queue", label: `Queue ${queue.length}` },
-            { id: "me", label: "Me" },
           ]}
           value={segment}
           onChange={setSegment}
@@ -367,8 +332,6 @@ export function SetterWorkspace() {
             <StoppedList items={stopped} />
           </div>
         ) : null}
-
-        {segment === "me" ? <SetterMe dataset={dataset} userId={userId} now={NOW} /> : null}
       </div>
 
       {active ? (

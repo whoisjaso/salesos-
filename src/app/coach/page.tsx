@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { CoachView } from "@/components/coach/CoachView";
+import { RoleGate } from "@/components/shell/RoleGate";
 
-export const metadata: Metadata = { title: "Coach" };
-
-export default function CoachPage() {
-  return <CoachView />;
+/** Legacy deep link. Coaching and playbooks live in Me. */
+export default function Page() {
+  return <RoleGate to="/me" />;
 }

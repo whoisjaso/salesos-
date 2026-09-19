@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { CloserWorkspace } from "@/components/workspace/CloserWorkspace";
+import { RoleGate } from "@/components/shell/RoleGate";
 
-export const metadata: Metadata = { title: "Closer" };
-
-export default function CloserPage() {
-  return <CloserWorkspace />;
+/** Legacy deep link. Home renders by role. */
+export default function Page() {
+  return <RoleGate to="/" />;
 }

@@ -8,6 +8,7 @@ import { computeFunnel, computeMetric, ledgerFor, netCollected } from "@/domain/
 import { deriveGameEvents, levelFor, playerState, streakDays, XP_TABLE, type GameEvent, type LevelState } from "@/domain/game";
 import { seasonFor } from "@/domain/gamification";
 import type { FunnelConnector, FunnelStage, ISODateTime, Id, PerformanceState, RevenueBasis } from "@/domain/types";
+import { initialsOf } from "@/lib/format";
 
 export type PersonaRole = "setter" | "closer" | "owner";
 
@@ -45,7 +46,6 @@ export interface TodayModel {
   track: LevelState;
   streakDays: number;
   xpPaused: boolean;
-  action: { label: string; href: string };
   number: {
     /** Minor units per opportunity. null when nothing is assigned. */
     perOpportunityMinor: number | null;
@@ -76,15 +76,6 @@ const SEGMENT_LABELS: Record<string, string> = {
 };
 
 export const SEGMENT_ORDER = ["two_way_contact", "retained_booking", "attended", "perceived_qualified", "won", "net_collected_cash"];
-
-export function initialsOf(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]!.toUpperCase())
-    .join("");
-}
 
 function segmentsFrom(funnel: { stages: FunnelStage[]; connectors: FunnelConnector[] }): StageSegment[] {
   return SEGMENT_ORDER.map((stageId) => {
@@ -141,7 +132,6 @@ export function buildTodayData(dataset: Dataset, now: ISODateTime): TodayData {
       track: player.commercial,
       streakDays: player.streakDays,
       xpPaused: player.gate.paused,
-      action: { label: "Next action", href: role === "closer" ? "/closer" : "/setter" },
       number: {
         perOpportunityMinor: owned.length === 0 ? null : net.amountMinor / owned.length,
         currency,
@@ -169,7 +159,6 @@ export function buildTodayData(dataset: Dataset, now: ISODateTime): TodayData {
       track: levelFor(teamXp),
       streakDays: streakDays(allEvents.filter((e) => repIds.has(e.userId)), now),
       xpPaused: false,
-      action: { label: "Fix this first", href: "/owner" },
       number: {
         perOpportunityMinor: m16.value,
         currency: m16.currency ?? currency,

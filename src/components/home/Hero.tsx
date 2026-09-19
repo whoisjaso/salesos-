@@ -1,8 +1,7 @@
 "use client";
 
-import { ArrowRight, Flame } from "@phosphor-icons/react";
+import { Flame } from "@phosphor-icons/react";
 import { motion, useReducedMotion } from "motion/react";
-import { Button } from "@/components/ui/Button";
 import { ProgressRing } from "@/components/ui/ProgressRing";
 import { StateChip } from "@/components/ui/StateChip";
 import { Surface } from "@/components/ui/Surface";
@@ -11,7 +10,7 @@ import type { TodayModel } from "./today-model";
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
-/** One hero: level ring, name, XP to next, streak, one action. */
+/** One hero: level ring, name, XP to next, streak. */
 export function Hero({ model }: { model: TodayModel }) {
   const reduce = useReducedMotion();
   const { track } = model;
@@ -57,12 +56,6 @@ export function Hero({ model }: { model: TodayModel }) {
             </span>
             {model.xpPaused ? <StateChip state="attention" label="XP paused" /> : null}
           </div>
-        </div>
-
-        <div className="shrink-0 sm:self-center">
-          <Button href={model.action.href} size="md" trailing={<ArrowRight size={16} weight="bold" />} className="w-full sm:w-auto sm:px-5">
-            {model.action.label}
-          </Button>
         </div>
       </motion.div>
     </Surface>

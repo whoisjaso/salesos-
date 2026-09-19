@@ -1,34 +1,30 @@
 import type { ComponentType } from "react";
 import type { IconProps } from "@phosphor-icons/react";
-import {
-  BookOpenText,
-  ChalkboardTeacher,
-  ChartLineUp,
-  Handshake,
-  PhoneCall,
-  SquaresFour,
-  UsersThree,
-} from "@phosphor-icons/react/dist/ssr";
+import { ChartLineUp, House, UserCircle, UsersThree } from "@phosphor-icons/react/dist/ssr";
+import type { SessionRole } from "@/lib/session";
 
 export interface NavItem {
   href: string;
   label: string;
-  /** One short word for the phone tab bar. */
-  shortLabel: string;
   icon: ComponentType<IconProps>;
-  /** Shown in the phone tab bar. Max five. */
-  primary?: boolean;
 }
 
-export const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Command", shortLabel: "Home", icon: SquaresFour, primary: true },
-  { href: "/owner", label: "Owner", shortLabel: "Owner", icon: ChartLineUp, primary: true },
-  { href: "/setter", label: "Setter", shortLabel: "Setter", icon: PhoneCall, primary: true },
-  { href: "/closer", label: "Closer", shortLabel: "Closer", icon: Handshake, primary: true },
-  { href: "/team", label: "Team", shortLabel: "Team", icon: UsersThree },
-  { href: "/coach", label: "Coach", shortLabel: "Coach", icon: ChalkboardTeacher, primary: true },
-  { href: "/playbooks", label: "Playbooks", shortLabel: "Playbooks", icon: BookOpenText },
+const REP_NAV: NavItem[] = [
+  { href: "/", label: "Today", icon: House },
+  { href: "/team", label: "Team", icon: UsersThree },
+  { href: "/me", label: "Me", icon: UserCircle },
 ];
+
+const OWNER_NAV: NavItem[] = [
+  { href: "/", label: "Business", icon: ChartLineUp },
+  { href: "/team", label: "Team", icon: UsersThree },
+  { href: "/me", label: "Me", icon: UserCircle },
+];
+
+/** Exactly three tabs per role. */
+export function navFor(role: SessionRole): NavItem[] {
+  return role === "owner" ? OWNER_NAV : REP_NAV;
+}
 
 export function isActivePath(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";

@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Funnel as FunnelIcon } from "@phosphor-icons/react";
-import { PageHeader } from "@/components/shell/PageHeader";
 import { cn } from "@/lib/cn";
 import { formatCount } from "@/lib/format";
 import { cohortKeyId, type CohortKey, type OwnerView } from "@/lib/owner-model";
@@ -13,24 +12,22 @@ import { HeroTile } from "./HeroTile";
 import { FixFirst } from "./FixFirst";
 import { TrustLine } from "./TrustLine";
 import { MoneyView } from "./MoneyView";
-import { TeamView } from "./TeamView";
 import { SourceView } from "./SourceView";
 
-type ViewId = "now" | "money" | "team" | "source";
+type ViewId = "now" | "money" | "source";
 
 const VIEWS: { id: ViewId; label: string }[] = [
   { id: "now", label: "Now" },
   { id: "money", label: "Money" },
-  { id: "team", label: "Team" },
   { id: "source", label: "Source" },
 ];
 
 export interface OwnerDashboardProps {
   view: OwnerView;
-  subtitle: string;
 }
 
-export function OwnerDashboard({ view, subtitle }: OwnerDashboardProps) {
+/** Business: Now / Money / Source. Team has its own tab. */
+export function OwnerDashboard({ view }: OwnerDashboardProps) {
   const reduce = useReducedMotion();
   const [tab, setTab] = useState<ViewId>("now");
   const [cohortKey, setCohortKey] = useState<CohortKey>({ path: "all", tier: "all" });
@@ -50,27 +47,21 @@ export function OwnerDashboard({ view, subtitle }: OwnerDashboardProps) {
 
   return (
     <>
-      <PageHeader
-        title="Owner"
-        subtitle={subtitle}
-        actions={
-          <>
-            <Segmented label="View" options={VIEWS} value={tab} onChange={setTab} />
-            <button
-              type="button"
-              onClick={() => setCohortOpen(true)}
-              aria-label={`Cohort filter, ${filtered ? cohort.label : "all"}. Open.`}
-              className={cn(
-                "relative inline-grid h-8 w-8 shrink-0 place-items-center rounded-sm border bg-raised text-fg-muted transition-colors hover:bg-hover hover:text-fg motion-reduce:transition-none",
-                filtered ? "border-accent text-accent" : "border-line-strong",
-              )}
-            >
-              <FunnelIcon size={16} weight={filtered ? "fill" : "bold"} aria-hidden />
-              {filtered ? <span aria-hidden className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-accent ring-2 ring-base" /> : null}
-            </button>
-          </>
-        }
-      />
+      <div className="mb-4 flex items-center justify-between gap-3 sm:mb-5">
+        <Segmented label="View" options={VIEWS} value={tab} onChange={setTab} />
+        <button
+          type="button"
+          onClick={() => setCohortOpen(true)}
+          aria-label={`Cohort filter, ${filtered ? cohort.label : "all"}. Open.`}
+          className={cn(
+            "relative inline-grid h-8 w-8 shrink-0 place-items-center rounded-sm border bg-raised text-fg-muted transition-colors hover:bg-hover hover:text-fg motion-reduce:transition-none",
+            filtered ? "border-accent text-accent" : "border-line-strong",
+          )}
+        >
+          <FunnelIcon size={16} weight={filtered ? "fill" : "bold"} aria-hidden />
+          {filtered ? <span aria-hidden className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-accent ring-2 ring-base" /> : null}
+        </button>
+      </div>
 
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={`${tab}-${cohort.key}`} {...enter}>
@@ -84,7 +75,6 @@ export function OwnerDashboard({ view, subtitle }: OwnerDashboardProps) {
             </div>
           ) : null}
           {tab === "money" ? <MoneyView economics={cohort.economics} /> : null}
-          {tab === "team" ? <TeamView players={view.players} capacity={view.capacity} seasonLabel={view.seasonLabel} /> : null}
           {tab === "source" ? <SourceView /> : null}
         </motion.div>
       </AnimatePresence>

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/shell/AppShell";
+import { SessionProvider } from "@/lib/session";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
     default: "Sales OS",
     template: "%s, Sales OS",
   },
-  description: "Obavia sales operating system. Funnel, assignments, coaching, and fair comparisons.",
+  description: "Obavia sales operating system.",
 };
 
 export const viewport: Viewport = {
@@ -29,22 +30,19 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-/** Applies the stored theme before first paint so there is no flash. */
-const themeScript = `(function(){try{var t=localStorage.getItem("sos-theme");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t);}}catch(e){}})();`;
-
-/** Reading timestamp for the current fixture set. Replaced by live data later. */
-const AS_OF = "2026-08-31T09:00:00Z";
+/** Applies the stored theme and role before first paint so there is no flash. */
+const bootScript = `(function(){try{var t=localStorage.getItem("sos-theme");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t);}}catch(e){}try{var s=JSON.parse(localStorage.getItem("sos-session")||"null");if(s&&(s.role==="setter"||s.role==="closer"||s.role==="owner")){document.documentElement.setAttribute("data-role",s.role);}}catch(e){}})();`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: bootScript }} />
       </head>
       <body className="flex min-h-full flex-col">
-        <AppShell tenantName="Obavia" asOf={AS_OF}>
-          {children}
-        </AppShell>
+        <SessionProvider>
+          <AppShell tenantName="Obavia">{children}</AppShell>
+        </SessionProvider>
       </body>
     </html>
   );

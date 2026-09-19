@@ -8,6 +8,7 @@ import { StateChip } from "@/components/ui/StateChip";
 import { Surface } from "@/components/ui/Surface";
 import { formatCount, formatMoneyMinor, formatPercent } from "@/lib/format";
 import { NEXT_STATE_LABEL, OWNER_LABEL, STATE_LABEL, nextState, type RecommendationUiState } from "@/lib/team-data";
+import { useSession } from "@/lib/session";
 import { WhySheet } from "./WhySheet";
 import { PremiseSheet } from "./PremiseSheet";
 
@@ -36,6 +37,7 @@ function bigNumber(m: MetricPayload): { value: string; detail: string } {
 export function HeroCard({ rec, metric, state, onState }: HeroCardProps) {
   const [why, setWhy] = useState(false);
   const [premise, setPremise] = useState(false);
+  const { session } = useSession();
   const suppressed = Boolean(rec.suppressed);
   const num = bigNumber(metric);
   const next = nextState(state);
@@ -82,9 +84,11 @@ export function HeroCard({ rec, metric, state, onState }: HeroCardProps) {
 
         <div className="flex flex-wrap items-center gap-2 pt-1">
           {suppressed ? (
-            <Button size="md" href="/owner">
-              Open data queue
-            </Button>
+            session?.role === "owner" ? (
+              <Button size="md" href="/">
+                Open data queue
+              </Button>
+            ) : null
           ) : (
             <Button size="md" disabled={next === null} onClick={() => next && onState(next)}>
               {NEXT_STATE_LABEL[state]}
