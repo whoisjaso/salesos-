@@ -10,6 +10,8 @@ export interface Session {
   userId: string;
   role: SessionRole;
   displayName: string;
+  /** Sessions are per business. Absent for the demo tenant's fixture people. */
+  tenantId?: string;
 }
 
 export interface SessionPerson extends Session {
@@ -38,7 +40,17 @@ function readStored(): Session | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<Session>;
     const person = SESSION_PEOPLE.find((p) => p.userId === parsed.userId);
-    return person ? { userId: person.userId, role: person.role, displayName: person.displayName } : null;
+    if (person) return { userId: person.userId, role: person.role, displayName: person.displayName };
+    // Someone who joined through onboarding: a per-business session (src/lib/onboarding.tsx).
+    if (
+      typeof parsed.tenantId === "string" &&
+      typeof parsed.userId === "string" &&
+      typeof parsed.displayName === "string" &&
+      (parsed.role === "setter" || parsed.role === "closer" || parsed.role === "owner")
+    ) {
+      return { userId: parsed.userId, role: parsed.role, displayName: parsed.displayName, tenantId: parsed.tenantId };
+    }
+    return null;
   } catch {
     return null;
   }

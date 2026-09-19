@@ -87,8 +87,10 @@ function buildStore(): MemoryProfileStore {
       const parsed = JSON.parse(raw) as Stored;
       for (const p of parsed.profiles ?? []) {
         const seed = seeds.find((x) => x.userId === p.userId);
-        if (!seed) continue;
-        const merged: Profile = { ...seed, ...p, tenantId: seed.tenantId, userId: seed.userId } as Profile;
+        // People who joined through onboarding have no seed; their stored profile stands on its own.
+        const base = seed ?? (typeof p.userId === "string" && typeof p.displayName === "string" ? emptyProfile(TENANT_ID, p.userId, p.displayName, SEED_NOW) : null);
+        if (!base) continue;
+        const merged: Profile = { ...base, ...p, tenantId: base.tenantId, userId: base.userId } as Profile;
         if (validateProfile(merged, []).length === 0) s.save(merged);
       }
       if (parsed.business) s.saveBusiness({ ...seedBusiness(), ...parsed.business, tenantId: TENANT_ID } as BusinessProfile);

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { useSession } from "@/lib/session";
+import { useTenantName } from "@/lib/onboarding";
 import { MetricDefinitionProvider } from "@/components/metrics/MetricDefinitionProvider";
 import { ProfilesProvider } from "@/lib/profiles";
 import { RepCardProvider } from "@/components/profile/RepCardSheet";
@@ -30,9 +31,10 @@ export function AppShell({ tenantName = "Obavia", children }: AppShellProps) {
   );
 }
 
-function ShellFrame({ tenantName, children }: { tenantName: string; children: ReactNode }) {
+function ShellFrame({ tenantName: fallbackName, children }: { tenantName: string; children: ReactNode }) {
   const pathname = usePathname();
   const { session } = useSession();
+  const tenantName = useTenantName(fallbackName);
   const items = session ? navFor(session.role) : [];
 
   if (!session) {

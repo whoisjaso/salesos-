@@ -97,11 +97,15 @@ export class SimulatedAuthAdapter implements AuthAdapter {
     return this.sign("google", email, nameFromEmail(email));
   }
 
-  async sendEmailLink(email: string, _redirectUri: string): Promise<{ sent: true }> {
+  async sendEmailLink(email: string, redirectUri: string): Promise<{ sent: true }> {
     const normalized = email.trim().toLowerCase();
     this.pendingLinks.set(SimulatedAuthAdapter.emailLinkToken(normalized), normalized);
+    this.lastRedirectUri = redirectUri;
     return { sent: true };
   }
+
+  /** Where the last simulated link would have sent the browser. Informational only. */
+  lastRedirectUri: string | null = null;
 
   async completeEmailLink(token: string): Promise<Identity> {
     const email = this.pendingLinks.get(token);
