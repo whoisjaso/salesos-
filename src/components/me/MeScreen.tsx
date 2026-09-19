@@ -11,6 +11,7 @@ import { cashRace, commissionPolicyFor, commissionSummary, recentCashDrops, tier
 import { qualityGate, type GameTrack } from "@/domain/game";
 import { computeMetric } from "@/domain/metrics";
 import { obaviaCommissionPolicies, obaviaDataset, obaviaDatasetWithPairs, obaviaPairs, NOW } from "@/fixtures/obavia";
+import { transcripts } from "@/fixtures/calls";
 import { useSession } from "@/lib/session";
 import { useTenantData } from "@/lib/onboarding";
 import { CoachEmpty, MeEmpty } from "@/components/onboarding/MeEmpty";
@@ -174,8 +175,12 @@ function RepMe({
    * Coaching that stands comes first and is what the row shows. A hold never
    * replaces coaching with "fix the data": when nothing stands, the row names
    * the coaching that waits, what it waits on, and who owns that.
+   *
+   * The transcripts go in because every coached metric rests on attendance or
+   * revenue attribution: without the rep's own conversations, one unlinked
+   * payment leaves this row with nothing but a wait.
    */
-  const plan = useMemo(() => coachingPlan(dataset, userId, NOW), [userId]);
+  const plan = useMemo(() => coachingPlan(dataset, userId, NOW, { transcripts }), [userId]);
   const rec = useMemo(
     () => plan.standing.find((r) => r.ownerRole === "rep") ?? plan.standing[0] ?? plan.held.find((r) => r.ownerRole === "rep") ?? plan.held[0],
     [plan],
@@ -192,7 +197,15 @@ function RepMe({
     if (titles.length === 0) return recHold.waitingOn;
     return titles.length === 1 ? titles[0] : `${titles[0]} and ${formatCount(titles.length - 1)} more`;
   }, [recHold, plan]);
-  const metric = useMemo(() => (rec ? computeMetric(rec.metricIds[0], dataset, { userId }, NOW) : null), [rec, userId]);
+  /**
+   * A recommendation read from a conversation carries no metric, and that is not a
+   * gap: its evidence is the words it cites. Only a measured recommendation gets a
+   * figure here.
+   */
+  const metric = useMemo(() => {
+    const metricId = rec?.metricIds[0];
+    return metricId ? computeMetric(metricId, dataset, { userId }, NOW) : null;
+  }, [rec, userId]);
   const season = useMemo(() => ({ from: data.season.from, to: data.season.to }), [data.season.from, data.season.to]);
   // Role-correct money: the rep's own tier bracket, race, and commission rate all follow the session role.
   const tierPolicy = useMemo(() => tierPolicyFor(role), [role]);
@@ -295,14 +308,13 @@ function RepMe({
           ariaLabel={`Race. ${own.statement}`}
           onClick={() => setSheet("race")}
         />
-        {rec && metric ? (
+        {rec ? (
           <DetailsRow
             label="Coach"
             leading={<GraduationCap size={18} weight="regular" aria-hidden className="text-fg-subtle" />}
-            // Held coaching names what it waits on and who owns it, across the row rather
-            // than squeezed into the value. Standing coaching shows its own title.
-            hint={recHold ? `Waiting on ${recHold.ownerLabel}: ${holdSummary}` : undefined}
-            value={recHold ? undefined : <span className="block max-w-[180px] truncate">{rec.title}</span>}
+            // Held coaching names what it waits on and who owns it. Standing coaching names
+            // the thing itself, across the row so the words are never clipped.
+            hint={recHold ? `Waiting on ${recHold.ownerLabel}: ${holdSummary}` : rec.title}
             ariaLabel={recHold ? `Coach. ${rec.title}. ${recHold.statement}` : `Coach. ${rec.title}`}
             onClick={() => setSheet("coach")}
           />
@@ -364,14 +376,20 @@ function RepMe({
         </div>
       </Sheet>
 
-      {rec && metric ? (
-        <Sheet open={sheet === "coach"} onClose={close} title="Coach" description={OWNER_LABEL[rec.ownerRole]}>
+      {rec ? (
+        <Sheet
+          open={sheet === "coach"}
+          onClose={close}
+          title="Coach"
+          // Where this came from, in the rep's terms: the conversation it was read from,
+          // the wait it is under, or the function that owns it.
+          description={recHold ? `Waiting on ${recHold.ownerLabel}` : rec.metricIds.length === 0 ? "Read from your own conversation" : OWNER_LABEL[rec.ownerRole]}
+        >
           <div className="flex flex-col gap-3">
             {recHold ? (
               <Surface padding="md" state="attention" className="flex flex-col gap-2">
                 <StateChip state="attention" label={`Waiting on ${recHold.ownerLabel}`} className="self-start" />
                 <p className="text-[13px] text-fg">{recHold.statement}</p>
-                <p className="text-[13px] text-fg-muted">This recommendation waits until {recHold.waitingOn}.</p>
                 <p className="text-[13px] text-fg-muted">
                   Nothing is asked of you here. Coaching that reads from your conversations is not held by this and appears as soon as it has evidence.
                 </p>

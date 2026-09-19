@@ -8,6 +8,7 @@ import type { Dataset } from "@/domain/metrics";
 import { playerState, type PlayerState } from "@/domain/game";
 import { seasonFor, missionFromRecommendation } from "@/domain/gamification";
 import { RulesCoachingEngine } from "@/domain/coaching";
+import { transcripts } from "@/fixtures/calls";
 
 export interface GameView {
   player: PlayerState;
@@ -39,23 +40,39 @@ const MISSION_LABELS: Partial<Record<MetricId, string>> = {
   M16: "Confirm 5 payment steps",
 };
 
+/** A mission read from a conversation proves itself in the next one, not in a metric. */
+const TRANSCRIPT_PROOF_RULE = "Named back on the next call";
+
 export function computeGame(dataset: Dataset, userId: Id, now: ISODateTime): GameView {
   const season = seasonFor(now, dataset.tenant.timezone);
   const player = playerState(dataset, userId, now, { from: season.startsAt, to: season.endsAt }, []);
-  const rec = RulesCoachingEngine.recommend(dataset, userId, now)[0];
+  // The rep's own conversations go in with the dataset: without them every coached
+  // metric rests on attendance or revenue attribution, and one open data exception
+  // leaves the rep with a waiting row instead of a mission.
+  const rec = RulesCoachingEngine.recommend(dataset, userId, now, { transcripts })[0];
   let mission: Mission | undefined;
   let proofRule: string | undefined;
   if (rec) {
-    const base = missionFromRecommendation(rec, 5);
-    const metricId = rec.metricIds[0];
+    const metricId: MetricId | undefined = rec.metricIds[0];
+    // A measured gap is practiced over the next five eligible cases. An angle read from
+    // one conversation is answered in that conversation's next call, so its target is one.
+    const base = missionFromRecommendation(rec, metricId ? 5 : 1);
     // A mission is never titled by a data problem. When the metric behind it is
     // waiting, the mission keeps its own name and says what the count waits on
-    // (docs/DECISIONS.md, "A held measurement never holds the person").
-    const title = MISSION_LABELS[metricId] ?? base.title;
+    // (docs/DECISIONS.md, "A held measurement never holds the person"). A
+    // recommendation read from a transcript has no metric, so it is titled by the
+    // thing it asks for, in the recommendation's own words.
+    const title = (metricId && MISSION_LABELS[metricId]) ?? (metricId ? base.title : capitalize(rec.action));
     mission = { ...base, title };
     proofRule = rec.held
       ? `Counts once ${rec.held.waitingOn}. ${rec.held.ownerLabel ?? "The owner"} owns that.`
-      : PROOF_RULES[metricId];
+      : metricId
+        ? PROOF_RULES[metricId]
+        : TRANSCRIPT_PROOF_RULE;
   }
   return { player, mission, proofRule, seasonLabel: season.label };
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

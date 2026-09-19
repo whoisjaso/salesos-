@@ -15,7 +15,11 @@ import { PremiseSheet } from "./PremiseSheet";
 
 export interface HeroCardProps {
   rec: CoachingRecommendation;
-  metric: MetricPayload;
+  /**
+   * The measured figure behind the recommendation. Null when there is none to show:
+   * coaching read from a conversation cites the words it came from, not a rate.
+   */
+  metric?: MetricPayload | null;
   state: RecommendationUiState;
   onState: (next: RecommendationUiState) => void;
 }
@@ -46,8 +50,10 @@ export function HeroCard({ rec, metric, state, onState }: HeroCardProps) {
   const [why, setWhy] = useState(false);
   const [premise, setPremise] = useState(false);
   const { session } = useSession();
+  const hold = rec.held;
   const suppressed = Boolean(rec.suppressed);
-  const num = bigNumber(metric, rec);
+  // Coaching read from a conversation carries no rate; its evidence is the moment it quotes.
+  const num = metric ? bigNumber(metric, rec) : null;
   const next = nextState(state);
   const surfaceState = suppressed ? "data_state" : state === "evaluated" ? "strong" : undefined;
 
@@ -56,30 +62,42 @@ export function HeroCard({ rec, metric, state, onState }: HeroCardProps) {
       <Surface state={surfaceState} padding="md" className="flex flex-col gap-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-[12px] font-medium text-fg-subtle">
-              {suppressed ? (
-                <span className="inline-flex items-center gap-1 text-fg-muted">
-                  <Wrench size={13} weight="bold" aria-hidden />
-                  Fix the data first
+            {/* A hold speaks in its own words: what this recommendation waits on and who
+                owns that. Nothing here ever tells a rep to go fix data
+                (docs/DECISIONS.md, "A held measurement never holds the person"). */}
+            <div className="flex flex-wrap items-center gap-x-1.5 text-[12px] font-medium text-fg-subtle">
+              {hold ? (
+                <span className="inline-flex items-start gap-1 leading-snug text-fg-muted">
+                  <Wrench size={13} weight="bold" aria-hidden className="mt-[2px] shrink-0" />
+                  <span>
+                    Waiting until {hold.waitingOn}. {hold.ownerLabel} owns that.
+                  </span>
                 </span>
               ) : (
-                <span>Practice</span>
+                <>
+                  <span>Practice</span>
+                  {/* The rep reading their own card already knows whose it is. */}
+                  {rec.ownerRole === "rep" ? null : <span>{OWNER_LABEL[rec.ownerRole]}</span>}
+                </>
               )}
-              <span>{OWNER_LABEL[rec.ownerRole]}</span>
             </div>
             <h2 className="mt-1 text-[15px] font-semibold leading-snug text-fg">
-              {suppressed ? rec.title.replace(/^Resolve data before coaching: /, "") : rec.title}
+              {rec.title.replace(/^(Resolve data before coaching: |Waiting on data: )/, "")}
             </h2>
           </div>
           <StateChip state={suppressed ? rec.dataState : state === "proposed" ? "neutral_no_benchmark" : "strong"} label={STATE_LABEL[state]} className="shrink-0" />
         </div>
 
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="tabular text-[24px] font-semibold leading-none tracking-tight text-fg">{num.value}</span>
-          {num.unit ? <span className="text-[13px] font-medium text-fg-muted">{num.unit}</span> : null}
-          <span className="tabular text-[12px] text-fg-subtle">{num.detail}</span>
-          {metric.dataState !== "complete" ? <StateChip state={metric.dataState} className="self-center" /> : null}
-        </div>
+        {num && metric ? (
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className="tabular text-[24px] font-semibold leading-none tracking-tight text-fg">{num.value}</span>
+            {num.unit ? <span className="text-[13px] font-medium text-fg-muted">{num.unit}</span> : null}
+            <span className="tabular text-[12px] text-fg-subtle">{num.detail}</span>
+            {metric.dataState !== "complete" ? <StateChip state={metric.dataState} className="self-center" /> : null}
+          </div>
+        ) : (
+          <p className="text-[13px] leading-snug text-fg-muted">{rec.observed}</p>
+        )}
 
         <p className="text-[14px] leading-snug text-fg">{capitalize(rec.action)}</p>
 

@@ -10,10 +10,18 @@
  * stands while an unlinked payment holds the revenue recommendation. A held
  * recommendation says what it waits on and who owns it, and it never displaces
  * the coaching that is valid.
+ *
+ * Every coached metric rests on attendance or revenue attribution, so a tenant
+ * with one unresolved meeting or one unlinked payment could end up with nothing
+ * but waiting rows. That is the promise broken, not kept. So coaching also reads
+ * the rep's own recent conversations: the strongest angle from a call transcript
+ * depends on no held surface, cites the words it came from, and is ranked as a
+ * real primary task (docs/DECISIONS.md, "Today connects to improvement").
  */
 import type {
   AffectedSurface,
   BottleneckCard,
+  Call,
   CoachingHold,
   CoachingOwner,
   CoachingRecommendation,
@@ -27,6 +35,15 @@ import type {
   Money,
   PerformanceVerdict,
 } from "./types";
+import {
+  FORBIDDEN_AI_EVENT_TYPE,
+  FORBIDDEN_EXTRACTION_FIELD,
+  RuleBasedCallIntelligence,
+  validateExtraction,
+  type CallExtraction,
+  type Feedback,
+  type TranscriptSpan,
+} from "./callIntelligence";
 import {
   SURFACE_ACTION,
   type IncidentScope,
@@ -482,7 +499,7 @@ export function benchmarkOpportunityScenario(input: {
 // ---------- Recommendation engine ----------
 
 export interface CoachingEngine {
-  recommend(dataset: Dataset, userId: Id | null, now: ISODateTime): CoachingRecommendation[];
+  recommend(dataset: DatasetWithTranscripts, userId: Id | null, now: ISODateTime, options?: CoachingOptions): CoachingRecommendation[];
 }
 
 function reviewDate(now: ISODateTime, days = 14): ISODateTime {
@@ -632,6 +649,206 @@ function ownerRoleFor(hold: Hold): CoachingOwner {
   return hold.hold.owner === "owner" ? "sales_ops" : hold.hold.owner;
 }
 
+// ---------- Transcript-sourced coaching ----------
+
+/**
+ * How recent a call has to be before its transcript may still coach. Past this
+ * the conversation has had its turn: an old moment stops asking for a change,
+ * and the rep is never coached forever on one call.
+ */
+export const TRANSCRIPT_COACHING_WINDOW_DAYS = 30;
+
+/** The transcripts the dataset carries for its own calls, keyed by callId. */
+export type TranscriptsByCall = Readonly<Record<Id, TranscriptSpan[]>> | ReadonlyMap<Id, TranscriptSpan[]>;
+
+/**
+ * A dataset that carries its calls' transcripts. Optional: a dataset without
+ * them coaches from metrics alone, exactly as before.
+ */
+export interface DatasetWithTranscripts extends Dataset {
+  transcripts?: TranscriptsByCall;
+}
+
+export interface CoachingOptions {
+  /** Supply the scope when the caller already has it, so incidents are scoped once. */
+  scope?: IncidentScope;
+  /**
+   * The rep's own conversations. Read from the transcript alone, so this candidate
+   * rests on no surface an incident can hold. Falls back to `dataset.transcripts`.
+   */
+  transcripts?: TranscriptsByCall;
+}
+
+/** What the angle is about, strongest first. Derived from the extraction, never from its wording. */
+type AngleKind = "open_objection" | "stakeholder" | "missing_fact";
+
+/**
+ * An open objection asks the most of the rep, a decision the customer does not make
+ * alone asks the next, a fact nobody established asks the least. Added to the base
+ * so an angle outranks every benchmark gap that only needs attention (26 to 29) and
+ * still sits under a material measured issue (36 and up).
+ */
+const ANGLE_WEIGHT: Record<AngleKind, number> = { open_objection: 9, stakeholder: 6, missing_fact: 3 };
+const TRANSCRIPT_BASE_PRIORITY = 25;
+/** A fresher call breaks a tie between two angles of the same kind; it never overturns a stronger one. */
+const TRANSCRIPT_RECENCY_WEIGHT = 2;
+
+const ANGLE_ALTERNATIVES: Record<AngleKind, string> = {
+  open_objection: "The objection may already have been settled after the call, somewhere this transcript does not reach.",
+  stakeholder: "The other decision-maker may already be in the room for the next step.",
+  missing_fact: "The fact may be recorded elsewhere on the opportunity and simply never said out loud on this call.",
+};
+
+function transcriptLookup(source: TranscriptsByCall | undefined): (callId: Id) => TranscriptSpan[] | undefined {
+  if (!source) return () => undefined;
+  if (source instanceof Map) return (callId) => source.get(callId);
+  const record = source as Readonly<Record<Id, TranscriptSpan[]>>;
+  return (callId) => record[callId];
+}
+
+/** The fit criteria this tenant actually assesses. Read from the dataset; never invented. */
+function offerFitKeysFrom(dataset: Dataset): string[] {
+  const keys = new Set<string>();
+  for (const a of dataset.assessments) for (const key of Object.keys(a.objective)) keys.add(key);
+  return [...keys].sort();
+}
+
+function spanClock(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
+function daysBetween(from: ISODateTime, to: ISODateTime): number {
+  return (Date.parse(to) - Date.parse(from)) / 86_400_000;
+}
+
+function agoWords(days: number): string {
+  if (days < 1) return "earlier today";
+  if (days < 2) return "yesterday";
+  return `${Math.round(days)} days ago`;
+}
+
+function sharesSpan(a: TranscriptSpan[], b: TranscriptSpan[]): boolean {
+  return a.some((x) => b.some((y) => y.startMs === x.startMs && y.endMs === x.endMs));
+}
+
+/** What the angle is, read off the extraction's own cited fields rather than its English. */
+function angleKind(extraction: CallExtraction, f: Feedback): AngleKind {
+  if (extraction.objections.some((o) => !o.resolved && sharesSpan(o.spans, f.spans))) return "open_objection";
+  if (extraction.stakeholders.some((s) => sharesSpan(s.spans, f.spans))) return "stakeholder";
+  return "missing_fact";
+}
+
+/**
+ * A transcript angle may never establish money, consent, or attendance. The extraction
+ * validators reject an uncited or reserved field before anything is read here, and this
+ * second pass drops any angle whose own words would state one of the facts
+ * FORBIDDEN_AI_EVENT_TYPE keeps the AI path away from. The candidate emits no events and
+ * carries no ledger, consent, or attendance claim of any kind.
+ */
+function establishesReservedFact(f: Feedback): boolean {
+  return FORBIDDEN_EXTRACTION_FIELD.test(`${f.angle} ${f.hint}`) || FORBIDDEN_AI_EVENT_TYPE.test(f.angle.trim());
+}
+
+interface TranscriptAngle {
+  call: Call;
+  at: ISODateTime;
+  feedback: Feedback;
+  kind: AngleKind;
+  score: number;
+}
+
+/** This person's ended calls inside the window that carry a transcript, newest first. */
+function coachableCalls(dataset: Dataset, userId: Id, now: ISODateTime, lookup: (callId: Id) => TranscriptSpan[] | undefined) {
+  return dataset.calls
+    .filter((c) => c.userId === userId && c.tenantId === dataset.tenant.tenantId && c.transportState === "ended")
+    .map((call) => ({ call, at: call.endedAt ?? call.startedAt, transcript: lookup(call.callId) }))
+    .filter((row): row is { call: Call; at: ISODateTime; transcript: TranscriptSpan[] } =>
+      row.at !== undefined && row.at <= now && row.transcript !== undefined && row.transcript.length > 0,
+    )
+    .filter((row) => daysBetween(row.at, now) <= TRANSCRIPT_COACHING_WINDOW_DAYS)
+    .sort((a, b) => (a.at === b.at ? a.call.callId.localeCompare(b.call.callId) : a.at < b.at ? 1 : -1));
+}
+
+/** The strongest angle across this person's recent conversations, or nothing when none carries one. */
+function strongestAngle(dataset: Dataset, userId: Id, now: ISODateTime, transcripts: TranscriptsByCall | undefined): TranscriptAngle | undefined {
+  const lookup = transcriptLookup(transcripts);
+  const offerFitKeys = offerFitKeysFrom(dataset);
+  const intelligence = new RuleBasedCallIntelligence();
+  let best: TranscriptAngle | undefined;
+  for (const row of coachableCalls(dataset, userId, now, lookup)) {
+    const extraction = intelligence.extract({
+      callId: row.call.callId,
+      opportunityId: row.call.opportunityId,
+      transcript: row.transcript,
+      offerFitKeys,
+      tenantId: row.call.tenantId,
+    });
+    // Route through the validators, never around them: an extraction that asserts
+    // anything without a cited span coaches nobody.
+    if (!validateExtraction(extraction).ok) continue;
+    const feedback = extraction.feedback.find((f) => f.spans.length > 0 && !establishesReservedFact(f));
+    if (!feedback) continue;
+    const kind = angleKind(extraction, feedback);
+    const age = Math.max(0, daysBetween(row.at, now));
+    const score = ANGLE_WEIGHT[kind] + TRANSCRIPT_RECENCY_WEIGHT * (1 - age / TRANSCRIPT_COACHING_WINDOW_DAYS);
+    if (!best || score > best.score) best = { call: row.call, at: row.at, feedback, kind, score };
+  }
+  return best;
+}
+
+/**
+ * Coaching read from the rep's own recent conversation. It cites the moment it came
+ * from, depends on no surface (`dependsOn: []`), and carries no metric: it is a
+ * reading of what was said, not a measured gap. Nothing can hold it, which is the
+ * whole point (docs/DECISIONS.md, "A held measurement never holds the person").
+ */
+function transcriptRecommendation(dataset: Dataset, userId: Id, now: ISODateTime, transcripts: TranscriptsByCall | undefined): Candidate | undefined {
+  const angle = strongestAngle(dataset, userId, now, transcripts);
+  if (!angle) return undefined;
+  const { call, feedback } = angle;
+  const opportunity = dataset.opportunities.find((o) => o.opportunityId === call.opportunityId);
+  const contact = opportunity ? dataset.contacts.find((c) => c.contactId === opportunity.primaryContactId) : undefined;
+  const who = contact?.displayName ?? contact?.organizationName ?? "this customer";
+  const span = feedback.spans[0];
+  const ago = agoWords(Math.max(0, daysBetween(angle.at, now)));
+  const rec: CoachingRecommendation = {
+    tenantId: dataset.tenant.tenantId,
+    recommendationId: `rec_call_${call.callId}_${userId}_${Date.parse(now)}`,
+    ownerRole: "rep",
+    ownerUserId: userId,
+    title: feedback.angle,
+    issue: `${feedback.angle}, on your call with ${who} ${ago}.`,
+    metricIds: [],
+    // One conversation, this person's. Stated in the same shape as every other cohort.
+    cohortId: `cohort:user=${userId}:call=${call.callId}`,
+    dataState: "complete",
+    observed: `On your call with ${who}, ${ago}, at ${spanClock(span.startMs)}: "${span.text.trim()}"`,
+    comparator: "Read from this conversation only. No benchmark, and no comparison with anyone else.",
+    alternativeExplanations: [
+      ANGLE_ALTERNATIVES[angle.kind],
+      "One conversation is one sample. A single call is a moment to work on, never a pattern.",
+      "The reading is a rule over the words that were said, not a judgment of how the call went.",
+    ],
+    evidenceRefs: [call.callId, ...feedback.spans.map((s) => `${call.callId}:span:${s.startMs}-${s.endMs}`)],
+    action: feedback.hint,
+    playbookVersion: "playbook-1.0-pilot",
+    effort: "One conversation, before the next step",
+    guardrails: [
+      "Read from the transcript alone. It establishes no money, consent, or attendance fact.",
+      "The transcript is evidence of what was said, not of what was meant.",
+      "Correlation is not cause; a rep can challenge this premise.",
+    ],
+    reviewAt: reviewDate(now, 7),
+    state: "proposed",
+    provenance: { engine: "rules", version: COACHING_ENGINE_VERSION },
+    // Nothing an incident can touch: the transcript is the whole evidence.
+    dependsOn: [],
+    provisional: false,
+  };
+  return { rec, priority: TRANSCRIPT_BASE_PRIORITY + angle.score };
+}
+
 const COACHED_METRICS: MetricId[] = ["M04", "M06", "M08", "M09", "M11", "M12", "M16"];
 
 /** How many held recommendations ride along with the valid ones, so the wait is visible but never dominant. */
@@ -650,8 +867,9 @@ export interface CoachingPlan {
  * Every candidate recommendation, split into what stands and what waits. Nothing
  * is dropped for being held, and nothing valid is displaced by a hold.
  */
-export function coachingPlan(dataset: Dataset, userId: Id | null, now: ISODateTime, scope?: IncidentScope): CoachingPlan {
-  const resolved = scope ?? scopeIncidents(dataset, { userId: userId ?? undefined, now });
+export function coachingPlan(dataset: DatasetWithTranscripts, userId: Id | null, now: ISODateTime, options: CoachingOptions = {}): CoachingPlan {
+  const resolved = options.scope ?? scopeIncidents(dataset, { userId: userId ?? undefined, now });
+  const transcripts = options.transcripts ?? dataset.transcripts;
   const filter: CohortFilter = userId ? { userId } : {};
   const candidates: Candidate[] = [];
   for (const id of COACHED_METRICS) {
@@ -666,6 +884,10 @@ export function coachingPlan(dataset: Dataset, userId: Id | null, now: ISODateTi
   if (userId) {
     const gap = perceptionGapRecommendation(dataset, filter, userId, now, resolved);
     if (gap) candidates.push(gap);
+    // The rep's own conversation, which no incident reaches. Emitted only when a recent
+    // call carries an angle, so it never stands in for evidence that is not there.
+    const transcript = transcriptRecommendation(dataset, userId, now, transcripts);
+    if (transcript) candidates.push(transcript);
   }
   const ordered = [...candidates].sort((a, b) => b.priority - a.priority);
   return {
@@ -676,8 +898,8 @@ export function coachingPlan(dataset: Dataset, userId: Id | null, now: ISODateTi
 }
 
 export const RulesCoachingEngine: CoachingEngine = {
-  recommend(dataset, userId, now) {
-    const plan = coachingPlan(dataset, userId, now);
+  recommend(dataset, userId, now, options) {
+    const plan = coachingPlan(dataset, userId, now, options);
     // One primary task plus a small number of optional lessons, then at most one
     // held item so the rep can see what is waiting and who owns it.
     return [...plan.standing.slice(0, STANDING_RECOMMENDATION_SLOTS), ...plan.held.slice(0, HELD_RECOMMENDATION_SLOTS)];

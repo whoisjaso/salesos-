@@ -8,6 +8,7 @@ import {
 } from "@/components/home/today-focus";
 import { coachingPlan } from "@/domain/coaching";
 import { obaviaDataset, NOW } from "@/fixtures/obavia";
+import { transcripts } from "@/fixtures/calls";
 
 const SETTER = "usr_setter_tomasz";
 const CLOSER = "usr_closer_marcus";
@@ -23,14 +24,26 @@ describe("Today secondary area: which state the data supports", () => {
     const focus = buildTodayFocus(obaviaDataset, SETTER, "setter", NOW, { reviewedCallId: "call_016" });
     expect(focus.kind).toBe("improvement");
     if (focus.kind !== "improvement") return;
-    // Every metric recommendation for this rep is waiting on payment data, so the improvement
-    // is read from the conversation, which waits on nothing.
-    const plan = coachingPlan(obaviaDataset, SETTER, NOW);
-    expect(plan.standing).toHaveLength(0);
+    // Every metric recommendation for this rep is waiting on payment data. What stands is
+    // read from the conversation, which waits on nothing, and it is this very call.
+    const plan = coachingPlan(obaviaDataset, SETTER, NOW, { transcripts });
+    expect(plan.standing[0].held).toBeUndefined();
+    expect(plan.standing[0].evidenceRefs).toContain("call_016");
     expect(plan.held.length).toBeGreaterThan(0);
     expect(focus.improvement.sentence).not.toMatch(/waiting on data/i);
     expect(focus.improvement.sentence).toBe("Name it back in their words before the next step, and ask what would settle it.");
     expect(focus.improvement.label).toBe("An objection was left open");
+  });
+
+  it("never puts another conversation's words over this call's transcript link", () => {
+    // What stands for this setter was read from call_016; the reviewed call is a different
+    // one, so the improvement is that call's own angle and the link stays honest.
+    const standing = coachingPlan(obaviaDataset, SETTER, NOW, { transcripts }).standing[0];
+    expect(standing.evidenceRefs).toContain("call_016");
+    const improvement = nextImprovement(obaviaDataset, SETTER, "setter", NOW, "call_089c");
+    expect(improvement?.label).toBe("A partner decides with them");
+    expect(improvement?.sentence).toBe("Ask what that person needs to see, and offer to bring it to the next call.");
+    expect(improvement?.href).toMatch(/^\/review\?call=call_089c&span=\d+$/);
   });
 
   it("links to the exact transcript moment, not to a search", () => {

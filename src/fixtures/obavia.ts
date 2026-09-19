@@ -35,6 +35,8 @@ import type {
 import type { Dataset, TrackedWorkHours } from "@/domain/metrics";
 import { fromDollars, scale } from "@/domain/money";
 import { type DatasetWithPairs, pairFor } from "@/domain/pairs";
+import type { DatasetWithTranscripts } from "@/domain/coaching";
+import { transcripts } from "@/fixtures/calls";
 
 export const NOW: ISODateTime = "2026-09-18T20:00:00Z";
 export const TENANT_ID = "obavia";
@@ -782,7 +784,14 @@ export function generateObaviaDataset(seed = 20260918): DatasetWithPairs {
 
 /** The dataset with pairs and role policies attached (same object as obaviaDataset). */
 export const obaviaDatasetWithPairs: DatasetWithPairs = generateObaviaDataset();
-export const obaviaDataset: Dataset = obaviaDatasetWithPairs;
+/**
+ * The pilot dataset carries its own conversations. Coaching reads a rep's
+ * transcripts to produce a recommendation that no data incident can hold, so a
+ * caller that forgets to pass them would silently leave the rep with nothing but
+ * waiting rows (docs/DECISIONS.md, "A held measurement never holds the person").
+ * Attaching them here makes the honest behaviour the default everywhere.
+ */
+export const obaviaDataset: Dataset & DatasetWithTranscripts = { ...obaviaDatasetWithPairs, transcripts };
 
 /** The opted-out contact and its opportunity, for routing and consent tests. */
 export const OPTED_OUT_CONTACT_ID = "ct_090";

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PERCEPTION_GAP_STAGE_ID,
   RulesCoachingEngine,
+  TRANSCRIPT_COACHING_WINDOW_DAYS,
   benchmarkOpportunityScenario,
   buildBottleneckCards,
   coachingPlan,
@@ -12,10 +13,12 @@ import {
   perceptionGap,
   sensitivityTable,
 } from "@/domain/coaching";
+import { FORBIDDEN_AI_EVENT_TYPE, FORBIDDEN_EXTRACTION_FIELD } from "@/domain/callIntelligence";
 import { fromDollars } from "@/domain/money";
 import { computeM08, type Dataset } from "@/domain/metrics";
 import type { LedgerEntry } from "@/domain/types";
 import { obaviaDataset, NOW } from "@/fixtures/obavia";
+import { transcripts } from "@/fixtures/calls";
 import { NOW as H_NOW, emptyDataset, mkAssignment, mkInstance, mkOpp, mkUser } from "./helpers";
 
 describe("SOS-16 earnings scenario", () => {
@@ -379,5 +382,102 @@ describe("a held measurement never holds the coaching", () => {
     const card = buildBottleneckCards(withUnlinked, H_NOW).find((c) => c.cardId === "bn_unlinked_payments");
     expect(card?.verdict.explanation).toMatch(/Calling, appointments, XP, levels, and coaching read from conversations are unaffected/);
     expect(card?.responsibleFunction).toBe("finance");
+  });
+});
+
+/**
+ * Every coached metric rests on attendance or revenue attribution, so a single
+ * unlinked payment or one unevidenced meeting used to leave a rep with nothing but
+ * waiting rows. Coaching read from the rep's own conversation depends on no surface
+ * (docs/DECISIONS.md, "A held measurement never holds the person").
+ */
+describe("coaching read from the rep's own conversation", () => {
+  const SETTER = "usr_setter_tomasz";
+  const CLOSER = "usr_closer_marcus";
+
+  const unlinked = obaviaDataset.ledger.filter((e) => e.opportunityId === undefined);
+
+  it("a rep with an unlinked payment still gets a standing recommendation, and nothing holds it", () => {
+    expect(unlinked.length).toBeGreaterThan(0);
+    // Without the conversations there is nothing that stands, because every coached
+    // metric rests on attendance or revenue attribution. That was the gap, and it is
+    // why the pilot dataset carries its transcripts: the honest behaviour is the default.
+    const withoutConversations = { ...obaviaDataset, transcripts: undefined };
+    expect(coachingPlan(withoutConversations, SETTER, NOW).standing).toHaveLength(0);
+
+    const plan = coachingPlan(obaviaDataset, SETTER, NOW);
+    expect(plan.standing).not.toHaveLength(0);
+    const rec = plan.standing[0];
+    expect(rec).toBeDefined();
+    expect(rec.held).toBeUndefined();
+    expect(rec.suppressed).toBeUndefined();
+    expect(rec.provisional).toBe(false);
+    // Nothing to depend on: the transcript is the whole evidence.
+    expect(rec.dependsOn).toEqual([]);
+    expect(rec.metricIds).toEqual([]);
+    expect(rec.ownerRole).toBe("rep");
+    expect(rec.ownerUserId).toBe(SETTER);
+    expect(rec.dataState).toBe("complete");
+    // And the revenue recommendation still waits, with its owner, exactly as before.
+    const revenue = plan.held.find((r) => r.metricIds.includes("M16"));
+    expect(revenue?.held?.waitingOn).toMatch(/unlinked payment/);
+  });
+
+  it("is a real primary task: the rep's first recommendation, ahead of every waiting row", () => {
+    const recs = RulesCoachingEngine.recommend(obaviaDataset, SETTER, NOW, { transcripts });
+    expect(recs[0].held).toBeUndefined();
+    expect(recs[0].title).toBe("An objection was left open");
+    expect(recs[0].action).toBe("Name it back in their words before the next step, and ask what would settle it.");
+    // The same for a closer, whose conversation named someone else in the decision.
+    const closer = RulesCoachingEngine.recommend(obaviaDataset, CLOSER, NOW, { transcripts })[0];
+    expect(closer.held).toBeUndefined();
+    expect(closer.title).toBe("A partner decides with them");
+  });
+
+  it("cites the call and the exact spans, and quotes what was said", () => {
+    const rec = coachingPlan(obaviaDataset, SETTER, NOW, { transcripts }).standing[0];
+    expect(rec.evidenceRefs[0]).toBe("call_016");
+    expect(rec.evidenceRefs.slice(1).every((r) => /^call_016:span:\d+-\d+$/.test(r))).toBe(true);
+    expect(rec.evidenceRefs.length).toBeGreaterThan(1);
+    expect(rec.cohortId).toBe(`cohort:user=${SETTER}:call=call_016`);
+    const span = transcripts.call_016.find((s) => `call_016:span:${s.startMs}-${s.endMs}` === rec.evidenceRefs[1]);
+    expect(span).toBeDefined();
+    expect(rec.observed).toContain(span!.text.trim());
+    expect(rec.observed).toContain("Desmond Castellano");
+    expect(rec.observed).toContain("0:52");
+  });
+
+  it("establishes no money, consent, or attendance fact", () => {
+    for (const userId of [SETTER, CLOSER]) {
+      const rec = coachingPlan(obaviaDataset, userId, NOW, { transcripts }).standing[0];
+      expect(FORBIDDEN_AI_EVENT_TYPE.test(rec.title)).toBe(false);
+      expect(FORBIDDEN_EXTRACTION_FIELD.test(`${rec.title} ${rec.action}`)).toBe(false);
+      // Nothing outside the transcript is cited, so nothing outside it can be claimed.
+      expect(rec.evidenceRefs.every((r) => r.startsWith("call_"))).toBe(true);
+      expect(rec.scenario).toBeUndefined();
+    }
+  });
+
+  it("stops coaching once the call is older than the window", () => {
+    const later = new Date(Date.parse(NOW) + (TRANSCRIPT_COACHING_WINDOW_DAYS + 5) * 86_400_000).toISOString().replace(".000Z", "Z");
+    const plan = coachingPlan(obaviaDataset, SETTER, later, { transcripts });
+    const fromCall = [...plan.standing, ...plan.held].filter((r) => r.metricIds.length === 0);
+    expect(fromCall).toHaveLength(0);
+    // Inside the window it is still there.
+    expect(coachingPlan(obaviaDataset, SETTER, NOW, { transcripts }).standing[0].metricIds).toEqual([]);
+  });
+
+  it("reads the transcripts the dataset carries, and is deterministic and pure", () => {
+    const carried = coachingPlan({ ...obaviaDataset, transcripts }, SETTER, NOW);
+    const passed = coachingPlan(obaviaDataset, SETTER, NOW, { transcripts });
+    expect(JSON.stringify(carried)).toBe(JSON.stringify(passed));
+    expect(JSON.stringify(passed)).toBe(JSON.stringify(coachingPlan(obaviaDataset, SETTER, NOW, { transcripts })));
+  });
+
+  it("says nothing when the rep has no recent conversation to read", () => {
+    // This closer's calls carry no transcript in the fixture, so nothing is invented.
+    const plan = coachingPlan(obaviaDataset, "usr_closer_renata", NOW, { transcripts });
+    expect(plan.standing.filter((r) => r.metricIds.length === 0)).toHaveLength(0);
+    expect(plan.held.length).toBeGreaterThan(0);
   });
 });

@@ -293,7 +293,8 @@ test.describe("Team and Me: Renata", () => {
     await expect(raceRow).not.toContainText("#");
 
     // The Coach row never says "fix the data": it names the coaching and, when that coaching
-    // waits, what it waits on and who owns it.
+    // waits, what it waits on and who owns it. This closer has no reviewed conversation in
+    // the fixture, so hers is the waiting case.
     const coachRow = rows.getByRole("button", { name: /^Coach/ });
     const coachText = (await coachRow.innerText()).replace(/\s+/g, " ").trim();
     expect(coachText).not.toMatch(/fix the data/i);
@@ -307,6 +308,9 @@ test.describe("Team and Me: Renata", () => {
     await expect(coach.getByText("Proposed", { exact: true })).toHaveCount(1);
     await expect(coach.getByRole("button", { name: "Why", exact: true })).toHaveCount(1);
     await expect(coach.getByRole("button", { name: "Premise is wrong" })).toHaveCount(1);
+    // The card says what this coaching waits on and who owns it, in the hold's own words.
+    await expect(coach.getByText(/^Waiting until .+\. (Finance|Sales ops|Marketing|The rep|The owner) owns that\.$/)).toBeVisible();
+    expect(await coach.innerText()).not.toMatch(/fix the data/i);
     await closeSheet(page);
 
     // Partner and Race rows open their own sheets.
@@ -329,5 +333,54 @@ test.describe("Team and Me: Renata", () => {
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("heading", { level: 1, name: "Who are you" })).toBeVisible();
     expect(await page.evaluate(() => window.localStorage.getItem("sos-session"))).toBeNull();
+  });
+});
+
+/**
+ * Every coached metric rests on attendance or revenue attribution, so a rep with one
+ * unlinked payment in the tenant used to see only a waiting row. Coaching read from the
+ * rep's own conversation waits on nothing (docs/DECISIONS.md, "A held measurement never
+ * holds the person").
+ */
+test.describe("Me: coaching read from the rep's own conversation", () => {
+  test.use({ person: PEOPLE.setter });
+
+  test("the Coach row names a thing to do today, and the card quotes the moment", async ({ page }) => {
+    await page.goto("/me");
+    const rows = page.getByRole("region", { name: "Details" });
+    const coachRow = rows.getByRole("button", { name: /^Coach/ });
+    await expect(coachRow).toContainText("An objection was left open");
+    const rowText = (await coachRow.innerText()).replace(/\s+/g, " ").trim();
+    expect(rowText).not.toMatch(/fix the data/i);
+    expect(rowText).not.toMatch(/Waiting on/);
+
+    await coachRow.click();
+    const coach = page.getByRole("dialog");
+    await expect(coach.getByRole("heading", { level: 2, name: "An objection was left open" })).toBeVisible();
+    // The practice line is a thing to do on the next call.
+    await expect(coach.getByText("Name it back in their words before the next step, and ask what would settle it.")).toBeVisible();
+    // The words it was read from are quoted, with who said them and where in the call.
+    await expect(coach.getByText(/^On your call with Desmond Castellano, .+ at 0:52: ".+"$/)).toBeVisible();
+    const sheetText = (await coach.innerText()).replace(/\s+/g, " ").trim();
+    expect(sheetText).not.toMatch(/fix the data/i);
+    expect(sheetText).not.toMatch(/Waiting until/);
+    await expect(coach.getByRole("button", { name: "Why", exact: true })).toBeVisible();
+    await closeSheet(page);
+  });
+});
+
+test.describe("Me: a closer's conversation coaches too", () => {
+  test.use({ person: PEOPLE.closerMarcus });
+
+  test("an unlinked payment holds the revenue row and nothing else", async ({ page }) => {
+    await page.goto("/me");
+    const rows = page.getByRole("region", { name: "Details" });
+    const coachRow = rows.getByRole("button", { name: /^Coach/ });
+    await expect(coachRow).toContainText("A partner decides with them");
+    expect((await coachRow.innerText()).replace(/\s+/g, " ")).not.toMatch(/fix the data|Waiting on/i);
+    await coachRow.click();
+    const coach = page.getByRole("dialog");
+    await expect(coach.getByText("Ask what that person needs to see, and offer to bring it to the next call.")).toBeVisible();
+    await closeSheet(page);
   });
 });

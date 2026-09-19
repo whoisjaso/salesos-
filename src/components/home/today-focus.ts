@@ -26,6 +26,7 @@ import type { AppointmentInstance, ISODateTime, Id } from "@/domain/types";
 import { coachingPlan, type CoachingPlan } from "@/domain/coaching";
 import { buildReview, canReview, coachingMoment, formatClock, reviewableCalls } from "@/lib/review";
 import { sameDayIn, TENANT_TZ } from "@/lib/workspace-setter";
+import { transcripts } from "@/fixtures/calls";
 
 export type RepRole = "setter" | "closer";
 
@@ -180,12 +181,13 @@ export function latestReviewedCallId(userId: Id, role: RepRole, now: ISODateTime
 /**
  * The single next improvement, with the moment in the transcript that shows it.
  *
- * A standing recommendation comes first when there is one: it is the person's
- * largest measured gap and it waits on nothing. When every metric recommendation
- * is held, the reviewed call's own transcript feedback is the improvement, which
- * is the rule in "A held measurement never holds the person": coaching read from
- * a conversation stands while coaching read from revenue waits. Either way the
- * link lands on the cited span, never on a search the reader has to run.
+ * A standing recommendation comes first when there is one: it waits on nothing.
+ * When every metric recommendation is held, coaching read from a conversation
+ * stands while coaching read from revenue waits ("A held measurement never holds
+ * the person"). A standing recommendation read from a different conversation may
+ * not borrow this call's link, so in that case the call's own angle answers
+ * instead. Either way the link lands on the cited span, never on a search the
+ * reader has to run.
  */
 export function nextImprovement(dataset: Dataset, userId: Id, role: RepRole, now: ISODateTime, callId: Id, plan?: CoachingPlan): TodayImprovement | undefined {
   const review = buildReview(callId);
@@ -200,9 +202,12 @@ export function nextImprovement(dataset: Dataset, userId: Id, role: RepRole, now
   const span = spanIndex === undefined ? undefined : review.transcript[spanIndex];
   if (!span) return undefined;
 
-  const standing = (plan ?? coachingPlan(dataset, userId, now)).standing[0];
-  const sentence = standing?.action ?? feedback?.hint;
-  const label = standing?.title ?? feedback?.angle;
+  const standing = (plan ?? coachingPlan(dataset, userId, now, { transcripts })).standing[0];
+  // A recommendation with no metric was read from one conversation. If it was not this
+  // one, its words do not belong over this call's transcript link.
+  const borrowed = standing !== undefined && standing.metricIds.length === 0 && !standing.evidenceRefs.includes(callId);
+  const sentence = (borrowed ? undefined : standing?.action) ?? feedback?.hint;
+  const label = (borrowed ? undefined : standing?.title) ?? feedback?.angle;
   if (!sentence || !label) return undefined;
 
   return {
@@ -234,7 +239,7 @@ function heldNote(plan: CoachingPlan): TodayHeldNote | undefined {
  * today's verified progress stands. Both carry at most one held note.
  */
 export function buildTodayFocus(dataset: Dataset, userId: Id, role: RepRole, now: ISODateTime, options: TodayFocusOptions = {}): TodayFocus {
-  const plan = options.plan ?? coachingPlan(dataset, userId, now);
+  const plan = options.plan ?? coachingPlan(dataset, userId, now, { transcripts });
   const held = heldNote(plan);
   const callId = options.reviewedCallId ?? latestReviewedCallId(userId, role, now, options.windowHours);
   const improvement = callId ? nextImprovement(dataset, userId, role, now, callId, plan) : undefined;
