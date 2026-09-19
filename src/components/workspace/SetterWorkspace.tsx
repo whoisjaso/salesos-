@@ -42,6 +42,7 @@ import {
   type SetterQueueItem,
 } from "@/lib/workspace-setter";
 import { computeGame } from "@/lib/workspace-game";
+import { reviewHref } from "@/lib/review";
 import { BookingSheet, type Booking } from "./BookingSheet";
 import { HandoffSheet } from "./HandoffSheet";
 import { GameStrip } from "./GameStrip";
@@ -532,6 +533,7 @@ function HeroFlow({
               <Sparkle size={11} weight="bold" aria-hidden />
               {call.phase === "summary" ? "AI proposed" : "No AI evidence"}
             </span>
+            {call.phase === "summary" ? <Button variant="ghost" size="sm" href={reviewHref(item.opportunity.opportunityId)} className="ml-auto mr-1 h-6 px-2 text-[12px]">Review</Button> : null}
             {call.phase === "summary" && !call.changing ? (
               <button type="button" onClick={() => setCall((c) => ({ ...c, changing: true }))} className="text-[12px] font-medium text-fg-muted underline-offset-2 hover:underline">
                 Change

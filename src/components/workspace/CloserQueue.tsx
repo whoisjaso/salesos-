@@ -1,11 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Surface } from "@/components/ui/Surface";
 import { Segmented } from "./Segmented";
 import { initials } from "./NextUp";
 import { formatDateTimeIn, TENANT_TZ } from "@/lib/workspace-setter";
 import { QUEUE_TYPE_LABEL, type CloserQueueItem, type CloserQueueType } from "@/lib/workspace-closer";
+import { latestReviewableCallId } from "@/lib/review";
 
 const TYPES: CloserQueueType[] = ["commitments", "questions", "proposals", "contract", "payment", "delivery"];
 
@@ -31,6 +33,7 @@ export function CloserQueue({ items, onSelect }: { items: CloserQueueItem[]; onS
                 </span>
                 {q.when ? <span className="shrink-0 text-[12px] text-fg-subtle">{formatDateTimeIn(q.when, TENANT_TZ)}</span> : null}
               </button>
+              {latestReviewableCallId(q.opportunity.opportunityId) ? <Link href={`/review?call=${latestReviewableCallId(q.opportunity.opportunityId)}`} className="flex h-8 items-center justify-end px-4 pb-1 text-[12px] font-medium text-fg-muted hover:text-fg">Review</Link> : null}
             </li>
           ))}
           {visible.length === 0 ? <li className="px-4 py-6 text-center text-[13px] text-fg-subtle">Nothing here</li> : null}
