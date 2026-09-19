@@ -40,19 +40,18 @@ export interface TierPolicy {
   version: string;
 }
 
-export const DEFAULT_TIERS: CashTier[] = [
+/**
+ * Closer tiers, owner-set: coins $0, cash $1,000, stacks $10,000, bags
+ * $30,000, diamonds $100,000 (tiers-closer-1.1). These are also the default
+ * tiers so existing call sites without a role follow the closer bracket.
+ */
+export const CLOSER_TIERS: CashTier[] = [
   { id: "coins", label: "Coins", minMinor: 0, icon: "Coin", hue: "#a7a59d" },
   { id: "cash", label: "Cash", minMinor: 100_000, icon: "Money", hue: "#86c7a2" },
-  { id: "stacks", label: "Stacks", minMinor: 500_000, icon: "Stack", hue: "#7ba4f0" },
-  { id: "bags", label: "Bags", minMinor: 2_500_000, icon: "Bag", hue: "#d9b878" },
+  { id: "stacks", label: "Stacks", minMinor: 1_000_000, icon: "Stack", hue: "#7ba4f0" },
+  { id: "bags", label: "Bags", minMinor: 3_000_000, icon: "Bag", hue: "#d9b878" },
   { id: "diamonds", label: "Diamonds", minMinor: 10_000_000, icon: "Diamond", hue: "#8fd3e8" },
 ];
-
-export const DEFAULT_TIER_POLICY: TierPolicy = {
-  tiers: DEFAULT_TIERS,
-  basis: "commission",
-  version: "tiers-1.0",
-};
 
 /**
  * Setter tiers. A setter's commission bracket is roughly half a closer's and
@@ -70,8 +69,12 @@ export const SETTER_TIERS: CashTier[] = [
 /** Role-scoped tier policies. Setters and closers never share thresholds or race each other. */
 export const TIER_POLICY_BY_ROLE: Record<TierRole, TierPolicy> = {
   setter: { tiers: SETTER_TIERS, basis: "commission", version: "tiers-setter-1.0" },
-  closer: { tiers: DEFAULT_TIERS, basis: "commission", version: "tiers-closer-1.0" },
+  closer: { tiers: CLOSER_TIERS, basis: "commission", version: "tiers-closer-1.1" },
 };
+
+/** Default tiers are the closer bracket (kept for call sites that pass no role). */
+export const DEFAULT_TIERS: CashTier[] = CLOSER_TIERS;
+export const DEFAULT_TIER_POLICY: TierPolicy = TIER_POLICY_BY_ROLE.closer;
 
 export function tierPolicyFor(role: TierRole): TierPolicy {
   const policy = TIER_POLICY_BY_ROLE[role];

@@ -18,3 +18,4 @@ export * from "./migration";
 export * from "./crmSync";
 export * from "./cashTiers";
 export * from "./pairs";
+export * from "./profile";
