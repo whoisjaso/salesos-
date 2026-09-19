@@ -10,6 +10,7 @@ import { Segmented } from "./Segmented";
 import { CohortSheet } from "./CohortSheet";
 import { HeroTile } from "./HeroTile";
 import { FixFirst } from "./FixFirst";
+import type { CoachingOwner } from "@/domain/types";
 import { TrustLine } from "./TrustLine";
 import { MoneyView } from "./MoneyView";
 import { SourceView } from "./SourceView";
@@ -28,6 +29,7 @@ export interface OwnerDashboardProps {
 
 /** Business: Now / Money / Source. Team has its own tab. */
 export function OwnerDashboard({ view }: OwnerDashboardProps) {
+  const [owners, setOwners] = useState<Record<string, CoachingOwner>>({});
   const reduce = useReducedMotion();
   const [tab, setTab] = useState<ViewId>("now");
   const [cohortKey, setCohortKey] = useState<CohortKey>({ path: "all", tier: "all" });
@@ -68,7 +70,7 @@ export function OwnerDashboard({ view }: OwnerDashboardProps) {
           {tab === "now" ? (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] lg:items-start lg:gap-5">
               <HeroTile economics={cohort.economics} flow={cohort.flow} cohortLabel={cohort.label} />
-              <FixFirst cards={cohort.cards} cohortLabel={cohort.label} />
+              <FixFirst cards={cohort.cards} cohortLabel={cohort.label} owners={owners} onAssign={(id, o) => setOwners((prev) => ({ ...prev, [id]: o }))} />
               <div className="lg:col-span-2">
                 <TrustLine items={view.trust} />
               </div>

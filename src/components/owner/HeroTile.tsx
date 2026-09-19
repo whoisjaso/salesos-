@@ -73,7 +73,7 @@ export function HeroTile({ economics, flow, cohortLabel }: HeroTileProps) {
         <button
           type="button"
           onClick={() => sheet.open(metric, { verdict })}
-          aria-label={`${metric.label}. Open definition.`}
+          aria-label="Net collected per assigned opportunity. Open definition."
           className="group -m-2 flex flex-col gap-3 rounded-sm p-2 text-left"
         >
           <div className="flex w-full items-start justify-between gap-2">

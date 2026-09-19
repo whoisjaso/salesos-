@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Info, PauseCircle } from "@phosphor-icons/react";
@@ -11,6 +11,7 @@ import { deriveGameEvents, levelFor, playerState, streakDays as streakOf, XP_TAB
 import { personalMilestone, seasonFor } from "@/domain/gamification";
 import { RulesCoachingEngine } from "@/domain/coaching";
 import { useSession } from "@/lib/session";
+import { useRouter } from "next/navigation";
 import {
   descriptivePolicy,
   guardrailCounts,
@@ -53,7 +54,11 @@ const repIds = new Set(reps.map((r) => r.userId));
 /** Team board. The session user is "me"; the owner sees the team ring instead. */
 export function TeamView() {
   const reduce = useReducedMotion();
-  const { session } = useSession();
+  const { session, ready } = useSession();
+  const router = useRouter();
+  useEffect(() => {
+    if (ready && !session) router.replace("/");
+  }, [ready, session, router]);
   const isOwner = session?.role === "owner";
   const meId = !isOwner && session ? session.userId : null;
   const [segment, setSegment] = useState<Segment>("board");

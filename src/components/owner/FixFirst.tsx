@@ -10,14 +10,16 @@ import { BottleneckCardView } from "./BottleneckCardView";
 export interface FixFirstProps {
   cards: BottleneckCard[];
   cohortLabel: string;
+  /** Lifted so the assignment survives switching Now / Money / Source. */
+  owners: Record<string, CoachingOwner>;
+  onAssign: (cardId: string, owner: CoachingOwner) => void;
 }
 
 /** Exactly one card above the fold; the rest behind "See all". Assignment is client state only. */
-export function FixFirst({ cards, cohortLabel }: FixFirstProps) {
+export function FixFirst({ cards, cohortLabel, owners, onAssign }: FixFirstProps) {
   const [allOpen, setAllOpen] = useState(false);
-  const [owners, setOwners] = useState<Record<string, CoachingOwner>>({});
   const ownerOf = (card: BottleneckCard) => owners[card.cardId] ?? card.responsibleFunction;
-  const assign = (card: BottleneckCard) => (owner: CoachingOwner) => setOwners((prev) => ({ ...prev, [card.cardId]: owner }));
+  const assign = (card: BottleneckCard) => (owner: CoachingOwner) => onAssign(card.cardId, owner);
 
   const [first, ...rest] = cards;
 
