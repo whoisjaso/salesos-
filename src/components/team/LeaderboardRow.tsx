@@ -75,12 +75,9 @@ export function LeaderboardRow({
       className="relative border-b border-line last:border-b-0"
     >
       {/* The avatar is its own control (opens the card), so it sits beside the row button, not inside it. */}
-      <Avatar
-        userId={row.userId}
-        size={40}
-        onOpenCard={openCard}
-        className={cn("absolute top-3 z-[1]", row.rank !== null ? "left-8" : "left-0", isMe && "ring-2 ring-accent ring-offset-2 ring-offset-raised")}
-      />
+      <span className={cn("absolute top-3 z-[1] inline-flex", row.rank !== null ? "left-8" : "left-0")}>
+        <Avatar userId={row.userId} size={40} onOpenCard={openCard} className={cn(isMe && "ring-2 ring-accent ring-offset-2 ring-offset-raised")} />
+      </span>
       <button
         type="button"
         aria-expanded={open}

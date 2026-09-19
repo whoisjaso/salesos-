@@ -32,10 +32,10 @@ export function PairAvatars({ setterDisplayName, closerDisplayName, size = 36, m
     </span>
   );
   return (
-    <span className={cn("inline-flex shrink-0 items-center", className)} style={{ width: size * 1.7, height: size }}>
-      <span className="relative block" style={{ width: size * 1.7, height: size }}>
+    <span className={cn("inline-flex shrink-0 items-center", className)} style={{ width: size * 1.8, height: size }}>
+      <span className="relative block" style={{ width: size * 1.8, height: size }}>
         <span className="absolute left-0 top-0">{circle(setterDisplayName, "setter", "z-0")}</span>
-        <span className="absolute top-0" style={{ left: size * 0.7 }}>
+        <span className="absolute top-0" style={{ left: size * 0.8 }}>
           {circle(closerDisplayName, "closer", "z-10")}
         </span>
       </span>
@@ -64,14 +64,9 @@ export function PairCard({ view, onOpen, meId, className }: PairCardProps) {
       <button type="button" onClick={() => onOpen(view)} aria-label={`${title}, open pair`} className="flex w-full flex-col gap-3 p-4 text-left transition-colors hover:bg-hover motion-reduce:transition-none sm:p-5">
         <span className="flex items-center gap-3">
           <PairAvatars setterDisplayName={setterDisplayName} closerDisplayName={closerDisplayName} meSide={meSide} />
-          <span className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="truncate text-[15px] font-semibold leading-tight text-fg">{title}</span>
-              <span className="tag text-fg-muted">{CHOSEN_BY_LABEL[pair.chosenBy]}</span>
-            </span>
-            <span className="truncate text-[12px] text-fg-subtle">
-              {setterDisplayName} sets, {closerDisplayName} closes
-            </span>
+          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="truncate text-[15px] font-semibold leading-tight text-fg">{title}</span>
+            <span className="tag text-fg-muted">{CHOSEN_BY_LABEL[pair.chosenBy]}</span>
           </span>
           {row?.rank !== null && row?.rank !== undefined ? (
             <span className="tabular shrink-0 text-[13px] font-medium text-fg-subtle">#{row.rank}</span>

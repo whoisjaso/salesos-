@@ -73,15 +73,25 @@ export function PairSheet({ open, onClose, view, viewer, rates }: PairSheetProps
       open={open}
       onClose={onClose}
       title={title}
-      description={`${setterDisplayName} sets, ${closerDisplayName} closes. ${CHOSEN_BY_LABEL[pair.chosenBy]}, since ${sinceLabel(pair.startedAt)}.`}
+      description={`${CHOSEN_BY_LABEL[pair.chosenBy]}, since ${sinceLabel(pair.startedAt)}`}
       width={520}
     >
       <div className="flex flex-col gap-5">
-        <div className="flex items-center gap-3">
-          <PairAvatars setterDisplayName={setterDisplayName} closerDisplayName={closerDisplayName} size={40} meSide={meSide} />
-          <div className="min-w-0 flex-1">
-            <PairBar funnel={funnel} diagnostic={diagnostic} />
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <PairAvatars setterDisplayName={setterDisplayName} closerDisplayName={closerDisplayName} size={40} meSide={meSide} />
+            <dl className="tabular grid min-w-0 flex-1 grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[12px] leading-snug">
+              <dt className="font-medium" style={{ color: PAIR_HUE.setter }}>
+                Sets
+              </dt>
+              <dd className="truncate text-fg">{setterDisplayName}</dd>
+              <dt className="font-medium" style={{ color: PAIR_HUE.closer }}>
+                Closes
+              </dt>
+              <dd className="truncate text-fg">{closerDisplayName}</dd>
+            </dl>
           </div>
+          <PairBar funnel={funnel} diagnostic={diagnostic} />
         </div>
 
         <section aria-label="Setter side" className="flex flex-col gap-2">
