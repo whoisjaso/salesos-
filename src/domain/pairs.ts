@@ -372,7 +372,10 @@ export function pairDiagnostic(dataset: Dataset, pairs: Pair[], pairId: Id, now:
   const noun = STAGE_NOUN[stageId] ?? stageId;
   const fromStageId = worst.connector.fromStageId;
   const fromLabel = [...own.setterSide, ...own.closerSide].find((s) => s.stageId === fromStageId)?.label ?? fromStageId;
-  const dataState = worst.parts.dataState === "complete" ? overall : worst.parts.dataState;
+  // The finding carries the weakest connector's own data state. A data problem
+  // elsewhere in the funnel (say an unlinked payment) does not reroute a
+  // setter-side finding to sales_ops.
+  const dataState = worst.parts.dataState;
   const dataProblem = dataState !== "complete" && dataState !== "no_benchmark";
   return {
     pairId,

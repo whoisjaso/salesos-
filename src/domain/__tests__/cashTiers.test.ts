@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
+  CLOSER_TIERS,
   DEFAULT_TIERS,
   DEFAULT_TIER_POLICY,
+  SETTER_TIERS,
+  TIER_POLICY_BY_ROLE,
   cashRace,
   commissionBucket,
+  commissionPolicyFor,
   commissionSummary,
   nextTier,
   recentCashDrops,
   tierFor,
+  tierPolicyFor,
   type TierPolicy,
 } from "@/domain/cashTiers";
-import { NOW, obaviaDataset } from "@/fixtures/obavia";
-import type { CommissionEntry, LedgerEntry } from "@/domain/types";
+import { NOW, obaviaCommissionPolicies, obaviaDataset } from "@/fixtures/obavia";
+import type { CommissionEntry, CommissionPolicy, LedgerEntry } from "@/domain/types";
 import { emptyDataset, mkOpp, mkUser } from "./helpers";
 
 const SEASON = { from: "2026-09-01T00:00:00Z", to: "2026-10-01T00:00:00Z" };
@@ -41,22 +46,40 @@ const commission = (id: string, userId: string, oppId: string, amountMinor: numb
 });
 
 describe("tierFor", () => {
-  it("is inclusive at each minimum and coins at zero", () => {
+  it("is inclusive at each minimum and coins at zero (closer bracket: $1,000 / $10,000 / $30,000 / $100,000)", () => {
     expect(tierFor(0).id).toBe("coins");
     expect(tierFor(99_999).id).toBe("coins");
     expect(tierFor(100_000).id).toBe("cash");
-    expect(tierFor(499_999).id).toBe("cash");
-    expect(tierFor(500_000).id).toBe("stacks");
-    expect(tierFor(2_500_000).id).toBe("bags");
+    expect(tierFor(999_999).id).toBe("cash");
+    expect(tierFor(1_000_000).id).toBe("stacks");
+    expect(tierFor(2_999_999).id).toBe("stacks");
+    expect(tierFor(3_000_000).id).toBe("bags");
     expect(tierFor(9_999_999).id).toBe("bags");
     expect(tierFor(10_000_000).id).toBe("diamonds");
     expect(tierFor(50_000_000).id).toBe("diamonds");
   });
 
-  it("thresholds are strictly increasing from zero and the policy is versioned", () => {
-    expect(DEFAULT_TIERS[0].minMinor).toBe(0);
-    for (let i = 1; i < DEFAULT_TIERS.length; i += 1) expect(DEFAULT_TIERS[i].minMinor).toBeGreaterThan(DEFAULT_TIERS[i - 1].minMinor);
-    expect(DEFAULT_TIER_POLICY).toMatchObject({ basis: "commission", version: "tiers-1.0" });
+  it("thresholds are strictly increasing from zero and the default policy is the versioned closer bracket", () => {
+    for (const tiers of [DEFAULT_TIERS, SETTER_TIERS, CLOSER_TIERS]) {
+      expect(tiers[0].minMinor).toBe(0);
+      for (let i = 1; i < tiers.length; i += 1) expect(tiers[i].minMinor).toBeGreaterThan(tiers[i - 1].minMinor);
+    }
+    expect(DEFAULT_TIERS).toBe(CLOSER_TIERS);
+    expect(DEFAULT_TIER_POLICY).toBe(TIER_POLICY_BY_ROLE.closer);
+    expect(DEFAULT_TIER_POLICY).toMatchObject({ basis: "commission", version: "tiers-closer-1.1" });
+    expect(TIER_POLICY_BY_ROLE.setter).toMatchObject({ basis: "commission", version: "tiers-setter-1.0" });
+  });
+
+  it("scopes thresholds by role: $30,000 is diamonds for a setter and bags for a closer", () => {
+    expect(SETTER_TIERS.map((t) => t.minMinor)).toEqual([0, 50_000, 250_000, 1_000_000, 2_500_000]);
+    expect(CLOSER_TIERS.map((t) => t.minMinor)).toEqual([0, 100_000, 1_000_000, 3_000_000, 10_000_000]);
+    expect(tierFor(3_000_000, tierPolicyFor("setter")).id).toBe("diamonds");
+    expect(tierFor(3_000_000, tierPolicyFor("closer")).id).toBe("bags");
+    expect(tierFor(1_000_000, tierPolicyFor("setter")).id).toBe("bags");
+    expect(tierFor(1_000_000, tierPolicyFor("closer")).id).toBe("stacks");
+    expect(tierFor(50_000, tierPolicyFor("setter")).id).toBe("cash");
+    expect(tierFor(50_000, tierPolicyFor("closer")).id).toBe("coins");
+    expect(() => tierPolicyFor("owner" as never)).toThrow(/unknown role/);
   });
 
   it("respects an owner-configured policy with different thresholds", () => {
@@ -77,8 +100,9 @@ describe("nextTier", () => {
   it("returns the next tier, the remaining amount, and progress within the current band", () => {
     expect(nextTier(0)).toMatchObject({ tier: { id: "cash" }, remainingMinor: 100_000, progress: 0 });
     expect(nextTier(50_000)).toMatchObject({ tier: { id: "cash" }, remainingMinor: 50_000, progress: 0.5 });
-    expect(nextTier(300_000)).toMatchObject({ tier: { id: "stacks" }, remainingMinor: 200_000, progress: 0.5 });
-    expect(nextTier(2_499_999)).toMatchObject({ tier: { id: "bags" }, remainingMinor: 1 });
+    expect(nextTier(550_000)).toMatchObject({ tier: { id: "stacks" }, remainingMinor: 450_000, progress: 0.5 });
+    expect(nextTier(2_999_999)).toMatchObject({ tier: { id: "bags" }, remainingMinor: 1 });
+    expect(nextTier(1_250_000, tierPolicyFor("setter"))).toMatchObject({ tier: { id: "diamonds" }, remainingMinor: 1_250_000 });
   });
 
   it("is null at the top tier", () => {
@@ -137,6 +161,46 @@ describe("commissionSummary", () => {
     expect(commissionSummary(real, "anyone", SEASON, NOW).hypothetical).toBe(false);
   });
 
+  it("with role policies, a setter earns 5% of the same cash the closer earns 10% on", () => {
+    const policies: CommissionPolicy[] = [
+      { tenantId: "t_test", policyVersion: "s5", effectiveFrom: "2026-08-01T00:00:00Z", basis: "net_collected_cash", ratePercent: 5, hypothetical: true, role: "setter" },
+      { tenantId: "t_test", policyVersion: "c10", effectiveFrom: "2026-08-01T00:00:00Z", basis: "net_collected_cash", ratePercent: 10, hypothetical: true, role: "closer" },
+    ];
+    const ds = emptyDataset({
+      users: [mkUser("s", ["setter"]), mkUser("c", ["closer"])],
+      opportunities: [mkOpp("o1", { currentOwner: { setter: "s", closer: "c" } }), mkOpp("o2", { currentOwner: { setter: "s", closer: "c" } })],
+      ledger: [
+        payment("p1", "o1", 480_000, "2026-09-03T12:00:00Z"),
+        payment("p2", "o2", 480_000, "2026-09-04T12:00:00Z"),
+        payment("r2", "o2", 80_000, "2026-09-05T12:00:00Z", { kind: "refund" }),
+        payment("old", "o1", 9_000_000, "2026-08-01T12:00:00Z"),
+      ],
+      commissionEntries: [commission("c_paid", "c", "o1", 1, "paid"), commission("s_disputed", "s", "o2", 1, "disputed")],
+    });
+    const setter = commissionSummary(ds, "s", SEASON, NOW, policies);
+    const closer = commissionSummary(ds, "c", SEASON, NOW, policies);
+    // Cash in season: o1 480,000 (paid entry for the closer), o2 400,000 net (setter's entry disputed, so excluded for the setter).
+    expect(setter).toMatchObject({ accruedMinor: 24_000, eligibleMinor: 0, paidMinor: 0, totalMinor: 24_000, hypothetical: true });
+    expect(closer).toMatchObject({ accruedMinor: 40_000, eligibleMinor: 0, paidMinor: 48_000, totalMinor: 88_000, hypothetical: true });
+    expect(commissionSummary(ds, "c", SEASON, NOW).totalMinor).toBe(1); // entry path unchanged
+    // Role-less policy applies to both.
+    const shared: CommissionPolicy = { tenantId: "t_test", policyVersion: "all", effectiveFrom: "2026-08-01T00:00:00Z", basis: "net_collected_cash", ratePercent: 7, hypothetical: false };
+    expect(commissionSummary(ds, "s", SEASON, NOW, [shared])).toMatchObject({ totalMinor: 33_600, hypothetical: false });
+    expect(commissionPolicyFor(policies, "setter")?.policyVersion).toBe("s5");
+    expect(commissionPolicyFor([shared], "closer")?.policyVersion).toBe("all");
+    expect(commissionPolicyFor([], "closer")).toBeUndefined();
+  });
+
+  it("agrees with the fixture's role-scoped entries for every rep", () => {
+    const season = { from: "2026-08-01T00:00:00Z", to: "2026-10-01T00:00:00Z" };
+    for (const u of obaviaDataset.users.filter((u) => u.roles.includes("setter") || u.roles.includes("closer"))) {
+      const fromEntries = commissionSummary(obaviaDataset, u.userId, season, NOW);
+      const fromPolicies = commissionSummary(obaviaDataset, u.userId, season, NOW, obaviaCommissionPolicies);
+      expect(fromPolicies.totalMinor).toBe(fromEntries.totalMinor);
+      expect(fromPolicies.hypothetical).toBe(true);
+    }
+  });
+
   it("maps every state to exactly one bucket or none", () => {
     expect(commissionBucket("calculated")).toBe("accrued");
     expect(commissionBucket("accrued")).toBe("accrued");
@@ -167,9 +231,10 @@ describe("cashRace", () => {
       commissionEntries: [commission("c_c", "c", "o_c", 99_000_000, "paid")],
     });
     const race = cashRace(ds, SEASON, "closer");
+    // Closer bracket tiers-closer-1.1: $6,000 and $1,000 are both "cash" (stacks starts at $10,000).
     expect(race.map((r) => [r.userId, r.netCollectedMinor, r.rank, r.tier.id])).toEqual([
-      ["a", 600_000, 1, "stacks"],
-      ["b", 600_000, 1, "stacks"],
+      ["a", 600_000, 1, "cash"],
+      ["b", 600_000, 1, "cash"],
       ["c", 100_000, 3, "cash"],
     ]);
     expect(race.some((r) => "commissionMinor" in r)).toBe(false);
@@ -182,19 +247,40 @@ describe("cashRace", () => {
       ledger: [payment("p", "o", 480_000, "2026-09-03T12:00:00Z")],
     });
     const race = cashRace(ds, SEASON, "setter");
-    expect(race[0]).toMatchObject({ userId: "s1", netCollectedMinor: 480_000, rank: 1, tier: { id: "cash" } });
+    // $4,800 on the setter bracket is stacks (setter thresholds: $500 / $2,500 / $10,000 / $25,000).
+    expect(race[0]).toMatchObject({ userId: "s1", netCollectedMinor: 480_000, rank: 1, tier: { id: "stacks" } });
     expect(race[1]).toMatchObject({ userId: "s2", netCollectedMinor: 0, rank: 2, tier: { id: "coins" } });
     expect(commissionSummary(ds, "s2", SEASON, NOW).totalMinor).toBe(0);
     expect(tierFor(commissionSummary(ds, "s2", SEASON, NOW).totalMinor).id).toBe("coins");
   });
 
-  it("covers the synthetic dataset without exposing commission", () => {
+  it("is role-scoped: the same cash earns a different badge per role, roles never share a race, and a bad role throws", () => {
+    const ds = emptyDataset({
+      users: [mkUser("s", ["setter"]), mkUser("c", ["closer"])],
+      opportunities: [mkOpp("o", { currentOwner: { setter: "s", closer: "c" } })],
+      ledger: [payment("p", "o", 480_000, "2026-09-03T12:00:00Z")],
+    });
+    const setters = cashRace(ds, SEASON, "setter");
+    const closers = cashRace(ds, SEASON, "closer");
+    expect(setters.map((r) => [r.userId, r.role, r.netCollectedMinor, r.tier.id])).toEqual([["s", "setter", 480_000, "stacks"]]);
+    expect(closers.map((r) => [r.userId, r.role, r.netCollectedMinor, r.tier.id])).toEqual([["c", "closer", 480_000, "cash"]]);
+    expect(setters[0].tier.id).not.toBe(closers[0].tier.id);
+    // TODO(pairs): UI must pass role. Until then the omitted role means the closer race.
+    expect(cashRace(ds, SEASON)).toEqual(closers);
+    expect(() => cashRace(ds, SEASON, "owner" as never)).toThrow(/requires a role/);
+    expect(() => cashRace(ds, SEASON, null as never)).toThrow(/never race each other/);
+  });
+
+  it("covers the synthetic dataset per role without exposing commission", () => {
     const season = { from: "2026-09-01T00:00:00Z", to: "2026-10-01T00:00:00Z" };
-    const race = cashRace(obaviaDataset, season);
-    expect(race.length).toBeGreaterThan(0);
-    for (let i = 1; i < race.length; i += 1) {
-      expect(race[i].netCollectedMinor).toBeLessThanOrEqual(race[i - 1].netCollectedMinor);
-      expect(race[i].rank).toBeGreaterThanOrEqual(race[i - 1].rank);
+    for (const role of ["setter", "closer"] as const) {
+      const race = cashRace(obaviaDataset, season, role);
+      expect(race.length).toBeGreaterThan(0);
+      expect(race.every((r) => r.role === role)).toBe(true);
+      for (let i = 1; i < race.length; i += 1) {
+        expect(race[i].netCollectedMinor).toBeLessThanOrEqual(race[i - 1].netCollectedMinor);
+        expect(race[i].rank).toBeGreaterThanOrEqual(race[i - 1].rank);
+      }
     }
   });
 });
