@@ -76,9 +76,9 @@ test.describe("Setter: Tomasz", () => {
     await expect(page.getByRole("button", { name: "Change", exact: true })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Review" })).toBeVisible();
 
-    // Wrong? opens the alternatives: the rep corrects it to a real conversation so booking is possible.
+    // Flag an issue opens the alternatives: the rep corrects it to a real conversation so booking is possible.
     await page.getByTestId("wrong").click();
-    const wrong = sheet(page, "Wrong?");
+    const wrong = sheet(page, "Flag an issue");
     await expect(wrong).toBeVisible();
     const outcomes = wrong.getByRole("radiogroup", { name: "Outcome" });
     await expect(outcomes.getByRole("radio")).toHaveCount(4);

@@ -34,6 +34,10 @@ export const EMPTY_PROGRESS_LINE = "Nothing verified yet today. Your first call 
  * Today's verified progress during the day, the single next improvement once a call has
  * been reviewed, and at most one quiet note for coaching that is waiting on data.
  * See src/components/home/today-focus.ts for the rule that picks between them.
+ *
+ * It is a strip and not a card on purpose: it carries three figures, and the rule that
+ * no card holds more than one number holds cards to one. Nothing here is bordered and
+ * nothing here is a tile; the only bordered things on this screen stay tappable.
  */
 export function TodayFocus({ focus, className }: { focus: TodayFocusModel; className?: string }) {
   const wrapper = cn("flex flex-col gap-2.5 border-t border-line pt-3", className);

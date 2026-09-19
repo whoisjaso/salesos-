@@ -610,8 +610,12 @@ export interface PlayerRow {
   progress: number;
   xp: number;
   streakDays: number;
-  /** Quality gate paused the mechanic (opt-out, refund, dispute under review). */
-  paused: boolean;
+  /**
+   * A track is waiting on evidence somebody else owns. Never the whole mechanic:
+   * a data incident holds the measurement it makes unreliable and nothing more
+   * (docs/DECISIONS.md, "A held measurement never holds the person").
+   */
+  waitingTracks: string[];
 }
 
 /** Calendar month containing `now`, UTC. Seasons reset the display, not history. */
@@ -639,7 +643,7 @@ export function buildPlayers(dataset: Dataset, now: ISODateTime): PlayerRow[] {
       progress: state.commercial.progress,
       xp: state.commercial.xp,
       streakDays: state.streakDays,
-      paused: state.gate.paused,
+      waitingTracks: state.gate.provisionalTracks,
     });
   }
   return rows.sort((a, b) => (a.role === b.role ? 0 : a.role === "closer" ? -1 : 1));

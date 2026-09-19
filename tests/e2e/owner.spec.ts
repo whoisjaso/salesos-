@@ -54,7 +54,8 @@ test.describe("Owner: Delphine", () => {
     await hero(page).click();
     const details = sheet(page, "Per opportunity");
     await expect(details).toBeVisible();
-    await expect(details.getByText("Net collected cash")).toBeVisible();
+    // The basis chip, not the metric's full name in the subtitle above it.
+    await expect(details.getByText("Net collected cash", { exact: true })).toBeVisible();
     await expect(details.getByText(/^\$[\d,]+ over \d+ assigned opportunities$/)).toBeVisible();
     await expect(details.getByText("Sum over sum")).toBeVisible();
 

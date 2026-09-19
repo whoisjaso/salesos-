@@ -74,7 +74,7 @@ interface CallState {
 
 const IDLE: CallState = { phase: "idle", seconds: 0 };
 
-/** The alternatives behind Wrong?: the outcome, then the next step. */
+/** The alternatives behind Flag an issue: the outcome, then the next step. */
 const OUTCOMES: CallInterpretedOutcome[] = ["meaningful_interaction", "voicemail", "no_answer", "wrong_contact"];
 const NEXT_STEPS: NextStepValue[] = ["book", "callback", "dq_review"];
 
@@ -332,7 +332,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
               <span aria-hidden>·</span>
               <button type="button" onClick={() => setWrongOpen(true)} className="inline-flex h-6 items-center gap-1 px-1.5 underline-offset-2 hover:underline" data-testid="wrong">
                 <Question size={12} weight="bold" aria-hidden />
-                Wrong?
+                Flag an issue
               </button>
             </div>
           ) : null}
@@ -475,7 +475,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
             <p className="mb-3 text-[13px] italic leading-snug text-fg-muted">&ldquo;{active.submission?.requestText}&rdquo;</p>
             <textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} rows={5} placeholder="Your reply" className="w-full resize-none rounded-sm border border-line-strong bg-raised px-3 py-2 text-[14px] leading-snug text-fg outline-none focus-visible:border-accent" />
           </Sheet>
-          <Sheet open={wrongOpen} onClose={() => setWrongOpen(false)} title="Wrong?" description={active.contact.displayName}>
+          <Sheet open={wrongOpen} onClose={() => setWrongOpen(false)} title="Flag an issue" description={active.contact.displayName}>
             <div className="flex flex-col gap-5">
               <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Outcome">
                 <span className="section-label">Outcome</span>

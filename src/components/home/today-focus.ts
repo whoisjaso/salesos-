@@ -151,7 +151,7 @@ export function todayCounts(dataset: Dataset, userId: Id, role: RepRole, now: IS
     counts.push({
       id: "attended",
       value: attended,
-      word: attended === 1 ? "attended" : "attended",
+      word: "attended",
       counts:
         unresolved > 0
           ? `appointments attended today, ${plural(unresolved, "meeting")} still without attendance evidence`

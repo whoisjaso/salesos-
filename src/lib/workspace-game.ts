@@ -48,8 +48,14 @@ export function computeGame(dataset: Dataset, userId: Id, now: ISODateTime): Gam
   if (rec) {
     const base = missionFromRecommendation(rec, 5);
     const metricId = rec.metricIds[0];
-    mission = { ...base, title: rec.suppressed ? "Paused until data is fixed" : MISSION_LABELS[metricId] ?? base.title };
-    proofRule = rec.suppressed ? "Resolve data before practice counts" : PROOF_RULES[metricId];
+    // A mission is never titled by a data problem. When the metric behind it is
+    // waiting, the mission keeps its own name and says what the count waits on
+    // (docs/DECISIONS.md, "A held measurement never holds the person").
+    const title = MISSION_LABELS[metricId] ?? base.title;
+    mission = { ...base, title };
+    proofRule = rec.held
+      ? `Counts once ${rec.held.waitingOn}. ${rec.held.ownerLabel ?? "The owner"} owns that.`
+      : PROOF_RULES[metricId];
   }
   return { player, mission, proofRule, seasonLabel: season.label };
 }

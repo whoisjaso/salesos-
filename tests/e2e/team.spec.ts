@@ -49,8 +49,9 @@ test.describe("Team and Me: Renata", () => {
     // The hold is scoped: what ranking waits on, and who owns it. No fix link for a rep.
     const heldRow = page.getByTestId("ranks-paused");
     await expect(heldRow).toContainText("Ranking on hold");
-    await expect(heldRow).toContainText("Waits until");
-    await expect(heldRow).toContainText("Finance owns that.");
+    // One short line on the screen: the count and the owner. What it waits on in
+    // full is in the sheet this row opens.
+    await expect(heldRow).toContainText(/\d+ items? to settle, Finance owns them/);
     await expect(page.getByText("Ranks paused")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Fix in Business" })).toHaveCount(0);
 

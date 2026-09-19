@@ -141,7 +141,9 @@ export function TeamView() {
   const daysLeft = seasonDaysLeft(NOW);
   const level = player ? player.commercial : teamTrack.level;
   const streak = player ? player.streakDays : teamTrack.streakDays;
-  const pausedReasons = player?.gate.paused ? player.gate.reasons : [];
+  // Not `gate.paused`: a data incident can no longer stop the whole mechanic, so
+  // the season sheet lists the tracks that are actually waiting, or nothing.
+  const pausedReasons = player?.gate.holds.map((h) => h.statement) ?? [];
 
   // A business created through onboarding: roster only, no ranks, until its own sample matures.
   if (session && !tenantData.demo) return <TeamRoster data={tenantData} viewer={{ userId: session.userId, role: session.role }} />;
