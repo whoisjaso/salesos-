@@ -1,6 +1,7 @@
-import type { IntegrationProvider } from "@/domain/integrations";
+import { providerById, type IntegrationProvider } from "@/domain/integrations";
+import { OAUTH_CRM_SOURCES } from "@/domain/crmSync";
 import { PRESETS, TARGET_FIELDS, type ColumnMapping, type MappingPlan, type RowIssue, type SourcePreset, type TargetField } from "@/domain/migration";
-import { MIGRATION_FIXTURES } from "@/fixtures/migration";
+import { GOHIGHLEVEL_CSV, HUBSPOT_CSV, MESSY_CSV } from "@/fixtures/migration";
 
 /** The four steps. Only the current step word is shown. */
 export type Step = 1 | 2 | 3 | 4;
@@ -8,29 +9,40 @@ export const STEP_WORD: Record<Step, string> = { 1: "Bring your data", 2: "We ma
 
 export const IGNORE: TargetField = "ignore";
 
-/** Presets with a tile, in order. Close and Pipedrive have no Simple Icons mark, the tile falls back to a letter. */
-export const PRESET_TILES: SourcePreset[] = ["hubspot", "gohighlevel", "salesforce", "pipedrive", "zoho", "close", "google_sheets"];
+export interface CrmSource {
+  provider: IntegrationProvider;
+  preset: SourcePreset;
+}
 
-const BRAND: Record<SourcePreset, string> = {
-  hubspot: "#FF7A59",
-  gohighlevel: "#2C7BE5",
-  salesforce: "#00A1E0",
-  pipedrive: "#017737",
-  zoho: "#E42527",
-  close: "#2F6BFF",
-  google_sheets: "#34A853",
-  generic: "#34A853",
-};
+/** OAuth CRMs in tile order. Close and Pipedrive have no Simple Icons mark, the tile falls back to a letter. */
+export const CRM_SOURCES: CrmSource[] = OAUTH_CRM_SOURCES.flatMap(({ providerId, preset }) => {
+  const provider = providerById[providerId];
+  return provider ? [{ provider, preset }] : [];
+});
 
-/** Minimal IntegrationProvider so LogoTile can paint a preset mark. Nothing else reads it. */
+/**
+ * What the simulated sync hands back for a preset. HubSpot and GoHighLevel
+ * have exact sample exports; the others stand in with the messy sheet.
+ */
+export function simulatedCsv(preset: SourcePreset): string {
+  if (preset === "hubspot") return HUBSPOT_CSV;
+  if (preset === "gohighlevel") return GOHIGHLEVEL_CSV;
+  return MESSY_CSV;
+}
+
+const BRAND: Partial<Record<SourcePreset, string>> = { google_sheets: "#34A853", generic: "#34A853" };
+
+/** IntegrationProvider for a preset so LogoTile can paint its mark. Registry providers are used as-is. */
 export function presetProvider(preset: SourcePreset): IntegrationProvider {
+  const hit = CRM_SOURCES.find((s) => s.preset === preset);
+  if (hit) return hit.provider;
   const spec = PRESETS[preset];
   return {
     providerId: `import_${preset}`,
     name: spec.label,
-    category: "crm",
+    category: "other",
     logoSlug: spec.logoSlug,
-    brandColor: BRAND[preset],
+    brandColor: BRAND[preset] ?? "#34A853",
     auth: "none",
     feeds: [],
     entryPathDefault: "form_entry",
@@ -38,21 +50,6 @@ export function presetProvider(preset: SourcePreset): IntegrationProvider {
     setup: [],
     oneLiner: "",
   };
-}
-
-const SAMPLE: Partial<Record<SourcePreset, string>> = {
-  hubspot: MIGRATION_FIXTURES.hubspot,
-  gohighlevel: MIGRATION_FIXTURES.gohighlevel,
-  google_sheets: MIGRATION_FIXTURES.messy,
-};
-
-/** Sample CSV text for a preset, or null when the fixtures do not carry one. */
-export function sampleCsv(preset: SourcePreset): string | null {
-  return SAMPLE[preset] ?? null;
-}
-
-export function sampleLabel(preset: SourcePreset): string {
-  return `Sample: ${PRESETS[preset].label} export`;
 }
 
 /** Target field label by field id. "ignore" reads "Ignore". */
