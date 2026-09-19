@@ -19,3 +19,4 @@ export * from "./crmSync";
 export * from "./cashTiers";
 export * from "./pairs";
 export * from "./profile";
+export * from "./onboarding";
