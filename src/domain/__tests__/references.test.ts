@@ -1,18 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { ACCEPTANCE_EXPECTATIONS, listenerExample } from "@/content/frameworks/personalMeaningListener";
+import { ACCEPTANCE_EXPECTATIONS, LISTENER_RULES, listenerExample } from "@/content/frameworks/personalMeaningListener";
 import { FakeReasoningModel, ModelCallIntelligence, modelOutputFrom, RuleBasedCallIntelligence, validateExtraction, type TranscriptSpan } from "@/domain/callIntelligence";
 import { defaultLensPack } from "@/domain/lens";
 import {
+  breaksDomainLock,
   conceptsFor,
   dismiss,
+  DOMAIN_LOCK_RULE,
+  domainFor,
   extractReferences,
   FORBIDDEN_SUGGESTION,
   invalidateOnRetraction,
   pin,
   reject,
+  significance,
   suggestReuse,
   unpin,
   utteranceIdFor,
+  vocabulary,
 } from "@/domain/references";
 
 /**
@@ -444,5 +449,204 @@ describe("19. one extraction and validation path", () => {
     const deterministic = ACCEPTANCE_EXPECTATIONS.filter((e) => e.testKind === "deterministic").map((e) => e.n);
     // 16 (layout beside the script) and 20 (tenant, consent, deletion) are e2e and integration concerns.
     expect(deterministic).toEqual([5, 6, 7, 8, 10, 13, 14, 15, 16, 18, 19, 20]);
+  });
+});
+
+describe("word choice is significance", () => {
+  const hockey = listenerExample("hockey").prospectUtterance;
+  const laterOwnership = (): [TranscriptSpan["speaker"], string] => ["customer", "So who handles the first response when your setter is out?"];
+
+  /** A small synthetic transcript: baseball said three times by the customer, then an ownership question. */
+  const baseballCall = () =>
+    conversation(
+      [
+        ["rep", "How do inquiries get handled today?"],
+        ["customer", "It's like a baseball team where nobody knows who is fielding the ball."],
+        ["rep", "Say more about that."],
+        ["customer", "Baseball, right. The ball drops between two people and everyone looks at each other."],
+        ["customer", "Every lead is a baseball nobody calls for."],
+      ],
+      4,
+      [laterOwnership()],
+    );
+
+  it("repeated hockey merges into one reference with count 3, a span per occurrence, and more significance than a single mention", () => {
+    const three = conversation([
+      ["customer", hockey],
+      ["rep", "Say more about that."],
+      ["customer", "It's a hockey team where nobody covers the net."],
+      ["customer", "Hockey, every night. That's what it feels like."],
+    ]);
+    const refs = extractReferences(three);
+    expect(refs).toHaveLength(1);
+    const r = refs[0];
+    expect(r.lifecycle.occurrenceCount).toBe(3);
+    expect(r.spans).toHaveLength(3);
+    expect(r.spans.map((s) => s.startMs)).toEqual([three[0].startMs, three[2].startMs, three[3].startMs]);
+    expect(r.lifecycle.lastObservedTurn).toBe(utteranceIdFor("conversation", three[3]));
+    const [single] = extractReferences(conversation([["customer", hockey]]));
+    expect(significance(single)).toBe(0.6);
+    expect(significance(r)).toBe(0.9);
+    expect(significance(r)).toBeGreaterThan(significance(single));
+    // The relationship clause is worth 0.1: the same first mention without one scores 0.5.
+    const [bare] = extractReferences(conversation([["customer", "That setback was as bad as breaking your leg in basketball."]]));
+    expect(significance(bare)).toBe(0.5);
+  });
+
+  it("significance caps at 1.0 and drops to 0 once rejected", () => {
+    const t = conversation([
+      ["customer", hockey],
+      ["customer", "Hockey again."],
+      ["customer", "Still hockey."],
+      ["customer", "Hockey, hockey, hockey."],
+      ["customer", "A hockey team, like I said."],
+    ]);
+    const [r] = extractReferences(t);
+    expect(r.lifecycle.occurrenceCount).toBe(5);
+    expect(significance(r)).toBe(1);
+    expect(significance(reject(r))).toBe(0);
+  });
+
+  it("seller-introduced lowers significance; third party lowers it further", () => {
+    const [shared] = extractReferences(
+      conversation([
+        ["rep", "Some owners describe it like a hockey team where nobody knows who is defending."],
+        ["customer", "Yeah, it's exactly like a hockey team where nobody knows who is defending."],
+      ]),
+    );
+    expect(shared.semantics.origin).toBe("seller_introduced_confirmed");
+    const [own] = extractReferences(conversation([["customer", hockey]]));
+    expect(significance(shared)).toBeCloseTo(significance(own) - 0.3, 5);
+    const [third] = extractReferences(conversation([["customer", "My partner says our inquiries are handled like a hockey team where nobody knows who is defending."]]));
+    expect(third.semantics.origin).toBe("third_party");
+    expect(significance(third)).toBeCloseTo(significance(own) - 0.5, 5);
+  });
+
+  it("rep repetition of a domain never raises the customer's count", () => {
+    const t = conversation([
+      ["customer", hockey],
+      ["rep", "Hockey, right. Like a hockey team. Hockey is a good way to put it."],
+      ["rep", "Back to the hockey team for a second."],
+    ]);
+    const [r] = extractReferences(t);
+    expect(r.lifecycle.occurrenceCount).toBe(1);
+    expect(r.spans).toHaveLength(1);
+    expect(significance(r)).toBe(0.6);
+  });
+
+  it("vocabulary finds profit x4, groups inflections, ranks by count then first use, and excludes the stoplist", () => {
+    const t = conversation([
+      ["rep", "Leads, leads, leads. The team needs more leads and the price is the price."],
+      ["customer", "Revenue is fine. Profit is what matters to me."],
+      ["customer", "The profits at the Kearney store are thin, and the leads we get are junk."],
+      ["customer", "I want the margin up. Margins, honestly, before anything else. More profit."],
+      ["customer", "If the profit is there the team is happy and the price is fine."],
+    ]);
+    const v = vocabulary(t);
+    expect(v[0]).toMatchObject({ term: "profit", count: 4, kind: "value_word" });
+    expect(v[0].spans).toHaveLength(4);
+    expect(v[0].spans.every((s) => s.speaker === "customer")).toBe(true);
+    expect(v.find((e) => e.term === "margin")).toMatchObject({ count: 2, kind: "value_word" });
+    const terms = v.map((e) => e.term);
+    for (const filler of ["the", "leads", "lead", "team", "price", "fine", "store", "more"]) expect(terms).not.toContain(filler);
+    expect(terms).not.toContain("profits");
+    expect(v.length).toBeLessThanOrEqual(8);
+    for (let i = 1; i < v.length; i++) expect(v[i - 1].count).toBeGreaterThanOrEqual(v[i].count);
+  });
+
+  it("vocabulary types outcome labels and emotion words, and a domain word reads as domain", () => {
+    const t = conversation([
+      ["customer", "What I want is breathing room. Honestly I'm frustrated with the whole thing."],
+      ["customer", "Breathing room on weekends, that's it. It's frustrating every single week."],
+      ["customer", "Like a hockey team, and hockey is the only way I can describe it."],
+    ]);
+    const v = vocabulary(t);
+    expect(v.find((e) => e.term === "breathing room")).toMatchObject({ count: 2, kind: "outcome_label" });
+    const emotion = v.find((e) => e.kind === "emotion_word");
+    expect(emotion?.count).toBe(2);
+    expect(["frustrated", "frustrating"]).toContain(emotion?.term);
+    expect(v.find((e) => e.term === "hockey")).toMatchObject({ count: 2, kind: "domain" });
+    // The phrase is not double counted as its words.
+    expect(v.map((e) => e.term)).not.toContain("breathing");
+    expect(v.map((e) => e.term)).not.toContain("room");
+  });
+
+  it("vocabulary never counts rep words, and a word said once is not vocabulary", () => {
+    const t = conversation([
+      ["rep", "Profit, profit, profit. Breathing room, breathing room. Frustrated, frustrated."],
+      ["customer", "Profit, once."],
+      ["customer", "Sure."],
+    ]);
+    expect(vocabulary(t)).toEqual([]);
+    expect(vocabulary([])).toEqual([]);
+  });
+
+  it("vocabulary is capped at 8 and deterministic", () => {
+    const words = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet"];
+    const line = words.map((w) => `${w} ${w}`).join(" ");
+    const t = conversation([["customer", line]]);
+    const v = vocabulary(t);
+    expect(v).toHaveLength(8);
+    expect(v.map((e) => e.term)).toEqual(words.slice(0, 8));
+    expect(JSON.stringify(vocabulary(t))).toBe(JSON.stringify(v));
+  });
+
+  it("domain lock: a baseball reference is only ever suggested in baseball words", () => {
+    const t = baseballCall();
+    const refs = extractReferences(t);
+    expect(refs).toHaveLength(1);
+    const r = refs[0];
+    expect(domainFor(r)).toBe("baseball");
+    expect(r.lifecycle.occurrenceCount).toBe(3);
+    expect(significance(r)).toBe(0.9);
+    const s = suggestReuse(refs, t[t.length - 1], "qualified");
+    expect(s).not.toBeNull();
+    expect(s!.line).toMatch(/your baseball example/);
+    expect(s!.line).not.toMatch(/hockey|basketball|jazz|soufflé|souffle|oven|band|football|chess/i);
+    expect(breaksDomainLock(s!.line, "baseball")).toBe(false);
+    expect(breaksDomainLock("Using your hockey example, who owns the first response?", "baseball")).toBe(true);
+    expect(breaksDomainLock("Like a souffle out of the oven that collapsed.", "baseball")).toBe(true);
+    expect(DOMAIN_LOCK_RULE).toMatch(/never substitute/i);
+    expect(domainFor(extractReferences(conversation([["customer", listenerExample("ambushed").prospectUtterance]]))[0])).toBeUndefined();
+  });
+
+  it("suggestReuse prefers the more significant of two references that match the same concept", () => {
+    // Relay first, then hockey said three times: both carry coordination; hockey outweighs.
+    const t = conversation(
+      [
+        ["customer", "After six it's like a relay where nobody's holding the baton and the lead just sits there."],
+        ["customer", hockey],
+        ["customer", "Hockey, every single night."],
+        ["customer", "A hockey team with no goalie."],
+      ],
+      4,
+      [laterOwnership()],
+    );
+    const refs = extractReferences(t);
+    expect(refs.map((r) => r.semantics.sourceDomain)).toEqual(["relay", "hockey"]);
+    expect(significance(refs[1])).toBeGreaterThan(significance(refs[0]));
+    const s = suggestReuse(refs, t[t.length - 1], "qualified");
+    expect(s?.referenceId).toBe(refs[1].identity.referenceId);
+    expect(s?.line).toMatch(/hockey example/);
+    // Equal weight keeps transcript order: the earlier one speaks.
+    const single = conversation([["customer", "After six it's like a relay where nobody's holding the baton and the lead just sits there."], ["customer", hockey]], 4, [laterOwnership()]);
+    const sr = extractReferences(single);
+    expect(significance(sr[0])).toBe(significance(sr[1]));
+    expect(suggestReuse(sr, single[single.length - 1], "qualified")?.referenceId).toBe(sr[0].identity.referenceId);
+  });
+
+  it("is deterministic: counts, significance, and vocabulary repeat byte for byte", () => {
+    const t = baseballCall();
+    const a = extractReferences(t, { tenantId: "t", conversationId: "c" });
+    const b = extractReferences(t, { tenantId: "t", conversationId: "c" });
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    expect(a.map(significance)).toEqual(b.map(significance));
+    expect(JSON.stringify(vocabulary(t))).toBe(JSON.stringify(vocabulary(t)));
+  });
+
+  it("the listener rules name repetition, the domain lock, and vocabulary", () => {
+    expect(LISTENER_RULES.some((r) => /repetition raises weight; first mention already counts/i.test(r))).toBe(true);
+    expect(LISTENER_RULES.some((r) => /speak their domain; never substitute another analogy or synonym/i.test(r))).toBe(true);
+    expect(LISTENER_RULES.some((r) => /vocabulary is theirs, ranked by count; rep words never count/i.test(r))).toBe(true);
   });
 });

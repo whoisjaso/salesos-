@@ -16,6 +16,10 @@
  * - Reuse retrieves by concept, never by matching nouns. Abstaining is valid.
  * - A suggestion never proposes price, discount, guarantee, or contract terms.
  * - Rejected, dismissed, and invalidated references are never suggested.
+ * - Repetition raises weight (significance); the first mention already counts. A plain re-mention
+ *   of the same domain or word by the customer is an occurrence with its own evidence span.
+ * - Domain lock: a suggestion speaks the prospect's own domain and never substitutes another.
+ * - Vocabulary is theirs: customer words used twice or more, ranked by count; rep words never count.
  */
 import type {
   MeaningStatus,
@@ -57,7 +61,27 @@ export interface ReuseSuggestion {
   concept: ConceptTag;
 }
 
-export const REFERENCE_EXTRACTOR_VERSION = "references-rules-1.0";
+export const REFERENCE_EXTRACTOR_VERSION = "references-rules-1.1";
+
+/** A distinctive word the customer used two or more times. Rep words never count. */
+export type VocabularyKind = "domain" | "value_word" | "outcome_label" | "emotion_word";
+
+export interface VocabularyEntry {
+  /** The customer's own surface form (the one they used most), inflections grouped. */
+  term: string;
+  /** Total customer occurrences across the transcript. */
+  count: number;
+  /** The distinct customer spans that carry the term, in transcript order. */
+  spans: TranscriptSpan[];
+  kind: VocabularyKind;
+}
+
+/**
+ * Domain lock (docs/DECISIONS.md "Word choice is significance"). A suggested line stays inside
+ * the reference's own analogy domain: baseball stays baseball, never hockey, basketball, jazz, or
+ * a soufflé, and never a generic synonym for the domain word.
+ */
+export const DOMAIN_LOCK_RULE = "Speak their domain: a suggested line uses the prospect's own analogy domain and never substitutes another analogy or a synonym for it.";
 
 // ---------- Detection tables ----------
 
@@ -185,6 +209,23 @@ function hasIdiom(text: string): boolean {
 function domainOf(text: string): string {
   for (const [re, label] of DOMAIN_LABEL) if (re.test(text)) return label;
   return "";
+}
+
+/** The pattern that names a domain in later speech: the label's own words, or the spoken noun. */
+function domainPattern(domain: string): RegExp {
+  const known = DOMAIN_LABEL.find(([, label]) => label === domain);
+  if (known) return known[0];
+  return new RegExp(`\\b${escapeRe(domain)}\\b`, "i");
+}
+
+/** True when a later customer turn uses the same expression or domain again, without a fresh comparison. */
+function mentionsAgain(ref: CitedReference, text: string): boolean {
+  const domain = ref.semantics.sourceDomain;
+  if (ref.semantics.kind === "analogy" && domain && domain !== "none") return domainPattern(domain).test(text);
+  const word = ref.semantics.kind === "personally_defined_term" ? ref.semantics.describedTarget : ref.evidence.exactExpression;
+  const head = word.split(/\s+/)[0] ?? "";
+  if (!head) return false;
+  return new RegExp(`\\b${escapeRe(head)}s?\\b`, "i").test(text);
 }
 
 /** The first plain noun after the article in "like a hockey team where ...". */
@@ -448,13 +489,22 @@ export function extractReferences(transcript: TranscriptSpan[], opts: ExtractOpt
     if (!Number.isFinite(span.startMs) || !Number.isFinite(span.endMs)) return;
     const candidates = [...analogyCandidates(span.text), ...emotionalCandidates(span.text), ...priorityCandidates(span.text)].sort((a, b) => a.offset - b.offset);
     const utteranceId = utteranceIdFor(conversationId, span);
+    // One occurrence per reference per turn, whether it arrives as a fresh comparison or a plain re-mention.
+    const countedThisTurn = new Set<string>();
+    const countAgain = (existing: CitedReference, key: string) => {
+      if (countedThisTurn.has(key)) return;
+      countedThisTurn.add(key);
+      existing.lifecycle.occurrenceCount += 1;
+      existing.lifecycle.lastObservedTurn = utteranceId;
+      if (!existing.spans.includes(span)) existing.spans.push(span);
+    };
     for (const c of candidates) {
       const existing = byKey.get(c.key);
       if (existing) {
-        existing.lifecycle.occurrenceCount += 1;
-        existing.lifecycle.lastObservedTurn = utteranceId;
+        countAgain(existing, c.key);
         continue;
       }
+      countedThisTurn.add(c.key);
       const origin = originOf(c, transcript, i, contextComplete);
       const concepts = conceptsOf(c.relationship, c.expression);
       const explained = c.meaningStatus === "confirmed" ? undefined : explanationFor(c, transcript, i, conversationId);
@@ -509,8 +559,185 @@ export function extractReferences(transcript: TranscriptSpan[], opts: ExtractOpt
       byKey.set(c.key, ref);
       out.push(ref);
     }
+    // Repetition raises weight: the same domain or word said again by the customer, in any form.
+    for (const [key, existing] of byKey) {
+      if (countedThisTurn.has(key) || existing.spans.includes(span)) continue;
+      if (mentionsAgain(existing, span.text)) countAgain(existing, key);
+    }
   });
   return out;
+}
+
+// ---------- Significance ----------
+
+/** Whether the record carries a relationship beyond the bare expression (the "where ..." clause, a contrast, or an explanation). */
+function hasRelationshipClause(r: Reference): boolean {
+  if (r.semantics.explainedMeaning) return true;
+  const rel = r.semantics.comparisonRelationship.trim().toLowerCase();
+  const expr = r.evidence.exactExpression.trim().toLowerCase();
+  if (r.semantics.kind === "analogy") return rel.length > 0 && rel !== expr;
+  if (r.semantics.kind === "personally_defined_term") return /distinguished from/i.test(rel);
+  return false;
+}
+
+/**
+ * How much the prospect's word choice weighs (docs/DECISIONS.md "Word choice is significance").
+ * Base 0.5 for a first mention; +0.15 per additional customer occurrence; +0.1 when the relationship
+ * clause is present; -0.3 when the seller introduced it; -0.5 when it is someone else's; 0 once rejected.
+ * Clamped to [0, 1]. Deterministic and pure.
+ */
+export function significance(reference: Reference): number {
+  if (reference.lifecycle.state === "rejected" || reference.reuse.reaction === "rejected") return 0;
+  let s = 0.5;
+  s += 0.15 * Math.max(0, reference.lifecycle.occurrenceCount - 1);
+  if (hasRelationshipClause(reference)) s += 0.1;
+  if (reference.semantics.origin === "seller_introduced_confirmed") s -= 0.3;
+  if (reference.semantics.origin === "third_party") s -= 0.5;
+  return Math.round(Math.min(1, Math.max(0, s)) * 1000) / 1000;
+}
+
+/** The analogy domain word (hockey, jazz, cooking, baseball, ...) when the reference has one. */
+export function domainFor(reference: Reference): string | undefined {
+  if (reference.semantics.kind !== "analogy") return undefined;
+  const d = reference.semantics.sourceDomain;
+  return d && d !== "none" ? d : undefined;
+}
+
+/** A line breaks the domain lock when it names a known analogy domain other than the reference's own. */
+export function breaksDomainLock(line: string, domain: string | undefined): boolean {
+  for (const [re, label] of DOMAIN_LABEL) {
+    if (label === domain) continue;
+    if (re.test(line)) return true;
+  }
+  return false;
+}
+
+// ---------- Vocabulary ----------
+
+/** Common English and business filler: never vocabulary, however often it is said. */
+const STOPLIST = new Set<string>(
+  `a about above after again against ago all almost along already also although always am among an and another any anybody anyone anything anyway anywhere are around as at away
+back bad be became because become been before behind being below best better between big both but by
+came can cannot come could day days did do does doing done down during each early either else end enough even ever every everybody everyone everything
+far few first five for four from front full get gets getting give given go goes going gone good got great
+had half has have having he hear heard her here hers herself him himself his honestly how however
+i if in inside instead into is it its itself just keep kept kind know knew last late later least less let like little long look looking lot lots
+made make makes making many may maybe me mean means might mine more morning most much must my myself
+near need needs never new next nine no nobody none nor not nothing now number of off often ok okay old on once one only onto or other others our ours out over own
+part per pretty put quite rather really right said same say says see seem seemed seems seen send sent set several she should side since six so some somebody someone something sometimes somewhere soon still such sure
+take taken takes talk talked tell ten than that the their theirs them themselves then there these they thing things think this those though three through thursday till time times to today together told tomorrow too took toward tried try twenty two
+under until up upon us use used using usually very want wants was way we week weekend weekends well went were what whatever when where whether which while who whole whom whose why will with within without won would
+yeah yes yet you your yours yourself yourselves
+monday tuesday wednesday friday saturday sunday january february march april june july august september october november december
+minute minutes hour hours second seconds night nights month months year years thirty forty fifty hundred thousand
+lead leads call calls calling called follow followup follow-up team teams price prices pricing cost costs fee fees month deal deals appointment appointments store stores rep reps sales system tool tools software vendor vendors people person customer customers business company website email text texts number numbers work works working manager partner guy guys thing stuff
+anyone anymore actually basically literally obviously exactly probably definitely kinda sorta gonna wanna maybe fine sure okay alright thanks thank please hi hello bye`
+    .split(/\s+/)
+    .filter(Boolean),
+);
+
+/** Result nouns a customer attaches to what they want. Small open list; phrases first. */
+const OUTCOME_LABELS: readonly string[] = [
+  "breathing room",
+  "peace of mind",
+  "more time",
+  "time back",
+  "my weekends",
+  "sleep at night",
+  "off my plate",
+  "headroom",
+  "runway",
+  "sanity",
+  "freedom",
+  "predictability",
+  "consistency",
+  "stability",
+  "visibility",
+  "control",
+];
+
+/** Emotionally specific words. Small open pattern, matched as whole words. */
+const EMOTION_WORDS = /^(frustrated|frustrating|frustration|worried|worry|worrying|excited|exciting|burned|burnt|stuck|exhausted|exhausting|nervous|anxious|tired|scared|angry|annoyed|annoying|overwhelmed|overwhelming|drowning|ambushed|blindsided|relieved|relief|confident|embarrassed|embarrassing|panicked|panic|dreading|dread|thrilled|furious|trapped|cornered)$/;
+
+/** Words that name a known analogy domain. */
+const DOMAIN_WORDS = new Set([
+  "hockey", "jazz", "soufflé", "souffle", "oven", "baking", "recipe", "kitchen", "cooking", "chef", "basketball", "football", "baseball", "soccer", "chess",
+  "garden", "gardening", "weeds", "planting", "construction", "contractor", "relay", "baton", "orchestra", "band", "choir", "racing", "fishing", "fish",
+]);
+
+/** Group inflections: profits/profit, margins/margin, worried/worry. Conservative, whole-word, ASCII suffixes only. */
+function stem(word: string): string {
+  let w = word;
+  if (w.length > 5 && w.endsWith("ies")) return w.slice(0, -3) + "y";
+  if (w.length > 5 && w.endsWith("ing")) w = w.slice(0, -3);
+  else if (w.length > 4 && w.endsWith("ed")) w = w.slice(0, -2);
+  else if (w.length > 4 && (w.endsWith("ses") || w.endsWith("xes") || w.endsWith("ches") || w.endsWith("shes"))) w = w.slice(0, -2);
+  else if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) w = w.slice(0, -1);
+  return w;
+}
+
+function kindOf(term: string, stemKey: string): VocabularyKind {
+  if (OUTCOME_LABELS.includes(term)) return "outcome_label";
+  if (EMOTION_WORDS.test(term) || EMOTION_WORDS.test(stemKey)) return "emotion_word";
+  if (DOMAIN_WORDS.has(term) || DOMAIN_WORDS.has(stemKey)) return "domain";
+  return "value_word";
+}
+
+interface VocabAcc {
+  key: string;
+  count: number;
+  firstAt: number;
+  spans: TranscriptSpan[];
+  forms: Map<string, number>;
+  kind: VocabularyKind;
+}
+
+/**
+ * The prospect's vocabulary: distinctive customer words used two or more times, stoplist excluded,
+ * inflections grouped, ranked by count then first occurrence. At most 8. Rep words never count.
+ * Outcome labels (breathing room, peace of mind, more time) are matched as phrases before single words.
+ */
+export function vocabulary(transcript: TranscriptSpan[]): VocabularyEntry[] {
+  const acc = new Map<string, VocabAcc>();
+  let order = 0;
+  const hit = (key: string, form: string, span: TranscriptSpan, kind: VocabularyKind) => {
+    const at = order++;
+    let a = acc.get(key);
+    if (!a) {
+      a = { key, count: 0, firstAt: at, spans: [], forms: new Map(), kind };
+      acc.set(key, a);
+    }
+    a.count += 1;
+    a.forms.set(form, (a.forms.get(form) ?? 0) + 1);
+    if (!a.spans.includes(span)) a.spans.push(span);
+  };
+  for (const span of transcript) {
+    if (span.speaker !== "customer" || typeof span.text !== "string") continue;
+    let text = span.text.toLowerCase();
+    for (const phrase of OUTCOME_LABELS) {
+      if (!phrase.includes(" ")) continue;
+      const re = new RegExp(`\\b${escapeRe(phrase)}\\b`, "g");
+      const times = text.match(re)?.length ?? 0;
+      for (let k = 0; k < times; k++) hit(phrase, phrase, span, "outcome_label");
+      if (times > 0) text = text.replace(re, " ");
+    }
+    const words = text.replace(/[^\p{L}\p{N}'-]+/gu, " ").split(/\s+/).map((w) => w.replace(/^['-]+|['-]+$/g, "")).filter(Boolean);
+    for (const w of words) {
+      if (w.length < 4 || /\d/.test(w) || w.includes("'") || STOPLIST.has(w)) continue;
+      const key = stem(w);
+      if (STOPLIST.has(key)) continue;
+      hit(key, w, span, kindOf(w, key));
+    }
+  }
+  return [...acc.values()]
+    .filter((a) => a.count >= 2)
+    .sort((a, b) => b.count - a.count || a.firstAt - b.firstAt)
+    .slice(0, 8)
+    .map((a) => {
+      const term = [...a.forms.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))[0][0];
+      const kind = a.kind === "value_word" ? kindOf(term, a.key) : a.kind;
+      return { term, count: a.count, spans: a.spans, kind };
+    });
 }
 
 /** Concept tags for a reference, read from its relationship and expression. */
@@ -569,6 +796,8 @@ export function suggestReuse(references: readonly Reference[], currentTurn: Tran
   const wanted = conceptsInTurn(currentTurn.text);
   if (wanted.length === 0) return null;
   if (stage === "contacted" && wanted.every((t) => t === "priority")) return null;
+  // Several references can match the concept; the most significant one speaks. Ties keep transcript order.
+  let best: { suggestion: ReuseSuggestion; weight: number } | undefined;
   for (const r of references) {
     if (!reusable(r)) continue;
     const own = utteranceIdFor(r.identity.conversationId, currentTurn);
@@ -581,9 +810,12 @@ export function suggestReuse(references: readonly Reference[], currentTurn: Tran
     if (!concept) continue;
     const line = lineFor(r, concept);
     if (!line || FORBIDDEN_SUGGESTION.test(line)) continue;
-    return { referenceId: r.identity.referenceId, line, concept };
+    // Domain lock: the line stays in the prospect's own domain, never another analogy.
+    if (breaksDomainLock(line, domainFor(r))) continue;
+    const weight = significance(r);
+    if (!best || weight > best.weight) best = { suggestion: { referenceId: r.identity.referenceId, line, concept }, weight };
   }
-  return null;
+  return best?.suggestion ?? null;
 }
 
 // ---------- Lifecycle ----------

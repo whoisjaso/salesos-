@@ -310,6 +310,9 @@ export const LISTENER_RULES: readonly string[] = [
   "A correction or transcript retraction visibly invalidates a pinned card; it never stays silently available as valid coaching context.",
   "Reference memory is conversation-scoped by default. Saving to a persistent profile is an explicit user action that keeps evidence, status and date. A temporary analogy never becomes a permanent personality trait.",
   "Never invent timestamps. Use turn times only when the transcript supplied them.",
+  "Repetition raises weight; first mention already counts. A prospect could have said anything and said it that way; said again, it is their language.",
+  "Speak their domain; never substitute another analogy or synonym. Baseball stays baseball, not hockey, basketball, or jazz.",
+  "Vocabulary is theirs, ranked by count; rep words never count. The count is shown, never a score.",
 ];
 
 export interface PersonalMeaningListener {

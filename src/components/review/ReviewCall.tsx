@@ -19,6 +19,7 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/Button";
+import { ConfidenceDot, ReadBar } from "@/components/workspace/BriefSheet";
 import { Sheet } from "@/components/ui/Sheet";
 import { Surface } from "@/components/ui/Surface";
 import { cn } from "@/lib/cn";
@@ -32,6 +33,7 @@ import {
   isGoodExample,
   NEVER_LINE,
   policyWithDisputes,
+  READ_CAPTION,
   type Moment,
   type MomentKind,
   type Review,
@@ -284,6 +286,70 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
               </ul>
             </section>
           ) : null}
+
+          {/* ----- Buyer mode: nine rows, the approach, the read. Labels, not sentences. ----- */}
+          <section className="flex flex-col gap-2" aria-label="Buyer mode" data-testid="review-buyer-mode">
+            <span className="section-label">Buyer mode</span>
+            <ul className="flex flex-col">
+              {review.buyerMode.rows.map((r) => {
+                const target = r.spanIndexes[0];
+                const inner = (
+                  <>
+                    <span className={cn("min-w-0 flex-1 truncate text-[13.5px]", r.known ? "text-fg" : "text-fg-subtle")}>{r.label}</span>
+                    <span className={cn("text-[13.5px]", r.known ? "font-semibold text-fg" : "text-fg-subtle")}>{r.value}</span>
+                    <ConfidenceDot confident={r.confident} className={r.known ? undefined : "opacity-40"} />
+                  </>
+                );
+                return (
+                  <li key={r.dimension} data-testid="buyer-mode-row" data-known={r.known}>
+                    {target !== undefined ? (
+                      <button type="button" onClick={() => jumpFromSheet(target)} className="-mx-1 flex h-9 w-full items-center gap-2 rounded-md px-1 text-left hover:bg-hover" aria-label={`${r.label}, ${r.value}, go to ${clock(transcript[target]?.startMs ?? 0)}`}>
+                        {inner}
+                      </button>
+                    ) : (
+                      <div className="flex h-9 items-center gap-2">{inner}</div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            {review.buyerMode.approach.length > 0 ? (
+              <div className="flex flex-col gap-1">
+                <span className="section-label">Approach</span>
+                <ul className="flex flex-col gap-1" data-testid="review-approach">
+                  {review.buyerMode.approach.map((line) => (
+                    <li key={line} className="flex items-start gap-2 text-[13.5px] leading-snug text-fg">
+                      <Sparkle size={13} weight="bold" aria-hidden className="mt-[3px] shrink-0 text-fg-subtle" />
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {review.buyerMode.read.length > 0 ? (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="section-label">Read</span>
+                  <span className="text-[11px] text-fg-subtle">{READ_CAPTION}</span>
+                </div>
+                <ul className="flex flex-col">
+                  {review.buyerMode.read.map((r) => {
+                    const target = r.spanIndexes[0];
+                    return (
+                      <li key={r.name} data-testid="review-read-row">
+                        <button type="button" onClick={() => target !== undefined && jumpFromSheet(target)} className="-mx-1 flex h-9 w-full items-center gap-3 rounded-md px-1 text-left hover:bg-hover">
+                          <span className="tabular w-[132px] shrink-0 truncate text-[13.5px] text-fg">
+                            {r.label} <span className="text-fg-muted">{r.percent}%</span>
+                          </span>
+                          <ReadBar percent={r.percent} />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
+          </section>
 
           <section className="flex flex-col gap-1" aria-label="Extracted">
             <span className="section-label">Extracted</span>

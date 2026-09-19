@@ -670,6 +670,28 @@ export function generateObaviaDataset(seed = 20260918): DatasetWithPairs {
     }
   }
 
+  // One short confirmation call before a booked closer demo (transcript in src/fixtures/calls.ts, call_089c):
+  // the setter confirms the slot and hears how the customer decides. Feeds the Buyer Mode card on the brief.
+  const confirmOpp = b.opportunities.find((o) => o.opportunityId === "opp_089");
+  if (confirmOpp) {
+    b.calls.push({
+      tenantId: TENANT_ID,
+      callId: "call_089c",
+      opportunityId: confirmOpp.opportunityId,
+      userId: SETTERS[0],
+      direction: "outbound",
+      providerCallId: `pc_${seed}_089c`,
+      transportState: "ended",
+      startedAt: iso(NOW_MS - DAY - 2 * HOUR),
+      endedAt: iso(NOW_MS - DAY - 2 * HOUR + 96_000),
+      durationSeconds: 96,
+      interpretedOutcome: "meaningful_interaction",
+      outcomeConfirmedBy: "policy",
+      evidenceRefs: ["ev_call_089c"],
+    });
+    if (confirmOpp.contactState === "none") confirmOpp.contactState = "two_way_contact";
+  }
+
   // Open tasks covering every TaskPriorityReason kind.
   const openForm = b.opportunities.filter((o) => o.commercialStatus === "open" && o.entryPath === "form_entry");
   const upcomingInst = b.appointmentInstances.find((i) => i.outcome === "scheduled");

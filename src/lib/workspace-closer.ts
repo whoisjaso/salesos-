@@ -18,7 +18,23 @@ import type {
   QualificationAssessment,
   Task,
 } from "@/domain/types";
+import {
+  BUYER_MODE_LABEL,
+  CONFIDENT,
+  emptyBuyerMode,
+  inferArchetypes,
+  inferBuyerMode,
+  knownDimensions,
+  mergeArchetypeRead,
+  mergeBuyerMode,
+  type ArchetypeRead,
+  type BuyerMode,
+  type BuyerModeDimension,
+} from "@/domain/buyerMode";
+import type { TranscriptSpan } from "@/domain/callIntelligence";
 import type { Dataset } from "@/domain/metrics";
+import { lensByName } from "@/content/lenses";
+import { transcriptFor } from "@/fixtures/calls";
 import { netCollected, opportunityAttributedTo } from "@/domain/metrics";
 import type { EvidenceLabel } from "./workspace-setter";
 import { contactFor, humanizeKey, languageLabel, latestAssessment, profileFor, submissionFor } from "./workspace-setter";
@@ -74,11 +90,52 @@ export interface FitChip {
   evidence: EvidenceLabel;
 }
 
+/** One known dimension on the brief: "Decision speed: Fast", a dot, the cited words on tap. */
+export interface BuyerModeBriefRow {
+  dimension: BuyerModeDimension;
+  label: string;
+  value: string;
+  /** 0..1 */
+  confidence: number;
+  /** Filled dot at or above CONFIDENT. */
+  confident: boolean;
+  /** The customer's own words, exactly as spoken. */
+  quotes: string[];
+}
+
+/** One line of the archetype read on the brief: label, percent, a slim bar, the cited words on tap. */
+export interface ReadBriefRow {
+  name: ArchetypeRead["name"];
+  label: string;
+  /** 0..100, rounded. */
+  percent: number;
+  quotes: string[];
+}
+
+/**
+ * The Buyer mode card: the top three known dimensions, the approach lines, the read, and the
+ * communication preferences folded in as evidence. `empty` shows one dim "No signal yet" row.
+ */
+export interface BuyerModeCard {
+  rows: BuyerModeBriefRow[];
+  approach: string[];
+  read: ReadBriefRow[];
+  evidence: BriefRow[];
+  /** Ended calls with a transcript that fed the card. */
+  callIds: Id[];
+  empty: boolean;
+}
+
+export const NO_SIGNAL_WORD = "No signal yet";
+export const MAX_BRIEF_DIMENSIONS = 3;
+
 export interface CloserBrief {
   rows: BriefRow[];
   fit: FitChip[];
   unknowns: string[];
+  /** Kept for callers that list preferences alone; the brief shows them inside `buyerMode.evidence`. */
   preferences: BriefRow[];
+  buyerMode: BuyerModeCard;
   lensHypothesis?: LensName;
   nextQuestion?: string;
   assessment?: QualificationAssessment;
@@ -125,8 +182,39 @@ export function buildCloserBrief(dataset: Dataset, item: UpcomingAppointment, of
   for (const p of profile?.observedPreferences ?? []) preferences.push({ label: "Observed", text: p.text, evidence: p.confirmed ? "Verified" : "AI-proposed" });
 
   const lens = profile?.lenses.find((l) => l.status !== "contradicted");
+  const buyerMode = buildBuyerModeCard(dataset, opp.opportunityId, preferences);
 
-  return { rows, fit, unknowns, preferences, lensHypothesis: lens?.name, nextQuestion: assessment?.nextQuestion, assessment };
+  return { rows, fit, unknowns, preferences, buyerMode, lensHypothesis: lens?.name, nextQuestion: assessment?.nextQuestion, assessment };
+}
+
+/** Ended calls on the opportunity that have a transcript, oldest first, so evidence accumulates in order. */
+export function transcriptsFor(dataset: Dataset, opportunityId: Id): { callId: Id; transcript: TranscriptSpan[] }[] {
+  return dataset.calls
+    .filter((c) => c.opportunityId === opportunityId && c.transportState === "ended")
+    .sort((a, b) => Date.parse(a.startedAt ?? "0") - Date.parse(b.startedAt ?? "0"))
+    .map((c) => ({ callId: c.callId, transcript: transcriptFor(c.callId) }))
+    .filter((x): x is { callId: Id; transcript: TranscriptSpan[] } => Boolean(x.transcript));
+}
+
+/**
+ * Buyer mode for the opportunity: inferBuyerMode over every ended call with a transcript, merged
+ * so evidence accumulates, plus the communication profile's stated preferences. Pure over the dataset.
+ */
+export function buildBuyerModeCard(dataset: Dataset, opportunityId: Id, evidence: BriefRow[] = []): BuyerModeCard {
+  const profile = profileFor(dataset, opportunityId);
+  const calls = transcriptsFor(dataset, opportunityId);
+  let mode: BuyerMode = calls.length === 0 && profile ? inferBuyerMode([], profile) : emptyBuyerMode();
+  let read: ArchetypeRead[] = calls.length === 0 && profile ? inferArchetypes([], profile) : [];
+  for (const { transcript } of calls) {
+    mode = mergeBuyerMode(mode, inferBuyerMode(transcript, profile));
+    read = mergeArchetypeRead(read, inferArchetypes(transcript, profile));
+  }
+  const rows: BuyerModeBriefRow[] = knownDimensions(mode).slice(0, MAX_BRIEF_DIMENSIONS).map((dimension) => {
+    const v = mode[dimension];
+    return { dimension, label: BUYER_MODE_LABEL[dimension], value: v.value, confidence: v.confidence, confident: v.confidence >= CONFIDENT, quotes: v.spans.map((s) => s.text.trim()) };
+  });
+  const readRows: ReadBriefRow[] = read.map((r) => ({ name: r.name, label: lensByName[r.name]?.label ?? r.name, percent: Math.round(r.probability * 100), quotes: r.spans.map((s) => s.text.trim()) }));
+  return { rows, approach: mode.approach, read: readRows, evidence, callIds: calls.map((c) => c.callId), empty: rows.length === 0 && readRows.length === 0 };
 }
 
 // ---------- Copilot ----------

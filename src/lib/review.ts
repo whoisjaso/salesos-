@@ -19,7 +19,9 @@ import {
   type TranscriptSpan,
   type ValidationResult,
 } from "@/domain/callIntelligence";
+import { BUYER_MODE_DIMENSIONS, BUYER_MODE_LABEL, UNKNOWN_VALUE, emptyBuyerMode, isConfident, type ArchetypeRead, type BuyerMode, type BuyerModeDimension } from "@/domain/buyerMode";
 import { RulesCoachingEngine } from "@/domain/coaching";
+import { lensByName } from "@/content/lenses";
 import { MEANING_WORD, ORIGIN_WORD, reject, suggestReuse, type CitedReference } from "@/domain/references";
 import type { Call, CallInterpretedOutcome, CoachingRecommendation, Contact, DomainEvent, Id, Opportunity, User } from "@/domain/types";
 import { NOW, obaviaDataset } from "@/fixtures/obavia";
@@ -106,6 +108,42 @@ export interface Angle {
   line: string;
 }
 
+/** One buyer mode dimension as the Details sheet shows it: a label, a value word, a dot. */
+export interface BuyerModeRow {
+  dimension: BuyerModeDimension;
+  label: string;
+  value: string;
+  /** 0..1 */
+  confidence: number;
+  /** Filled dot at or above CONFIDENT. */
+  confident: boolean;
+  /** False for Unknown: the row is dimmed and cites nothing. */
+  known: boolean;
+  /** Indexes into `transcript`. Empty for Unknown. */
+  spanIndexes: number[];
+}
+
+/** One line of the archetype read: "Competence 72%", a slim bar, the cited words on tap. */
+export interface ReadRow {
+  name: ArchetypeRead["name"];
+  label: string;
+  /** 0..100, rounded. */
+  percent: number;
+  spanIndexes: number[];
+}
+
+export interface BuyerModeView {
+  rows: BuyerModeRow[];
+  /** Up to six imperative lines. */
+  approach: string[];
+  /** Up to four lines, strongest first. */
+  read: ReadRow[];
+  /** True when every dimension is Unknown and the read is empty. */
+  empty: boolean;
+}
+
+export const READ_CAPTION = "what we believe, and how strongly";
+
 export interface Review {
   call: Call;
   contact: Contact;
@@ -125,6 +163,8 @@ export interface Review {
   feedback: FeedbackCard[];
   /** Their words, in transcript order. */
   references: ReferenceView[];
+  /** Buyer mode: nine rows, the approach, the read. */
+  buyerMode: BuyerModeView;
 }
 
 export interface ReviewRow {
@@ -451,6 +491,18 @@ export function angleFor(review: Review, rejected: ReadonlySet<string> = new Set
   return undefined;
 }
 
+/** Nine rows in dimension order; a dimension the extraction did not fill reads Unknown. */
+export function buildBuyerModeView(mode: BuyerMode | undefined, read: ArchetypeRead[] | undefined, transcript: TranscriptSpan[]): BuyerModeView {
+  const m = mode ?? emptyBuyerMode();
+  const rows: BuyerModeRow[] = BUYER_MODE_DIMENSIONS.map((dimension) => {
+    const v = m[dimension];
+    const known = v.value !== UNKNOWN_VALUE;
+    return { dimension, label: BUYER_MODE_LABEL[dimension], value: v.value, confidence: v.confidence, confident: isConfident(v), known, spanIndexes: known ? indexes(transcript, v.spans) : [] };
+  });
+  const readRows: ReadRow[] = (read ?? []).map((r) => ({ name: r.name, label: lensByName[r.name]?.label ?? r.name, percent: Math.round(r.probability * 100), spanIndexes: indexes(transcript, r.spans) }));
+  return { rows, approach: m.approach ?? [], read: readRows, empty: rows.every((r) => !r.known) && readRows.length === 0 };
+}
+
 function buildCitations(fields: ExtractedField[]): Map<number, string[]> {
   const map = new Map<number, string[]>();
   for (const f of fields) {
@@ -473,7 +525,8 @@ export function buildReview(callId: Id): Review | undefined {
   const contact = opportunity && dataset.contacts.find((c) => c.contactId === opportunity.primaryContactId);
   if (!opportunity || !rep || !contact) return undefined;
 
-  const extraction = intelligence.extract({ callId, opportunityId: opportunity.opportunityId, transcript, offerFitKeys: OFFER_FIT_KEYS, tenantId: call.tenantId });
+  const profile = dataset.communicationProfiles?.find((p) => p.opportunityId === opportunity.opportunityId);
+  const extraction = intelligence.extract({ callId, opportunityId: opportunity.opportunityId, transcript, offerFitKeys: OFFER_FIT_KEYS, tenantId: call.tenantId, profile });
   const validation = validateExtraction(extraction);
   const policy = applyExtractionPolicy(extraction, call, opportunity, { ...DEFAULT_EXTRACTION_POLICY, now: NOW });
   const recs = RulesCoachingEngine.recommend(dataset, rep.userId, NOW);
@@ -498,6 +551,7 @@ export function buildReview(callId: Id): Review | undefined {
     hero: heroFor(stages),
     feedback: buildFeedback(extraction, transcript),
     references: buildReferences(extraction, transcript),
+    buyerMode: buildBuyerModeView(extraction.buyerMode, extraction.archetypeRead, transcript),
   };
 }
 

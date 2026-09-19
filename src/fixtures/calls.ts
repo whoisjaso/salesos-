@@ -12,6 +12,8 @@
  * - call_008: voicemail, rep leaves a message (setter Tomasz).
  * - call_016: meaningful, unresolved stakeholder ("my partner handles that") (setter Tomasz).
  * - call_010: meaningful, price objection the rep answers without a discount (closer Marcus).
+ * - call_089c: short confirmation call before Marcus's demo with Svetlana Esposito (setter Tomasz):
+ *   numbers first, fast decision, partner sits in. Feeds the Buyer Mode card on the closer brief.
  *
  * Three prospect-originated expressions for the Personal Meaning Listener (src/domain/references.ts):
  * call_005 "like a jazz band where everybody wants to play a solo" with a later "text robot" concern;
@@ -152,16 +154,36 @@ const PRICE: Line[] = [
   ["rep", "Thanks, Bartholomew.", 2],
 ];
 
+/** call_089c: Tomasz (setter) confirms Svetlana Esposito's booked demo, Iron Horse Auto Mall. 15 turns. */
+const CONFIRM: Line[] = [
+  ["rep", "Svetlana, Tomasz with Obavia. You booked a demo with Marcus for Wednesday afternoon. I'm calling to make sure the twenty minutes is worth your time. Do you have two minutes?", 10],
+  ["customer", "Two minutes, sure. We're short-staffed today, so keep it quick.", 5],
+  ["rep", "You wrote that internet leads get lost after the first call. What happens to them now?", 6],
+  ["customer", "The BDC calls once, logs it, and moves on. We get about two hundred leads a month and I'd guess half never hear from us twice.", 10],
+  ["rep", "So the second touch is the gap. What would you want Marcus to cover first?", 5],
+  ["customer", "Send me the numbers first. What one store did in the first sixty days, appointments and sold units. I don't need the slideshow.", 10],
+  ["rep", "He'll open with those. Anything else?", 3],
+  ["customer", "How fast can we start if it makes sense? We've got a tent sale the first week of October and I want more leads worked before then.", 9],
+  ["rep", "Setup is inside a week once you sign. Marcus can confirm that on the call.", 5],
+  ["customer", "Good. My partner and I run the store together, so he'll sit in. I decide on the tools, he decides on the money.", 9],
+  ["rep", "Then the invite should go to both of you. Which email?", 4],
+  ["customer", "Mine, and I'll forward it. He doesn't check his.", 4],
+  ["rep", "Done. Wednesday at three thirty Eastern, Marcus, twenty minutes, numbers first.", 6],
+  ["customer", "Wednesday at three thirty. Talk then.", 3],
+  ["rep", "Thanks Svetlana.", 1],
+];
+
 /** Transcripts keyed by the callId they belong to in `obaviaDataset.calls`. */
 export const transcripts: Record<Id, TranscriptSpan[]> = {
   call_005: thread(BOOKS),
   call_008: thread(VOICEMAIL),
   call_016: thread(STAKEHOLDER),
   call_010: thread(PRICE),
+  call_089c: thread(CONFIRM),
 };
 
 /** Stable order for lists and tests: the booking call first. */
-export const TRANSCRIPT_CALL_IDS: Id[] = ["call_005", "call_008", "call_016", "call_010"];
+export const TRANSCRIPT_CALL_IDS: Id[] = ["call_005", "call_008", "call_016", "call_010", "call_089c"];
 
 export function transcriptFor(callId: Id): TranscriptSpan[] | undefined {
   return transcripts[callId];

@@ -62,6 +62,12 @@ What it never infers: biography, hobbies, injury history, gambling, trauma, hidd
 
 The six worked examples (hockey, jazz, soufflé, ambushed, basketball, profit) are fixtures with the expected capture and expected later suggestion, and the 20 acceptance expectations are typed with a deterministic or model-quality test kind.
 
+Word choice is significance (`docs/DECISIONS.md`). Three rules sit on top of the loop, all in `src/domain/references.ts`:
+
+- Repetition weighting: a first mention already counts (`significance` base 0.5); each further customer mention of the same expression or domain merges into the same reference, adds an evidence span, and raises the weight (+0.15 each, capped at 1.0). A stated relationship adds 0.1; seller-introduced lowers it by 0.3, third party by 0.5, rejected is 0. Cards order by significance; `suggestReuse` picks the most significant match.
+- Vocabulary: `vocabulary(transcript)` lists the customer's distinctive words used two or more times (inflections grouped, stoplist excluded, at most 8), typed as domain, value word, outcome label, or emotion word, ranked by count then first use. Rep words never count.
+- Domain lock (`DOMAIN_LOCK_RULE`): a suggested line stays inside the reference's own domain (`domainFor`). Baseball stays baseball; a line that names another analogy domain is dropped, never substituted.
+
 ## What stays study-only and why
 
 | Material | Why it stays out of live prompts |

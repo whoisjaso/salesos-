@@ -14,10 +14,24 @@
  * - The policy never emits payment, consent, or attendance events. Those come from providers.
  * - Transcript text is data. Nothing in it can authorize an action.
  */
+import {
+  BUYER_MODE_DIMENSIONS,
+  BUYER_MODE_VERSION,
+  LENS_NAMES,
+  MAX_APPROACH,
+  MAX_ARCHETYPE_READ,
+  emptyBuyerMode,
+  inferArchetypes,
+  inferBuyerMode,
+  validateArchetypeRead,
+  validateBuyerMode,
+  type ArchetypeRead,
+  type BuyerMode,
+} from "./buyerMode";
 import { createEvent } from "./events";
 import { buildSystemPrompt, type LensPack } from "./lens";
 import { extractReferences, type CitedReference } from "./references";
-import type { Call, CallInterpretedOutcome, DomainEvent, FitValue, Id, ISODateTime, Opportunity, Task } from "./types";
+import type { Call, CallInterpretedOutcome, CommunicationProfile, DomainEvent, FitValue, Id, ISODateTime, Opportunity, Task } from "./types";
 
 // ---------- Schema ----------
 
@@ -116,6 +130,16 @@ export interface CallExtraction {
    * Each cites the customer span it was read from. Default [].
    */
   references: CitedReference[];
+  /**
+   * How this customer decides, from their own words (src/domain/buyerMode.ts). Nine dimensions,
+   * each with a confidence and the customer spans it came from; absent reads as all Unknown.
+   */
+  buyerMode?: BuyerMode;
+  /**
+   * The archetype read: up to four lens hypotheses with the weight of the customer's words behind
+   * each (src/domain/buyerMode.ts). Shown as "Read", never as a type. Absent reads as none.
+   */
+  archetypeRead?: ArchetypeRead[];
   /** The lens pack version the extraction was made through, when a model ran. */
   lensVersion?: string;
 }
@@ -217,6 +241,9 @@ export function validateExtraction(x: CallExtraction): ValidationResult {
       if (expression?.trim() && !r.spans.some((s) => s.text.includes(expression))) errors.push(`references[${i}] quotes words that are not in its span`);
     }
   });
+  // Buyer mode and the archetype read: the customer's words only, every non-Unknown value cited.
+  if (x.buyerMode !== undefined) errors.push(...validateBuyerMode(x.buyerMode));
+  if (x.archetypeRead !== undefined) errors.push(...validateArchetypeRead(x.archetypeRead));
   return { ok: errors.length === 0, errors };
 }
 
@@ -230,6 +257,8 @@ export interface ExtractInput {
   offerFitKeys: string[];
   /** Stamped on reference identities when known. */
   tenantId?: Id;
+  /** The opportunity's communication profile, when one exists: its explicit preferences boost buyer mode. */
+  profile?: CommunicationProfile;
 }
 
 export interface CallIntelligence {
@@ -469,6 +498,10 @@ export class RuleBasedCallIntelligence implements CallIntelligence {
     // ----- Their words: first-mention references from customer turns only. -----
     const references = conversational ? extractReferences(spans, { tenantId: input.tenantId, conversationId: input.callId }) : [];
 
+    // ----- Buyer mode and the archetype read: customer turns only, Unknown when silent. -----
+    const buyerMode = conversational ? inferBuyerMode(spans, input.profile) : emptyBuyerMode();
+    const archetypeRead = conversational ? inferArchetypes(spans, input.profile) : [];
+
     // Unknown fit facts and an unknown next step are honest unknowns, not doubt about the
     // outcome. Uncertainty describes how sure the outcome assertion is.
     return {
@@ -489,6 +522,8 @@ export class RuleBasedCallIntelligence implements CallIntelligence {
       stageEvidence,
       feedback,
       references,
+      buyerMode,
+      archetypeRead,
     };
   }
 }
@@ -518,6 +553,8 @@ export class StubCallIntelligence implements CallIntelligence {
       stageEvidence: { contacted: [], qualified: [], buying: [], bought: [] },
       feedback: [],
       references: [],
+      buyerMode: emptyBuyerMode(),
+      archetypeRead: [],
     };
   }
 }
@@ -539,6 +576,7 @@ const SPAN_SCHEMA = {
   properties: { startMs: { type: "number" }, endMs: { type: "number" }, text: { type: "string" }, speaker: { enum: ["customer", "rep", "unknown"] } },
 };
 const SPANS = { type: "array", items: SPAN_SCHEMA };
+const BUYER_MODE_VALUE_SCHEMA = { type: "object", required: ["value", "confidence", "spans"], properties: { value: { type: "string" }, confidence: { type: "number", minimum: 0, maximum: 1 }, spans: SPANS } };
 
 /** JSON schema for the model's output. The wrapper fills callId, opportunityId, versions. */
 export const EXTRACTION_JSON_SCHEMA = {
@@ -558,6 +596,25 @@ export const EXTRACTION_JSON_SCHEMA = {
     feedback: { type: "array", maxItems: MAX_FEEDBACK, items: { type: "object", required: ["angle", "hint", "spans"], properties: { angle: { type: "string" }, hint: { type: "string" }, spans: SPANS } } },
     /** Optional: the prospect's own expressions, each citing a customer span. Validated like every other cited field. */
     references: { type: "array", items: { type: "object", required: ["identity", "evidence", "semantics", "lifecycle", "reuse", "spans"], properties: { spans: SPANS } } },
+    /**
+     * Optional: buyer mode, nine dimensions from the customer's own words. Value is a short word
+     * ("Unknown" with confidence 0 and no spans when the words are not there); every other value cites customer spans.
+     */
+    buyerMode: {
+      type: "object",
+      required: ["version", "approach", ...BUYER_MODE_DIMENSIONS],
+      properties: {
+        version: { const: BUYER_MODE_VERSION },
+        approach: { type: "array", maxItems: MAX_APPROACH, items: { type: "string" } },
+        ...Object.fromEntries(BUYER_MODE_DIMENSIONS.map((d) => [d, BUYER_MODE_VALUE_SCHEMA])),
+      },
+    },
+    /** Optional: the archetype read, at most four, probability descending, each citing customer spans. */
+    archetypeRead: {
+      type: "array",
+      maxItems: MAX_ARCHETYPE_READ,
+      items: { type: "object", required: ["name", "probability", "spans"], properties: { name: { enum: LENS_NAMES }, probability: { type: "number", minimum: 0, maximum: 1 }, spans: SPANS } },
+    },
   },
 } as const;
 
@@ -606,6 +663,9 @@ function coerceModelOutput(raw: unknown, input: ExtractInput, modelVersion: stri
     stageEvidence,
     feedback: (Array.isArray(r.feedback) ? r.feedback.slice(0, MAX_FEEDBACK) : []) as Feedback[],
     references: (Array.isArray(r.references) ? r.references.filter(isRecord) : []) as unknown as CitedReference[],
+    // Passed through as given; validateExtraction rejects any uncited value. Absent reads as all Unknown.
+    buyerMode: isRecord(r.buyerMode) ? (r.buyerMode as unknown as BuyerMode) : emptyBuyerMode(),
+    archetypeRead: Array.isArray(r.archetypeRead) ? (r.archetypeRead.filter(isRecord) as unknown as ArchetypeRead[]) : [],
     lensVersion,
   };
 }
@@ -639,7 +699,13 @@ export class ModelCallIntelligence implements AsyncCallIntelligence {
   }
 
   async extract(input: ExtractInput): Promise<CallExtraction> {
-    const user = JSON.stringify({ callId: input.callId, offerFitKeys: input.offerFitKeys, transcript: input.transcript });
+    const user = JSON.stringify({
+      callId: input.callId,
+      offerFitKeys: input.offerFitKeys,
+      transcript: input.transcript,
+      // The customer's own stated preferences (SOS-07), as data. Never a name, voice, or appearance.
+      customerStatedPreferences: (input.profile?.explicitPreferences ?? []).map((p) => p.text),
+    });
     let raw: unknown;
     try {
       raw = await this.model.complete({ system: this.system, user, schema: EXTRACTION_JSON_SCHEMA });
