@@ -39,10 +39,10 @@ export default defineConfig({
         ...devices["iPhone 14"],
         // Only Chromium is installed; keep the iPhone metrics but not its WebKit default.
         browserName: "chromium",
-        defaultBrowserType: "chromium",
         viewport: { width: 390, height: 844 },
         // Short timers in the call state machines (reducedMotion collapses the simulated provider delays).
-        reducedMotion: "reduce",
+        // Not a top-level test option, so it goes through contextOptions.
+        contextOptions: { reducedMotion: "reduce" },
       },
     },
     {

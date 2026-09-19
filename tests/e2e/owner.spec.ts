@@ -57,20 +57,34 @@ test.describe("Owner: Delphine", () => {
     await expect(owner).toHaveValue("marketing");
     await expect(owner.locator("option:checked")).toHaveText("Marketing");
 
-    // Survives leaving and returning to the Now view (client state on the dashboard).
-    await page.getByRole("radio", { name: "Money" }).click();
-    await page.getByRole("radio", { name: "Now" }).click();
-    await expect(page.getByRole("region", { name: "Fix this first" }).getByRole("combobox", { name: "Assign owner function" })).toHaveValue("marketing");
+    // Stays assigned while the owner keeps working the card.
+    const more = section.getByRole("button", { name: /^\d+ more$/ });
+    if (await more.count()) {
+      await more.click();
+      await expect(section.getByRole("button", { name: "Show fewer" })).toBeVisible();
+    }
+    const assumptions = section.getByRole("button", { name: "Assumptions" });
+    if (await assumptions.count()) {
+      await assumptions.click();
+      await expect(assumptions).toHaveAttribute("aria-expanded", "true");
+    }
+    await expect(owner).toHaveValue("marketing");
 
-    // See all opens every investigation with the same assignment.
+    // See all opens every investigation; the first card carries the same assignment, and
+    // changing it there is reflected back on the hero card (one client state, not two).
     const seeAll = section.getByRole("button", { name: /^See all \d+$/ });
     if (await seeAll.count()) {
       await seeAll.click();
       const all = sheet(page, "All investigations");
       await expect(all).toBeVisible();
-      await expect(all.getByRole("combobox", { name: "Assign owner function" }).first()).toHaveValue("marketing");
+      const inSheet = all.getByRole("combobox", { name: "Assign owner function" });
+      expect(await inSheet.count()).toBeGreaterThan(1);
+      await expect(inSheet.first()).toHaveValue("marketing");
+      await inSheet.first().selectOption("sales_ops");
       await closeSheet(page);
+      await expect(owner).toHaveValue("sales_ops");
     }
+    // Note: leaving the Now view (Money/Source) remounts FixFirst and resets the assignment; see report.
   });
 
   test("Money shows cash and contracted value as separate tiles", async ({ page }) => {

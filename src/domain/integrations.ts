@@ -11,11 +11,20 @@ import type { EntryPath, Id, ISODateTime } from "./types";
 export type AuthMethod = "oauth" | "api_key" | "webhook" | "none";
 export type Feed = "leads" | "bookings" | "calls" | "meetings" | "payments" | "messages" | "contracts";
 
+export type LogoMode = "mask" | "image" | "icon";
+
 export interface IntegrationProvider {
   providerId: string;
   name: string;
   category: "ads" | "social" | "calendar" | "forms_pages" | "crm" | "telephony" | "meetings" | "payments" | "automation" | "other";
   logoSlug: string; // simple-icons slug
+  /**
+   * Where the mark comes from when Simple Icons has none.
+   * mask: monochrome silhouette painted in brand color (Simple Icons default).
+   * image: full-color logo rendered as-is (official favicon or color SVG).
+   * icon: not a brand; render a generic Phosphor icon.
+   */
+  logo?: { mode: LogoMode; url?: string };
   brandColor: string; // hex, from simple-icons
   auth: AuthMethod;
   feeds: Feed[];
@@ -37,31 +46,36 @@ export const PROVIDERS: IntegrationProvider[] = [
   { providerId: "calendly", name: "Calendly", category: "calendar", logoSlug: "calendly", brandColor: "#006BFF", auth: "oauth", feeds: ["bookings"], entryPathDefault: "booked_entry", permissions: ["Read scheduled events", "Read invitee details"], setup: ["Tap Connect", "Approve in Calendly"], oneLiner: "Bookings go straight to a closer", popular: true },
   { providerId: "cal_com", name: "Cal.com", category: "calendar", logoSlug: "caldotcom", brandColor: "#292929", auth: "api_key", feeds: ["bookings"], entryPathDefault: "booked_entry", permissions: ["Read bookings"], setup: ["Paste API key", "Pick event types"], oneLiner: "Open-source scheduling, same result" },
   { providerId: "google_calendar", name: "Google Calendar", category: "calendar", logoSlug: "googlecalendar", brandColor: "#4285F4", auth: "oauth", feeds: ["bookings", "meetings"], entryPathDefault: "booked_entry", permissions: ["Read events", "Create appointments you book"], setup: ["Tap Connect", "Approve in Google"], oneLiner: "Your reps' calendars, live", popular: true },
-  { providerId: "gohighlevel", name: "GoHighLevel", category: "crm", logoSlug: "gohighlevel", brandColor: "#2C7BE5", auth: "oauth", feeds: ["leads", "bookings", "messages"], entryPathDefault: "form_entry", permissions: ["Read contacts and opportunities", "Read calendar bookings"], setup: ["Tap Connect", "Approve in GHL", "Pick a location"], oneLiner: "Funnels and bookings from GHL" },
+  { providerId: "gohighlevel", logo: { mode: "image", url: "https://www.google.com/s2/favicons?domain=gohighlevel.com&sz=128" }, name: "GoHighLevel", category: "crm", logoSlug: "gohighlevel", brandColor: "#2C7BE5", auth: "oauth", feeds: ["leads", "bookings", "messages"], entryPathDefault: "form_entry", permissions: ["Read contacts and opportunities", "Read calendar bookings"], setup: ["Tap Connect", "Approve in GHL", "Pick a location"], oneLiner: "Funnels and bookings from GHL" },
   { providerId: "hubspot", name: "HubSpot", category: "crm", logoSlug: "hubspot", brandColor: "#FF7A59", auth: "oauth", feeds: ["leads", "contracts"], entryPathDefault: "form_entry", permissions: ["Read contacts and forms", "Read deals"], setup: ["Tap Connect", "Approve in HubSpot"], oneLiner: "Forms and deals from HubSpot" },
   { providerId: "salesforce", name: "Salesforce", category: "crm", logoSlug: "salesforce", brandColor: "#00A1E0", auth: "oauth", feeds: ["leads", "contracts"], entryPathDefault: "form_entry", permissions: ["Read leads, contacts, and opportunities", "Read activities"], setup: ["Tap Connect", "Approve in Salesforce"], oneLiner: "Bring your Salesforce history over" },
-  { providerId: "pipedrive", name: "Pipedrive", category: "crm", logoSlug: "pipedrive", brandColor: "#017737", auth: "oauth", feeds: ["leads", "contracts"], entryPathDefault: "form_entry", permissions: ["Read persons and deals", "Read activities"], setup: ["Tap Connect", "Approve in Pipedrive"], oneLiner: "Persons and deals, synced" },
+  { providerId: "pipedrive", logo: { mode: "image", url: "https://www.google.com/s2/favicons?domain=pipedrive.com&sz=128" }, name: "Pipedrive", category: "crm", logoSlug: "pipedrive", brandColor: "#017737", auth: "oauth", feeds: ["leads", "contracts"], entryPathDefault: "form_entry", permissions: ["Read persons and deals", "Read activities"], setup: ["Tap Connect", "Approve in Pipedrive"], oneLiner: "Persons and deals, synced" },
   { providerId: "zoho", name: "Zoho CRM", category: "crm", logoSlug: "zoho", brandColor: "#E42527", auth: "oauth", feeds: ["leads", "calls", "contracts"], entryPathDefault: "form_entry", permissions: ["Read leads, contacts, and deals", "Read call logs"], setup: ["Tap Connect", "Approve in Zoho"], oneLiner: "Leads, deals, and calls from Zoho" },
-  { providerId: "close", name: "Close", category: "crm", logoSlug: "close", brandColor: "#1463FF", auth: "oauth", feeds: ["leads", "calls"], entryPathDefault: "form_entry", permissions: ["Read leads and opportunities", "Read call activity"], setup: ["Tap Connect", "Approve in Close"], oneLiner: "Leads and calls from Close" },
+  { providerId: "close", logo: { mode: "image", url: "https://cdn.jsdelivr.net/gh/gilbarbara/logos/logos/close.svg" }, name: "Close", category: "crm", logoSlug: "close", brandColor: "#1463FF", auth: "oauth", feeds: ["leads", "calls"], entryPathDefault: "form_entry", permissions: ["Read leads and opportunities", "Read call activity"], setup: ["Tap Connect", "Approve in Close"], oneLiner: "Leads and calls from Close" },
   { providerId: "typeform", name: "Typeform", category: "forms_pages", logoSlug: "typeform", brandColor: "#262627", auth: "oauth", feeds: ["leads"], entryPathDefault: "form_entry", permissions: ["Read form responses"], setup: ["Tap Connect", "Pick a form"], oneLiner: "Every response is a lead" },
   { providerId: "webflow", name: "Webflow", category: "forms_pages", logoSlug: "webflow", brandColor: "#146EF5", auth: "oauth", feeds: ["leads"], entryPathDefault: "form_entry", permissions: ["Read form submissions"], setup: ["Tap Connect", "Approve in Webflow", "Pick a site"], oneLiner: "Landing page forms, no code" },
-  { providerId: "clickfunnels", name: "ClickFunnels", category: "forms_pages", logoSlug: "clickfunnels", brandColor: "#1E63EF", auth: "webhook", feeds: ["leads"], entryPathDefault: "form_entry", permissions: ["Send opt-ins to Sales OS"], setup: ["Copy the webhook URL", "Paste in your funnel"], oneLiner: "VSL opt-ins in real time" },
+  { providerId: "clickfunnels", logo: { mode: "image", url: "https://www.google.com/s2/favicons?domain=clickfunnels.com&sz=128" }, name: "ClickFunnels", category: "forms_pages", logoSlug: "clickfunnels", brandColor: "#1E63EF", auth: "webhook", feeds: ["leads"], entryPathDefault: "form_entry", permissions: ["Send opt-ins to Sales OS"], setup: ["Copy the webhook URL", "Paste in your funnel"], oneLiner: "VSL opt-ins in real time" },
   { providerId: "landing_page", name: "Any landing page", category: "forms_pages", logoSlug: "html5", brandColor: "#E34F26", auth: "webhook", feeds: ["leads"], entryPathDefault: "form_entry", permissions: ["Send form posts to Sales OS"], setup: ["Copy one line of code", "Paste in your form"], oneLiner: "Works with any page or VSL", popular: true },
   { providerId: "twilio", name: "Twilio", category: "telephony", logoSlug: "twilio", brandColor: "#F22F46", auth: "api_key", feeds: ["calls", "messages"], entryPathDefault: "form_entry", permissions: ["Place and record calls from your number", "Send and receive texts"], setup: ["Paste account SID and token", "Pick your number"], oneLiner: "Your business number, in the dialer", popular: true },
   { providerId: "zoom", name: "Zoom", category: "meetings", logoSlug: "zoom", brandColor: "#0B5CFF", auth: "oauth", feeds: ["meetings"], entryPathDefault: "booked_entry", permissions: ["Read meeting participants and join times", "Read recordings you allow"], setup: ["Tap Connect", "Approve in Zoom"], oneLiner: "Proves who showed up" },
   { providerId: "google_meet", name: "Google Meet", category: "meetings", logoSlug: "googlemeet", brandColor: "#00897B", auth: "oauth", feeds: ["meetings"], entryPathDefault: "booked_entry", permissions: ["Read meeting attendance"], setup: ["Tap Connect", "Approve in Google"], oneLiner: "Attendance from Meet" },
   { providerId: "stripe", name: "Stripe", category: "payments", logoSlug: "stripe", brandColor: "#635BFF", auth: "oauth", feeds: ["payments"], entryPathDefault: "form_entry", permissions: ["Read payments, refunds, and disputes"], setup: ["Tap Connect", "Approve in Stripe"], oneLiner: "Cash in, refunds out, reconciled", popular: true },
-  { providerId: "docusign", name: "DocuSign", category: "other", logoSlug: "docusign", brandColor: "#FFB805", auth: "oauth", feeds: ["contracts"], entryPathDefault: "form_entry", permissions: ["Read envelope status"], setup: ["Tap Connect", "Approve in DocuSign"], oneLiner: "Signed means signed" },
+  { providerId: "docusign", logo: { mode: "image", url: "https://www.google.com/s2/favicons?domain=docusign.com&sz=128" }, name: "DocuSign", category: "other", logoSlug: "docusign", brandColor: "#FFB805", auth: "oauth", feeds: ["contracts"], entryPathDefault: "form_entry", permissions: ["Read envelope status"], setup: ["Tap Connect", "Approve in DocuSign"], oneLiner: "Signed means signed" },
   { providerId: "zapier", name: "Zapier", category: "automation", logoSlug: "zapier", brandColor: "#FF4F00", auth: "webhook", feeds: ["leads", "bookings"], entryPathDefault: "form_entry", permissions: ["Send any Zap to Sales OS"], setup: ["Copy the webhook URL", "Add a Webhooks step"], oneLiner: "Anything Zapier can reach" },
   { providerId: "make", name: "Make", category: "automation", logoSlug: "make", brandColor: "#6D00CC", auth: "webhook", feeds: ["leads", "bookings"], entryPathDefault: "form_entry", permissions: ["Send any scenario to Sales OS"], setup: ["Copy the webhook URL", "Add an HTTP module"], oneLiner: "Anything Make can reach" },
-  { providerId: "share_link", name: "Share link", category: "other", logoSlug: "link", brandColor: "#7BA4F0", auth: "none", feeds: ["leads"], entryPathDefault: "form_entry", permissions: [], setup: ["Copy your link", "Send it anywhere"], oneLiner: "Organic, referrals, walk-ins" },
+  { providerId: "share_link", logo: { mode: "icon" }, name: "Share link", category: "other", logoSlug: "link", brandColor: "#7BA4F0", auth: "none", feeds: ["leads"], entryPathDefault: "form_entry", permissions: [], setup: ["Copy your link", "Send it anywhere"], oneLiner: "Organic, referrals, walk-ins" },
   { providerId: "csv", name: "Spreadsheet", category: "other", logoSlug: "googlesheets", brandColor: "#34A853", auth: "none", feeds: ["leads"], entryPathDefault: "form_entry", permissions: [], setup: ["Upload a file", "Match the columns"], oneLiner: "Bring an old list in" },
 ];
 
 export const providerById = Object.fromEntries(PROVIDERS.map((p) => [p.providerId, p])) as Record<string, IntegrationProvider>;
 
 export function logoUrl(p: IntegrationProvider): string {
+  if (p.logo?.url) return p.logo.url;
   return `https://cdn.jsdelivr.net/npm/simple-icons@v13/icons/${p.logoSlug}.svg`;
+}
+
+export function logoMode(p: IntegrationProvider): LogoMode {
+  return p.logo?.mode ?? "mask";
 }
 
 export const CATEGORY_LABEL: Record<IntegrationProvider["category"], string> = {

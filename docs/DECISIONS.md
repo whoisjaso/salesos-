@@ -22,6 +22,8 @@ Owner decisions made during the build, in order. Each one updates the relevant s
 
 **OAuth first, always.** For every connection and every data transfer, the first option is Connect, authorize in the tool they already use, done. Files, API keys, and webhooks exist only for tools that offer no OAuth, and appear below the OAuth option, never beside it. Applies to Connect, Import, and any future sync. Implemented in `src/domain/crmSync.ts` and the Connect and Import screens.
 
+**Every brand gets its real logo.** Wherever another company is named, its actual mark is shown, never a letter tile. Simple Icons silhouettes painted in brand color where available; otherwise the official favicon or a color SVG rendered as-is. Generic items (share link, spreadsheet) use a neutral icon. Registry: `logo` override on each provider in `src/domain/integrations.ts`.
+
 **Bring existing data in without friction.** An Import flow matches an old CRM export or spreadsheet to our schema by header and value shape, with exact presets for HubSpot, GoHighLevel, Salesforce, Pipedrive, Zoho, Close, and Google Sheets. The owner reviews only the columns we are unsure about, sees a dry run before anything writes, and every imported record carries its source row. Imported consent never overwrites a newer opt-out. Implemented in `src/domain/migration.ts` and the owner `/import` screen.
 
 **Personality routing signals.** Customer's own words and texting style: allowed as hypotheses that a real exchange must confirm (SOS-07 lens library). One explicit question in the funnel ("Numbers first, or see how it works?") is the primary pairing signal. Profile-picture or appearance inference: rejected. Unreliable and a legal exposure; the spec already excludes it (SOS-07, SOS-23).

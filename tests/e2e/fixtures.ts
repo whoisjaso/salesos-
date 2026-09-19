@@ -22,7 +22,8 @@ export const SESSION_KEY = "sos-session";
  */
 export const test = base.extend<{ person: Person | null }>({
   person: [null, { option: true }],
-  page: async ({ page, person }, use) => {
+  // eslint flags a callback literally named `use` as a React hook; Playwright only cares about position.
+  page: async ({ page, person }, provide) => {
     await page.addInitScript(
       ({ key, session }) => {
         try {
@@ -34,7 +35,7 @@ export const test = base.extend<{ person: Person | null }>({
       },
       { key: SESSION_KEY, session: person },
     );
-    await use(page);
+    await provide(page);
   },
 });
 
