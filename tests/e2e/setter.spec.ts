@@ -35,7 +35,7 @@ test.describe("Setter: Tomasz", () => {
     await expect(page.getByRole("tab", { name: /^Queue \d+$/ })).toBeVisible();
   });
 
-  test("lead to handoff: call Desmond, confirm the AI summary, book, brief", async ({ page }) => {
+  test("lead to handoff: call Desmond, the transcript decides, book, brief", async ({ page }) => {
     await page.goto("/");
 
     // Pick the approved-reattempt row from the Queue.
@@ -62,18 +62,25 @@ test.describe("Setter: Tomasz", () => {
       .poll(() => page.evaluate(() => (window as unknown as { __providerStates: string[] }).__providerStates))
       .toEqual(["Reserving", "Ringing", "Connected"]);
 
-    // End the call: the model proposes, the rep confirms.
+    // End the call: the transcript decides and the dock is already the next step. No Confirm.
     await dock(page).click();
-    await expect(page.getByText("AI proposed")).toBeVisible();
-    await expect(dock(page)).toHaveText("Confirm");
-    // A reattempt simulates Voicemail; the rep corrects it to a real conversation so booking is possible.
-    await page.getByRole("button", { name: "Change" }).click();
+    const postcall = page.getByTestId("postcall");
+    await expect(postcall).toContainText("Transcript decided");
+    await expect(postcall.getByTestId("stage-strip")).toBeVisible();
+    await expect(postcall.getByTestId("stage-segment")).toHaveCount(4);
+    // A reattempt simulates Voicemail: next step callback, preselected on the dock.
+    await expect(postcall.getByTestId("next-step")).toHaveText("Callback");
+    await expect(dock(page)).toHaveText("Callback");
+    await expect(page.getByRole("button", { name: "Confirm", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Change", exact: true })).toHaveCount(0);
+
+    // Wrong? opens the dispute: the rep corrects it to a real conversation so booking is possible.
+    await postcall.getByTestId("wrong").click();
     const outcomes = page.getByRole("radiogroup", { name: "Outcome" });
     await expect(outcomes.getByRole("radio")).toHaveCount(4);
     await outcomes.getByRole("radio", { name: "Meaningful interaction" }).click();
     await expect(outcomes.getByRole("radio", { name: "Meaningful interaction" })).toHaveAttribute("aria-checked", "true");
-    await dock(page).click();
-    await expect(page.getByText("Meaningful interaction, confirmed")).toBeVisible();
+    await expect(postcall.getByTestId("next-step")).toHaveText("Book");
 
     // Book: first slot, confirm.
     await expect(dock(page)).toHaveText("Book");

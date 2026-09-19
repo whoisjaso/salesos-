@@ -61,6 +61,7 @@ Preserve what the user asked for, show where it is specified, and prevent a futu
 | Large earnings attract talent | Actual approved context may be shared under policy; no typical-earnings guarantee | 15, 19, 23 |
 | New, recurring, referral and backend revenue differ | Separate commercial categories and avoid double-counting | 05, 19 |
 | The source scaled with a small high-output team | Treat as a reported business example, not a staffing benchmark | 01, 21, 25 |
+| Rep confirms AI outcome | Superseded: the transcript decides with banded probabilities per stage (contacted, qualified, buying, bought; bands-1.0: 80 Yes, 63 Likely, 40 Unlikely, owner-set); stages move at the band, lean below it; dispute only, no confirm. Money, consent, attendance still from ledger and providers | `src/domain/callIntelligence.ts` (StageScores, BandPolicy, applyExtractionPolicy auto mode), `src/domain/lens.ts`, review screen (`src/lib/review.ts`, `src/components/review/`), setter post-call; owner decision in docs/DECISIONS.md |
 
 ## Important proposals, not approved facts
 

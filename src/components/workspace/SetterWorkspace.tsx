@@ -14,9 +14,11 @@ import {
   Phone,
   PhoneDisconnect,
   Prohibit,
+  Question,
   Sparkle,
   UserSound,
 } from "@phosphor-icons/react";
+import type { NextStepValue } from "@/domain/callIntelligence";
 import type { CallInterpretedOutcome, Contact, ConsentState, User } from "@/domain/types";
 import { obaviaDataset, NOW, CLOSERS } from "@/fixtures/obavia";
 import { Button } from "@/components/ui/Button";
@@ -30,11 +32,13 @@ import {
   DQ_REASONS,
   formatTimeIn,
   languageLabel,
+  nextStepFor,
   OUTCOME_LABEL,
   primaryLabel,
   priorRelationship,
   PROVIDER_FALLBACK,
-  simulatedOutcome,
+  simulatedPostCall,
+  simulatedStages,
   sourceLabel,
   TENANT_TZ,
   todayStrip,
@@ -44,23 +48,28 @@ import {
 import { computeGame } from "@/lib/workspace-game";
 import { useTenantData } from "@/lib/onboarding";
 import { SetterEmptyToday } from "@/components/onboarding/SetterEmptyToday";
-import { reviewHref } from "@/lib/review";
+import { NEXT_STEP_WORD, reviewHref, type StageView } from "@/lib/review";
+import { StageStrip } from "@/components/review/StageStrip";
 import { BookingSheet, type Booking } from "./BookingSheet";
 import { HandoffSheet } from "./HandoffSheet";
 import { GameStrip } from "./GameStrip";
 import { NextUp, initials } from "./NextUp";
 import { Segmented } from "./Segmented";
 
-type Phase = "idle" | "reserving" | "ringing" | "connected" | "summary" | "logging" | "next" | "dq" | "done" | "provider_failed";
+type Phase = "idle" | "reserving" | "ringing" | "connected" | "summary" | "logging" | "dq" | "done" | "provider_failed";
 type Segment = "now" | "queue";
 
 interface CallState {
   phase: Phase;
   proposed?: CallInterpretedOutcome;
   outcome?: CallInterpretedOutcome;
+  /** The next step the extraction chose. The dock is already set to it. */
+  nextStep?: NextStepValue;
+  stages?: StageView[];
   seconds: number;
   dqReason?: string;
   result?: string;
+  /** "Wrong?" was tapped: the outcome radios are open. */
   changing: boolean;
 }
 
@@ -172,14 +181,24 @@ export function SetterWorkspace({ userId }: { userId: string }) {
     });
   };
 
+  // The transcript decides: the simulated extraction applies itself and picks the next step.
   const endCall = () => {
     if (!active) return;
     clearTimers();
-    const proposed = simulatedOutcome(active.opportunity.opportunityId, active.priorAttempts);
-    setCall((c) => ({ ...c, phase: "summary", proposed, outcome: proposed }));
+    const sim = simulatedPostCall(active.opportunity.opportunityId, active.priorAttempts);
+    setCall((c) => ({ ...c, phase: "summary", proposed: sim.outcome, outcome: sim.outcome, nextStep: sim.nextStep, stages: sim.stages, changing: false }));
   };
 
-  const confirmOutcome = () => setCall((c) => (c.outcome ? { ...c, phase: "next", changing: false } : c));
+  /** A disputed or manually logged outcome recomputes the stages and the next step. */
+  const setOutcome = (outcome: CallInterpretedOutcome) => {
+    if (!active) return;
+    const id = active.opportunity.opportunityId;
+    setCall((c) => ({ ...c, outcome, nextStep: nextStepFor(outcome), stages: simulatedStages(outcome, id) }));
+  };
+
+  const logResult = () => setCall((c) => (c.outcome ? { ...c, phase: "summary", changing: false } : c));
+
+  const callback = () => finish(`Callback ${formatTimeIn(new Date(Date.parse(NOW) + 3 * 3_600_000).toISOString(), TENANT_TZ)}`);
 
   const finish = (result: string) => setCall((c) => ({ ...c, phase: "done", result }));
 
@@ -223,14 +242,21 @@ export function SetterWorkspace({ userId }: { userId: string }) {
       case "connected":
         return { label: "End call", onClick: endCall, icon: PhoneDisconnect };
       case "summary":
+        // Already set to the next step the extraction chose.
+        switch (call.nextStep) {
+          case "book":
+            return { label: "Book", onClick: () => setBookingOpen(true), icon: CalendarCheck };
+          case "dq_review":
+            return { label: "Review DQ", onClick: () => setCall((c) => ({ ...c, phase: "dq" })), icon: Prohibit };
+          case "callback":
+            return { label: "Callback", onClick: callback, icon: Clock };
+          default:
+            return { label: "Next", onClick: advance, icon: Check };
+        }
       case "logging":
-        return { label: "Confirm", onClick: confirmOutcome, disabled: !call.outcome, icon: Check };
+        return { label: "Log result", onClick: logResult, disabled: !call.outcome, icon: Check };
       case "provider_failed":
-        return { label: "Log result", onClick: () => setCall((c) => ({ ...c, phase: "logging", outcome: undefined })), icon: Check };
-      case "next":
-        return call.outcome === "meaningful_interaction"
-          ? { label: "Book", onClick: () => setBookingOpen(true), icon: CalendarCheck }
-          : { label: "Approved reattempt", onClick: () => finish(`Reattempt ${active.priorAttempts + 2} approved`), icon: ArrowCounterClockwise };
+        return { label: "Log result", onClick: () => setCall((c) => ({ ...c, phase: "logging", outcome: undefined, stages: undefined, nextStep: undefined })), icon: Check };
       case "dq":
         return { label: "Submit DQ", onClick: () => finish(`DQ: ${DQ_REASONS.find((r) => r.code === call.dqReason)?.label ?? ""}`), disabled: !call.dqReason, icon: Prohibit };
       case "done":
@@ -260,7 +286,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
                   exit={reduce ? undefined : { opacity: 0, y: -6 }}
                   transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                 >
-                  {!inFlow ? <HeroIdle item={active} expanded={expanded} onToggle={() => setExpanded((v) => !v)} /> : <HeroFlow item={active} call={call} setCall={setCall} booking={currentBooking} onHandoff={() => setHandoffOpen(true)} onBook={() => setBookingOpen(true)} handoff={handoffs[active.opportunity.opportunityId]} />}
+                  {!inFlow ? <HeroIdle item={active} expanded={expanded} onToggle={() => setExpanded((v) => !v)} /> : <HeroFlow item={active} call={call} setCall={setCall} setOutcome={setOutcome} onCallback={callback} booking={currentBooking} onHandoff={() => setHandoffOpen(true)} onBook={() => setBookingOpen(true)} handoff={handoffs[active.opportunity.opportunityId]} />}
                 </motion.div>
               ) : (
                 <motion.div key="empty" initial={false} className="flex h-[148px] flex-col items-center justify-center gap-2 text-center">
@@ -482,6 +508,8 @@ function HeroFlow({
   item,
   call,
   setCall,
+  setOutcome,
+  onCallback,
   booking,
   onHandoff,
   onBook,
@@ -490,6 +518,8 @@ function HeroFlow({
   item: SetterQueueItem;
   call: CallState;
   setCall: (fn: (c: CallState) => CallState) => void;
+  setOutcome: (o: CallInterpretedOutcome) => void;
+  onCallback: () => void;
   booking?: Booking;
   onHandoff: () => void;
   onBook: () => void;
@@ -533,17 +563,24 @@ function HeroFlow({
       ) : null}
 
       {call.phase === "summary" || call.phase === "logging" ? (
-        <div className="rounded-md border border-dashed border-line-strong p-3">
+        <div className="rounded-md border border-dashed border-line-strong p-3" data-testid="postcall">
           <div className="flex items-center justify-between">
             <span className="section-label inline-flex items-center gap-1 text-accent">
               <Sparkle size={11} weight="bold" aria-hidden />
-              {call.phase === "summary" ? "AI proposed" : "No AI evidence"}
+              {call.phase === "summary" ? "Transcript decided" : "No AI evidence"}
             </span>
-            {call.phase === "summary" ? <Button variant="ghost" size="sm" href={reviewHref(item.opportunity.opportunityId)} className="ml-auto mr-1 h-6 px-2 text-[12px]">Review</Button> : null}
-            {call.phase === "summary" && !call.changing ? (
-              <button type="button" onClick={() => setCall((c) => ({ ...c, changing: true }))} className="text-[12px] font-medium text-fg-muted underline-offset-2 hover:underline">
-                Change
-              </button>
+            {call.phase === "summary" ? (
+              <span className="flex items-center gap-1">
+                <Button variant="ghost" size="sm" href={reviewHref(item.opportunity.opportunityId)} className="h-6 px-2 text-[12px]">
+                  Review
+                </Button>
+                {!call.changing ? (
+                  <button type="button" onClick={() => setCall((c) => ({ ...c, changing: true }))} className="inline-flex h-6 items-center gap-1 px-1 text-[12px] font-medium text-fg-muted underline-offset-2 hover:underline" data-testid="wrong">
+                    <Question size={12} weight="bold" aria-hidden />
+                    Wrong?
+                  </button>
+                ) : null}
+              </span>
             ) : null}
           </div>
           {call.phase === "summary" && !call.changing ? (
@@ -556,7 +593,7 @@ function HeroFlow({
                   type="button"
                   role="radio"
                   aria-checked={call.outcome === o}
-                  onClick={() => setCall((c) => ({ ...c, outcome: o }))}
+                  onClick={() => setOutcome(o)}
                   className={cn("h-11 rounded-sm border px-3 text-left text-[14px] font-medium transition-colors motion-reduce:transition-none", call.outcome === o ? "border-accent bg-accent-soft text-fg" : "border-line-strong text-fg-muted hover:bg-hover")}
                 >
                   {OUTCOME_LABEL[o]}
@@ -564,23 +601,25 @@ function HeroFlow({
               ))}
             </div>
           )}
-        </div>
-      ) : null}
-
-      {call.phase === "next" ? (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-1.5 text-[13px] text-fg-muted">
-            <Check size={14} weight="bold" aria-hidden className="text-perf-strong" />
-            {OUTCOME_LABEL[call.outcome ?? "unknown"]}, confirmed
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="secondary" onClick={() => setCall((c) => ({ ...c, phase: "done", result: `Callback ${formatTimeIn(new Date(Date.parse(NOW) + 3 * 3_600_000).toISOString(), TENANT_TZ)}` }))} leading={<Clock size={16} weight="bold" />}>
-              Callback
-            </Button>
-            <Button variant="secondary" onClick={() => setCall((c) => ({ ...c, phase: "dq" }))} leading={<Prohibit size={16} weight="bold" />}>
-              Review DQ
-            </Button>
-          </div>
+          {call.stages ? <StageStrip stages={call.stages} compact className="mt-2" /> : null}
+          {call.phase === "summary" && call.nextStep && call.nextStep !== "none" ? (
+            <div className="mt-2 flex items-center gap-2 text-[13px]">
+              <span className="text-fg-muted">Next</span>
+              <span className="font-medium text-fg" data-testid="next-step">{NEXT_STEP_WORD[call.nextStep]}</span>
+              <span className="ml-auto flex items-center gap-1">
+                {call.nextStep !== "callback" ? (
+                  <Button variant="ghost" size="sm" onClick={onCallback} className="h-6 px-2 text-[12px]">
+                    Callback
+                  </Button>
+                ) : null}
+                {call.nextStep !== "dq_review" ? (
+                  <Button variant="ghost" size="sm" onClick={() => setCall((c) => ({ ...c, phase: "dq" }))} className="h-6 px-2 text-[12px]">
+                    DQ
+                  </Button>
+                ) : null}
+              </span>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

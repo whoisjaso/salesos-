@@ -39,7 +39,8 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/customer's own words/);
     expect(prompt).toMatch(/Never invent a price, a discount, consent, payment, or attendance/);
     expect(prompt).toMatch(/Output JSON only/);
-    expect(prompt).toContain("(none configured)");
+    expect(prompt).not.toContain("(none configured)");
+    expect(prompt).toContain("Impact Formula");
   });
 
   it("prints frameworks with their principles and do-nots when the owner adds them", () => {

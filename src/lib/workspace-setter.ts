@@ -17,7 +17,9 @@ import type {
   CommunicationProfile,
 } from "@/domain/types";
 import type { Dataset } from "@/domain/metrics";
+import { BAND_LABEL, bandFor, STAGE_KEYS, type NextStepValue, type StageKey } from "@/domain/callIntelligence";
 import { formatRelativeTime } from "@/lib/format";
+import { STAGE_WORD, type StageView } from "@/lib/review";
 
 export const TENANT_TZ = "America/New_York";
 export const BOOKING_TZ = "America/Chicago";
@@ -294,6 +296,58 @@ export function simulatedOutcome(opportunityId: Id, priorAttempts: number): Call
   for (const ch of opportunityId) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const r = h % 10;
   return r < 5 ? "meaningful_interaction" : r < 8 ? "voicemail" : "no_answer";
+}
+
+/** Deterministic stage scores and next step for the simulated call, so the post-call step auto-applies without a transcript. */
+export interface SimulatedPostCall {
+  outcome: CallInterpretedOutcome;
+  stages: StageView[];
+  nextStep: NextStepValue;
+}
+
+/** The next step the extraction picks for an outcome: book, callback, or DQ review. */
+export function nextStepFor(outcome: CallInterpretedOutcome): NextStepValue {
+  switch (outcome) {
+    case "meaningful_interaction":
+      return "book";
+    case "wrong_contact":
+      return "dq_review";
+    case "voicemail":
+    case "no_answer":
+      return "callback";
+    default:
+      return "none";
+  }
+}
+
+function hashOf(id: Id): number {
+  let h = 0;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h;
+}
+
+/** Stage scores under the default bands for a simulated outcome. No transcript, so no cited spans. */
+export function simulatedStages(outcome: CallInterpretedOutcome, opportunityId: Id): StageView[] {
+  const h = hashOf(opportunityId);
+  const scores: Record<StageKey, number> =
+    outcome === "meaningful_interaction"
+      ? (() => {
+          const qualified = 0.55 + (h % 30) / 100; // 0.55..0.84
+          return { contacted: 0.9, qualified, buying: Math.max(0, Math.round((qualified - 0.15) * 100) / 100), bought: 0 };
+        })()
+      : outcome === "voicemail" || outcome === "wrong_contact"
+        ? { contacted: 0.1, qualified: 0, buying: 0, bought: 0 }
+        : { contacted: 0, qualified: 0, buying: 0, bought: 0 };
+  return STAGE_KEYS.map((key) => {
+    const score = Math.round(scores[key] * 100) / 100;
+    const band = bandFor(score);
+    const cleared = band === "yes" || band === "likely";
+    return { key, label: STAGE_WORD[key], score, percent: Math.round(score * 100), band, bandLabel: BAND_LABEL[band], application: cleared ? "applied" : score > 0 ? "leaning" : "none", spanIndexes: [] };
+  });
+}
+
+export function simulatedPostCall(opportunityId: Id, priorAttempts: number, outcome = simulatedOutcome(opportunityId, priorAttempts)): SimulatedPostCall {
+  return { outcome, stages: simulatedStages(outcome, opportunityId), nextStep: nextStepFor(outcome) };
 }
 
 export const OUTCOME_LABEL: Record<CallInterpretedOutcome, string> = {
