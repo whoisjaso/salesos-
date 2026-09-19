@@ -21,7 +21,8 @@ export interface CountUpProps {
 export function CountUp({ value, format = formatCount, delay = 0, className }: CountUpProps) {
   const reduce = useReducedMotion();
   const ref = useRef<HTMLSpanElement>(null);
-  const mv = useMotionValue(value);
+  /** Normalized progress 0..1 so the spring settles in the same time for 21 and 68,600,000. */
+  const mv = useMotionValue(1);
   const previous = useRef<number | null>(null);
 
   useEffect(() => {
@@ -34,11 +35,11 @@ export function CountUp({ value, format = formatCount, delay = 0, className }: C
     }
     const from = previous.current ?? 0;
     previous.current = value;
-    mv.set(from);
-    const unsubscribe = mv.on("change", (v) => {
-      el.textContent = format(v);
+    mv.set(0);
+    const unsubscribe = mv.on("change", (p) => {
+      el.textContent = format(from + (value - from) * p);
     });
-    const controls = animate(mv, value, {
+    const controls = animate(mv, 1, {
       type: "spring",
       stiffness: 90,
       damping: 24,

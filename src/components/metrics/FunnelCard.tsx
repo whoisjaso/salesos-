@@ -47,7 +47,7 @@ export function FunnelCard({ stage, verdict, money, onOpen, delay = 0, className
           <CountUp value={stage.count} format={format} delay={delay} />
         </div>
         {money ? (
-          <div className="mt-2 inline-flex h-5 items-center rounded-[4px] bg-accent-soft px-1.5 text-[11px] font-medium text-accent">
+          <div className="mt-2 inline-flex h-5 max-w-full items-center whitespace-nowrap rounded-[4px] bg-accent-soft px-1.5 text-[11px] font-medium text-accent xl:px-1 xl:text-[10.5px]">
             {formatBasis(money.basis)}
           </div>
         ) : null}

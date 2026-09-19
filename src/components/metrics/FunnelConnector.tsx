@@ -58,8 +58,8 @@ export function FunnelConnector({ connector, orientation = "horizontal", onOpen,
   const label = (
     <span
       className={cn(
-        "inline-flex items-center gap-1 text-[11px] font-medium leading-tight",
-        !vertical && "max-w-[72px] justify-center text-center",
+        "inline-flex items-center gap-1 text-[11px] font-medium leading-[1.15]",
+        !vertical && "max-w-[72px] flex-col gap-0.5 text-center",
         TONE_TEXT[spec.tone],
       )}
     >
