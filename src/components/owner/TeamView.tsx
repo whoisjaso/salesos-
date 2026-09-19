@@ -1,65 +1,70 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
+import { Flame, Pause } from "@phosphor-icons/react";
 import { Surface } from "@/components/ui/Surface";
+import { ProgressRing } from "@/components/ui/ProgressRing";
 import { cn } from "@/lib/cn";
-import { formatCount, formatPercent } from "@/lib/format";
-import type { CapacityRow } from "@/lib/owner-model";
+import { formatCount } from "@/lib/format";
+import type { CapacityRow, PlayerRow } from "@/lib/owner-model";
 
-/** Per closer and setter: upcoming instances, open tasks, load bar. No ranking. */
-export function TeamView({ rows }: { rows: CapacityRow[] }) {
-  const reduce = useReducedMotion();
+export interface TeamViewProps {
+  players: PlayerRow[];
+  capacity: CapacityRow[];
+  seasonLabel: string;
+}
+
+/** One row per rep: name, level ring, streak. Load from the capacity model as a thin line. No ranking. */
+export function TeamView({ players, capacity, seasonLabel }: TeamViewProps) {
+  const loadOf = (userId: string) => capacity.find((c) => c.userId === userId);
   return (
-    <Surface padding="none">
-      <ul className="divide-y divide-line">
-        {rows.map((row, i) => {
-          const pct = Math.min(1, row.loadRatio);
-          const over = row.loadRatio > 1;
-          return (
-            <li key={row.userId} className="flex flex-col gap-2.5 px-4 py-3.5 sm:px-5">
-              <div className="flex items-center gap-3">
-                <span aria-hidden className="inline-grid h-8 w-8 shrink-0 place-items-center rounded-full bg-hover text-[12px] font-semibold text-fg-muted">
-                  {row.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
-                </span>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between text-[12px] text-fg-subtle">
+        <span>{seasonLabel}</span>
+        <span>Verified events only</span>
+      </div>
+      <Surface padding="none">
+        <ul className="divide-y divide-line">
+          {players.map((p) => {
+            const load = loadOf(p.userId);
+            const ratio = load ? Math.min(1, load.loadRatio) : 0;
+            return (
+              <li key={p.userId} className="relative flex items-center gap-4 px-4 py-3 sm:px-5">
+                <ProgressRing value={p.progress} size={44} strokeWidth={3} label={`${p.name}, level ${p.level}`} centerText={`L${p.level}`} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[14px] font-medium text-fg">{row.name}</div>
-                  <div className="text-[12px] capitalize text-fg-subtle">{row.role}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[14px] font-medium text-fg">{p.name}</span>
+                    {p.paused ? (
+                      <span className="inline-flex h-5 items-center gap-1 rounded-[4px] border border-dashed border-line-strong px-1.5 text-[11px] font-medium text-fg-muted">
+                        <Pause size={11} weight="bold" aria-hidden />
+                        Paused
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="text-[12px] capitalize text-fg-subtle">{p.role}</div>
                 </div>
-                <dl className="tabular flex shrink-0 items-baseline gap-4 text-[13px]">
-                  <div className="flex items-baseline gap-1">
-                    <dd className="font-semibold text-fg">{formatCount(row.upcomingInstances)}</dd>
-                    <dt className="text-[11px] text-fg-subtle">7d</dt>
-                  </div>
-                  <div className="flex items-baseline gap-1">
-                    <dd className="font-semibold text-fg">{formatCount(row.openTasks)}</dd>
-                    <dt className="text-[11px] text-fg-subtle">tasks</dt>
-                  </div>
-                  <div className="flex items-baseline gap-1">
-                    <dd className={cn("font-semibold", over ? "text-perf-attention" : "text-fg")}>{formatPercent(row.loadRatio, { digits: 0 })}</dd>
-                    <dt className="text-[11px] text-fg-subtle">load</dt>
-                  </div>
-                </dl>
-              </div>
-              <div
-                role="meter"
-                aria-label={`${row.name} load`}
-                aria-valuemin={0}
-                aria-valuemax={row.availableMinutes}
-                aria-valuenow={row.totalMinutes}
-                aria-valuetext={row.explanation}
-                className="h-1.5 w-full overflow-hidden rounded-full bg-hover"
-              >
-                <motion.div
-                  className={cn("h-full rounded-full", over ? "bg-perf-attention" : "bg-accent")}
-                  initial={reduce ? false : { width: 0 }}
-                  animate={{ width: `${pct * 100}%` }}
-                  transition={{ duration: 0.6, delay: 0.05 + i * 0.05, ease: [0.16, 1, 0.3, 1] }}
-                />
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </Surface>
+                <div className={cn("tabular inline-flex items-center gap-1.5 text-[15px] font-semibold", p.streakDays > 0 ? "text-fg" : "text-fg-subtle")} aria-label={`${p.streakDays} day streak`}>
+                  <Flame size={16} weight={p.streakDays > 0 ? "fill" : "regular"} aria-hidden className={p.streakDays > 0 ? "text-perf-attention" : "text-fg-faint"} />
+                  {formatCount(p.streakDays)}
+                  <span className="text-[11px] font-medium text-fg-subtle">d</span>
+                </div>
+                {load ? (
+                  <span
+                    role="meter"
+                    aria-label={`${p.name} load, next 7 days`}
+                    aria-valuemin={0}
+                    aria-valuemax={load.availableMinutes}
+                    aria-valuenow={load.totalMinutes}
+                    aria-valuetext={load.explanation}
+                    className="absolute inset-x-4 bottom-0 h-px bg-line sm:inset-x-5"
+                  >
+                    <span className="block h-full bg-accent" style={{ width: `${ratio * 100}%` }} />
+                  </span>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      </Surface>
+    </div>
   );
 }

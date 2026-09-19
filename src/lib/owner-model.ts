@@ -35,6 +35,7 @@ import {
 import { evaluate, defaultBenchmarkFor } from "@/domain/performance";
 import { buildBottleneckCards } from "@/domain/coaching";
 import { DEFAULT_CAPACITY_POLICY, estimateLoad, type CapacityPolicy } from "@/domain/routing";
+import { playerState } from "@/domain/game";
 import { formatAsOf, formatMoneyMinor, formatRelativeTime } from "@/lib/format";
 
 // ---------- Cohort keys ----------
@@ -86,6 +87,8 @@ export interface TrustItem {
   severity: TrustSeverity;
   /** Chip text, a few words. */
   label: string;
+  /** Phone text: the count or age only. */
+  short: string;
   /** Sheet title. */
   title: string;
   /** One sentence: which decisions this touches. */
@@ -126,6 +129,7 @@ export function buildTrustItems(dataset: Dataset, now: ISODateTime): TrustItem[]
       id: "freshness",
       severity,
       label: `Updated ${formatRelativeTime(new Date(latest).toISOString(), now)}`,
+      short: ageMinutes < 60 ? `${Math.round(ageMinutes)}m` : ageMinutes < 24 * 60 ? `${Math.round(ageMinutes / 60)}h` : `${Math.round(ageMinutes / 1440)}d`,
       title: "Data freshness",
       affected: severity === "info" ? "All feeds reported within the last hour." : "Rates and rankings use the last received record; recent activity may be missing.",
       records: feeds
@@ -143,6 +147,7 @@ export function buildTrustItems(dataset: Dataset, now: ISODateTime): TrustItem[]
       id: "attendance",
       severity: "warning",
       label: `${unresolved.length} unresolved attendance`,
+      short: String(unresolved.length),
       title: "Unresolved attendance",
       affected: "Show rate is a bound until these matured appointments have attendance evidence.",
       records: unresolved.map((i) => ({
@@ -159,6 +164,7 @@ export function buildTrustItems(dataset: Dataset, now: ISODateTime): TrustItem[]
       id: "unlinked",
       severity: "critical",
       label: `${unlinked.length} unlinked ${unlinked.length === 1 ? "payment" : "payments"}`,
+      short: String(unlinked.length),
       title: "Unlinked payments",
       affected: "Net collected cash is unreconciled until each payment maps to an opportunity.",
       records: unlinked.map((e) => ({
@@ -177,6 +183,7 @@ export function buildTrustItems(dataset: Dataset, now: ISODateTime): TrustItem[]
       id: "immature",
       severity: "info",
       label: `${immature.length} of ${opps.length} immature`,
+      short: String(immature.length),
       title: "Immature cohort",
       affected: `Assigned within the last ${horizon} days. Their outcomes are provisional, not zero.`,
       records: immature.map((o) => ({
@@ -422,6 +429,52 @@ export function buildCapacity(dataset: Dataset, now: ISODateTime, policy: Capaci
   return rows.sort((a, b) => (a.role === b.role ? 0 : a.role === "closer" ? -1 : 1));
 }
 
+// ---------- Team progression (SOS-15) ----------
+
+export interface PlayerRow {
+  userId: Id;
+  name: string;
+  role: "setter" | "closer";
+  level: number;
+  /** 0..1 within the current level. */
+  progress: number;
+  xp: number;
+  streakDays: number;
+  /** Quality gate paused the mechanic (opt-out, refund, dispute under review). */
+  paused: boolean;
+}
+
+/** Calendar month containing `now`, UTC. Seasons reset the display, not history. */
+export function seasonFor(now: ISODateTime): { from: ISODateTime; to: ISODateTime; label: string } {
+  const d = new Date(now);
+  const from = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+  const to = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+  const label = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(from);
+  return { from: from.toISOString(), to: to.toISOString(), label };
+}
+
+export function buildPlayers(dataset: Dataset, now: ISODateTime): PlayerRow[] {
+  const season = seasonFor(now);
+  const rows: PlayerRow[] = [];
+  for (const user of dataset.users) {
+    if (!user.active) continue;
+    const role = user.roles.includes("closer") ? "closer" : user.roles.includes("setter") ? "setter" : null;
+    if (!role) continue;
+    const state = playerState(dataset, user.userId, now, season);
+    rows.push({
+      userId: user.userId,
+      name: user.displayName,
+      role,
+      level: state.commercial.level,
+      progress: state.commercial.progress,
+      xp: state.commercial.xp,
+      streakDays: state.streakDays,
+      paused: state.gate.paused,
+    });
+  }
+  return rows.sort((a, b) => (a.role === b.role ? 0 : a.role === "closer" ? -1 : 1));
+}
+
 // ---------- Decision layer ----------
 
 export const STAGE_LABEL: Record<string, string> = {
@@ -459,6 +512,8 @@ export interface OwnerView {
   synthetic: boolean;
   trust: TrustItem[];
   capacity: CapacityRow[];
+  players: PlayerRow[];
+  seasonLabel: string;
   cohorts: Record<string, CohortView>;
 }
 
@@ -487,6 +542,8 @@ export function buildOwnerView(dataset: Dataset, now: ISODateTime): OwnerView {
     synthetic: dataset.synthetic ?? false,
     trust: buildTrustItems(dataset, now),
     capacity: buildCapacity(dataset, now),
+    players: buildPlayers(dataset, now),
+    seasonLabel: seasonFor(now).label,
     cohorts,
   };
 }

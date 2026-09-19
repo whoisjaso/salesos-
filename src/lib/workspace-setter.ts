@@ -9,6 +9,7 @@ import type {
   ISODateTime,
   Id,
   LeadSubmission,
+  LensName,
   Opportunity,
   QualificationAssessment,
   Task,
@@ -419,7 +420,7 @@ export interface HandoffBrief {
   questions: BriefLine[];
   commitments: BriefLine[];
   preferences: BriefLine[];
-  lensHypothesis?: string;
+  lensHypothesis?: LensName;
   missing: string[];
 }
 

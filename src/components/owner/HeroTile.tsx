@@ -23,6 +23,15 @@ const SHORT_LABEL: Record<string, string> = {
   won: "Won",
 };
 
+const PHONE_LABEL: Record<string, string> = {
+  assigned: "Leads",
+  two_way_contact: "Contact",
+  retained_booking: "Booked",
+  attended: "Shows",
+  perceived_qualified: "Fit",
+  won: "Won",
+};
+
 const SEGMENT_TONE: Record<PerformanceVerdict["state"], string> = {
   strong: "border-[color:var(--perf-strong-line)]",
   attention: "border-[color:var(--perf-attention-line)]",
@@ -60,7 +69,7 @@ export function HeroTile({ economics, flow, cohortLabel }: HeroTileProps) {
 
   return (
     <>
-      <Surface padding="lg" className="flex flex-col gap-5">
+      <Surface padding="md" className="flex flex-col gap-4 lg:gap-5 lg:p-6">
         <button
           type="button"
           onClick={() => sheet.open(metric, { verdict })}
@@ -71,7 +80,7 @@ export function HeroTile({ economics, flow, cohortLabel }: HeroTileProps) {
             <span className="text-[13px] font-medium text-fg-muted">Net collected per assigned opportunity</span>
             <CaretRight size={14} weight="bold" aria-hidden className="mt-0.5 shrink-0 text-fg-faint transition-colors group-hover:text-fg-muted" />
           </div>
-          <div className="tabular text-[44px] font-semibold leading-none tracking-tight text-fg sm:text-[52px]">
+          <div className="tabular text-[40px] font-semibold leading-none tracking-tight text-fg sm:text-[52px]">
             {metric.value === null ? (
               <span className="text-fg-muted">N/A</span>
             ) : (
@@ -92,7 +101,7 @@ export function HeroTile({ economics, flow, cohortLabel }: HeroTileProps) {
         </button>
 
         <div>
-          <ol className="flex w-full gap-1" aria-label="Funnel stages, tap for the full funnel">
+          <ol className="grid w-full grid-cols-6 gap-1" aria-label="Funnel stages, tap for the full funnel">
             {countStages.map((stage, i) => {
               const v = segmentVerdict(stage, i);
               const share = base > 0 ? stage.count / base : 0;
@@ -100,7 +109,6 @@ export function HeroTile({ economics, flow, cohortLabel }: HeroTileProps) {
                 <motion.li
                   key={stage.stageId}
                   className="min-w-0"
-                  style={{ flexGrow: 1 + share * 3, flexBasis: 0 }}
                   initial={reduce ? false : { opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.4, delay: 0.1 + i * 0.05, ease: [0.16, 1, 0.3, 1] }}
@@ -110,14 +118,19 @@ export function HeroTile({ economics, flow, cohortLabel }: HeroTileProps) {
                     onClick={() => setFunnelOpen(true)}
                     aria-label={`${stage.label}, ${formatCount(stage.count)}${stage.unknownCount ? `, ${stage.unknownCount} unknown` : ""}${v ? `, ${v.label}` : ""}. Open funnel.`}
                     className={cn(
-                      "flex h-14 w-full flex-col justify-between rounded-[6px] border bg-raised px-1.5 py-1.5 text-left transition-colors hover:bg-hover motion-reduce:transition-none",
+                      "relative flex h-14 w-full flex-col justify-between overflow-hidden rounded-[6px] border bg-raised px-1 py-1.5 text-left transition-colors hover:bg-hover motion-reduce:transition-none sm:px-2",
                       v ? SEGMENT_TONE[v.state] : "border-line-strong",
                     )}
                   >
-                    <span className="truncate text-[10.5px] font-medium leading-none text-fg-subtle">{SHORT_LABEL[stage.stageId]}</span>
-                    <span className="tabular truncate text-[15px] font-semibold leading-none text-fg">
+                    <span aria-hidden className="absolute inset-x-0 bottom-0 h-0.5 bg-line" />
+                    <span aria-hidden className="absolute bottom-0 left-0 h-0.5 bg-fg-faint" style={{ width: `${share * 100}%` }} />
+                    <span className="truncate text-[10px] font-medium leading-none text-fg-subtle sm:text-[11px]">
+                      <span className="sm:hidden">{PHONE_LABEL[stage.stageId]}</span>
+                      <span className="hidden sm:inline">{SHORT_LABEL[stage.stageId]}</span>
+                    </span>
+                    <span className="tabular truncate text-[14px] font-semibold leading-none text-fg sm:text-[16px]">
                       {formatCount(stage.count)}
-                      {stage.unknownCount ? <span className="text-[11px] font-medium text-fg-subtle">+{stage.unknownCount}?</span> : null}
+                      {stage.unknownCount ? <span className="text-[10px] font-medium text-fg-subtle sm:text-[11px]">+{stage.unknownCount}?</span> : null}
                     </span>
                   </button>
                 </motion.li>

@@ -39,7 +39,7 @@ export function TrustLine({ items }: { items: TrustItem[] }) {
         onClick={() => setOpen(true)}
         aria-label="Data trust. Open details."
         className={cn(
-          "surface flex h-11 w-full items-center gap-4 overflow-hidden px-4 text-left transition-colors hover:bg-hover motion-reduce:transition-none",
+          "surface flex h-11 w-full items-center justify-around gap-4 overflow-hidden px-4 text-left transition-colors hover:bg-hover motion-reduce:transition-none sm:justify-start",
           OUTLINE[worst],
         )}
       >
@@ -54,7 +54,8 @@ export function TrustLine({ items }: { items: TrustItem[] }) {
             return (
               <span key={item.id} className={cn("inline-flex min-w-0 items-center gap-1.5 text-[13px] font-medium", TONE[item.severity])}>
                 <Icon size={16} weight="bold" aria-hidden className="shrink-0" />
-                <span className="tabular truncate">{item.label}</span>
+                <span className="tabular sm:hidden">{item.short}</span>
+                <span className="tabular hidden truncate sm:inline">{item.label}</span>
               </span>
             );
           })

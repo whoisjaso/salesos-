@@ -12,6 +12,7 @@ import type {
   Id,
   LeadSubmission,
   LedgerEntry,
+  LensName,
   Offer,
   Opportunity,
   QualificationAssessment,
@@ -78,7 +79,7 @@ export interface CloserBrief {
   fit: FitChip[];
   unknowns: string[];
   preferences: BriefRow[];
-  lensHypothesis?: string;
+  lensHypothesis?: LensName;
   nextQuestion?: string;
   assessment?: QualificationAssessment;
 }

@@ -2,13 +2,16 @@
  * Pure helpers for the Team and Coach pages. No React, no fixtures baked in:
  * every function takes the dataset and `now` so the pages stay deterministic.
  */
-import type { CoachingRecommendation, ISODateTime, Id, Mission, SkillPath } from "@/domain/types";
+import type { CoachingRecommendation, ISODateTime, Id, LeaderboardRow, MetricId, Mission, SkillPath } from "@/domain/types";
 import type { Dataset } from "@/domain/metrics";
 import { computeMetric } from "@/domain/metrics";
 import { DEFAULT_LEADERBOARD_POLICY, type LeaderboardPolicy } from "@/domain/leaderboard";
 import { COACHING_ENGINE_VERSION, STAGE_ACTION_LIBRARY, sensitivityTable, type StageAction } from "@/domain/coaching";
 import { defaultSkillPaths, missionFromRecommendation, seasonFor } from "@/domain/gamification";
+import type { StageChampion } from "@/domain/game";
 import { fromDollars } from "@/domain/money";
+
+// ---------- Season and policy ----------
 
 /** Season window as the ranking period; the previous calendar month as the own-baseline prior period. */
 export function seasonPolicy(now: ISODateTime, overrides: Partial<LeaderboardPolicy> = {}): LeaderboardPolicy {
@@ -28,6 +31,16 @@ export function seasonPolicy(now: ISODateTime, overrides: Partial<LeaderboardPol
 /** Descriptive rebuild: pause lifted and the sample minimum relaxed so a rank can be shown at all. */
 export function descriptivePolicy(now: ISODateTime): LeaderboardPolicy {
   return seasonPolicy(now, { pauseOnUnresolvedData: false, minMaturedSample: 1, policyVersion: `${DEFAULT_LEADERBOARD_POLICY.policyVersion}-descriptive` });
+}
+
+/** "September 2026" without the display-layer suffix. */
+export function seasonTitle(now: ISODateTime): string {
+  return seasonFor(now).label.split(" season")[0];
+}
+
+export function seasonDaysLeft(now: ISODateTime): number {
+  const end = Date.parse(seasonFor(now).endsAt);
+  return Math.max(0, Math.ceil((end - Date.parse(now)) / 86_400_000));
 }
 
 export interface PauseConditions {
@@ -55,6 +68,118 @@ export function guardrailCounts(dataset: Dataset): GuardrailCounts {
   const refunds = dataset.ledger.filter((e) => e.kind === "refund" || e.kind === "dispute_debit").length;
   const complaintEvents = dataset.events?.filter((e) => e.eventType.includes("complaint")).length;
   return { optOuts, complaints: dataset.events ? (complaintEvents ?? 0) : null, refunds };
+}
+
+// ---------- Board helpers ----------
+
+/** Leaderboard rows only ever carry setter or closer; narrow the wider Role type. */
+export function rowRole(row: LeaderboardRow): "setter" | "closer" {
+  return row.role === "setter" ? "setter" : "closer";
+}
+
+export function initials(displayName: string): string {
+  const parts = displayName.split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "") + (parts[parts.length - 1]?.[0] ?? "")).toUpperCase();
+}
+
+export type Movement = "up" | "down" | "flat" | "none";
+
+/** Direction of the current value against the rep's own prior period. Never a rank animation. */
+export function movementOf(row: LeaderboardRow): Movement {
+  const cur = row.revenuePerLead.value;
+  const prior = row.priorPeriodRevenuePerLead;
+  if (cur === null || prior === null || prior === undefined) return "none";
+  if (cur > prior) return "up";
+  if (cur < prior) return "down";
+  return "flat";
+}
+
+// ---------- Stage champions ----------
+
+const STAGE_METRIC: { stageId: StageChampion["stageId"]; label: string; metricId: MetricId }[] = [
+  { stageId: "contact", label: "Contact", metricId: "M04" },
+  { stageId: "booked", label: "Booked", metricId: "M06" },
+  { stageId: "show", label: "Show", metricId: "M08" },
+  { stageId: "fit", label: "Fit", metricId: "M09" },
+  { stageId: "won", label: "Won", metricId: "M12" },
+  { stageId: "cash", label: "Cash", metricId: "M16" },
+];
+
+export const CHAMPION_MIN_DENOMINATOR = 10;
+
+export interface ChampionRow extends StageChampion {
+  metricId: MetricId;
+  leadTier?: number;
+  /** Money per unit for the cash stage; ratio otherwise. */
+  unit: "ratio" | "money_per_unit";
+  currency: string;
+}
+
+/**
+ * Leader per stage within the comparable tier: the role's largest tier group
+ * (ties go to the lower tier), highest rate wins, provisional under 10 in the denominator.
+ */
+export function stageChampions(dataset: Dataset, rows: LeaderboardRow[], policy: LeaderboardPolicy, now: ISODateTime): ChampionRow[] {
+  const groups = new Map<number | undefined, LeaderboardRow[]>();
+  for (const r of rows) groups.set(r.leadTier, [...(groups.get(r.leadTier) ?? []), r]);
+  let cohort: LeaderboardRow[] = [];
+  let tier: number | undefined;
+  for (const [t, members] of groups) {
+    if (members.length > cohort.length || (members.length === cohort.length && (t ?? 99) < (tier ?? 99))) {
+      cohort = members;
+      tier = t;
+    }
+  }
+  const currency = dataset.tenant.reportingCurrency;
+  return STAGE_METRIC.map(({ stageId, label, metricId }) => {
+    let best: { row: LeaderboardRow; value: number; numerator: number; denominator: number } | null = null;
+    for (const row of cohort) {
+      const m = computeMetric(metricId, dataset, { userId: row.userId, role: rowRole(row), from: policy.periodFrom, to: policy.periodTo }, now);
+      if (m.value === null) continue;
+      if (!best || m.value > best.value || (m.value === best.value && row.displayName.localeCompare(best.row.displayName) < 0)) {
+        best = { row, value: m.value, numerator: m.numerator, denominator: m.denominator };
+      }
+    }
+    const unit = metricId === "M16" ? "money_per_unit" : "ratio";
+    if (!best) {
+      return { stageId, label, metricId, userId: null, displayName: null, numerator: 0, denominator: 0, rate: null, provisional: true, reason: "No computable value in this cohort", leadTier: tier, unit, currency };
+    }
+    const small = best.denominator < CHAMPION_MIN_DENOMINATOR;
+    return {
+      stageId,
+      label,
+      metricId,
+      userId: best.row.userId,
+      displayName: best.row.displayName,
+      numerator: unit === "money_per_unit" ? Math.round(best.numerator) : best.numerator,
+      denominator: best.denominator,
+      rate: best.value,
+      provisional: small,
+      reason: small ? `${best.denominator} in the denominator, under ${CHAMPION_MIN_DENOMINATOR}` : undefined,
+      leadTier: tier,
+      unit,
+      currency,
+    };
+  });
+}
+
+// ---------- Missions and skill paths ----------
+
+/** Five-word proof rules per metric. The full evidence rule stays on the mission. */
+export const PROOF_SHORT: Partial<Record<MetricId, string>> = {
+  M03: "First attempt logged on time",
+  M04: "Confirmed conversation, not voicemail",
+  M06: "Agenda recorded, booking retained",
+  M07: "DQ sample annotated with evidence",
+  M08: "Provider-verified attendance, agenda recorded",
+  M09: "Fit rating with evidence refs",
+  M11: "Decision objective recorded, revisited",
+  M12: "Review documented, one behavior",
+  M16: "Payment confirmed in the ledger",
+};
+
+export function proofShort(metricId: MetricId): string {
+  return PROOF_SHORT[metricId] ?? "Linked evidence, manager reviewed";
 }
 
 /** Sum of accountable opportunities a rep has held in any role, for the optional private milestone. */
@@ -132,6 +257,8 @@ export function skillPathsForRep(dataset: Dataset, userId: Id): SkillPath[] {
   );
 }
 
+// ---------- Coach ----------
+
 /** SOS-16 worked base: 140 retained, 50% current, 20% downstream, $5,000 per win, 5% hypothetical. */
 export const SENSITIVITY_BASE = {
   eligible: 140,
@@ -152,6 +279,20 @@ export const STATE_LABEL: Record<RecommendationUiState, string> = {
   proposed: "Proposed",
   accepted: "Accepted",
   in_practice: "In practice",
+  evaluated: "Evaluated",
+};
+
+/** The next state a single button moves to; null once evaluated. */
+export function nextState(state: RecommendationUiState): RecommendationUiState | null {
+  const order: RecommendationUiState[] = ["proposed", "accepted", "in_practice", "evaluated"];
+  const i = order.indexOf(state);
+  return i < 0 || i === order.length - 1 ? null : order[i + 1];
+}
+
+export const NEXT_STATE_LABEL: Record<RecommendationUiState, string> = {
+  proposed: "Accept",
+  accepted: "Start practice",
+  in_practice: "Mark evaluated",
   evaluated: "Evaluated",
 };
 
