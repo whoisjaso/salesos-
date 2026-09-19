@@ -36,34 +36,54 @@ test.describe("Team and Me: Renata", () => {
     // Reps cannot fix the data from here (owner-only link).
     await expect(page.getByRole("link", { name: "Fix in Business" })).toHaveCount(0);
 
-    // Show ranks anyway: descriptive, numbered.
+    // Show ranks anyway: descriptive, numbered, labelled as such on every row and on my season chip.
     const toggle = page.getByRole("switch", { name: "Show ranks anyway" });
     await expect(toggle).toHaveAttribute("aria-checked", "false");
     await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-checked", "true");
     await expect(rankCells.first()).toBeVisible();
     await expect(rankCells.first()).toHaveText(/^\d+$/);
+    expect(await rankCells.count()).toBe(await board.getByRole("listitem").count());
     await expect(board.getByText("descriptive").first()).toBeVisible();
+    await expect(me).toContainText("descriptive");
     await expect(page.getByRole("region", { name: "Season" })).toContainText(/#\d+/);
+    await expect(page.getByRole("region", { name: "Season" })).toContainText("descriptive");
+    // Note: once ranks show, every row has a rank, so the paused banner (and its switch) unmounts.
+    // Reps cannot flip it back without a reload; see report.
+  });
+
+  test("owner sees the same paused board with a Fix in Business link", async ({ browser }) => {
+    const ctx = await browser.newContext();
+    await ctx.addInitScript((s) => window.localStorage.setItem("sos-session", JSON.stringify(s)), PEOPLE.owner);
+    const page = await ctx.newPage();
+    await page.goto("/team");
+    await expect(page.getByRole("region", { name: "Season" })).toContainText("Team,");
+    await expect(page.getByText(/^Ranking paused: /)).toContainText("unlinked payment");
+    await expect(page.getByRole("link", { name: "Fix in Business" })).toHaveAttribute("href", "/");
+    await expect(page.getByRole("radio", { name: "Missions" })).toHaveCount(0);
+    await ctx.close();
   });
 
   test("a row opens to its funnel and a correction request", async ({ page }) => {
     await page.goto("/team");
     const row = page.getByRole("list", { name: "Board" }).getByRole("listitem").filter({ hasText: "Renata Solís" });
     await row.getByRole("button", { name: /Renata Solís/ }).click();
-    await expect(row.getByText("Matured")).toBeVisible();
+    await expect(row.getByText("Matured", { exact: true })).toBeVisible();
+    await expect(row.getByText(/^\d+ of \d+$/)).toBeVisible();
     await row.getByRole("button", { name: "Request correction" }).click();
     await expect(row.getByText("Sent for review")).toBeVisible();
   });
 
   test("Me shows Level and one coaching card", async ({ page }) => {
     await page.goto("/me");
-    await expect(page.getByText(/^Level \d+$/).first()).toBeVisible();
-    await expect(page.locator('[aria-label^="Level "]').first()).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Renata Solís" })).toBeVisible();
+    await expect(page.getByText(/Level \d+/).first()).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: /^Level \d+, \d+% to next$/ })).toBeVisible();
     await expect(page.getByText(/XP to next|Max level/)).toBeVisible();
-    // One coaching card with a proposed recommendation and a metric.
-    const coaching = page.locator("article, section").filter({ hasText: /Proposed|Accepted|Why/ }).first();
-    await expect(coaching).toBeVisible();
+    await expect(page.getByText("Per opportunity")).toBeVisible();
+    // Exactly one coaching card: a proposal with Why and Premise is wrong.
+    await expect(page.getByText("Proposed", { exact: true })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Why", exact: true })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Premise is wrong" })).toHaveCount(1);
     await expect(page.getByText("Per attended appointment")).toBeVisible();
     await expect(page.getByRole("button", { name: "Playbook" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Not you?" })).toBeVisible();

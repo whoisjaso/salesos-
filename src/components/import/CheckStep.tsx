@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { DryRunReport } from "@/domain/migration";
+import type { DryRunReport, RowIssue } from "@/domain/migration";
 import { cn } from "@/lib/cn";
 import { formatCount, formatMoneyMinor } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
-import { issueRow, SEVERITY_LABEL, SEVERITY_ORDER, type IssueRow, type Severity } from "./import-model";
+import { errorRows, lineOf, SEVERITY_LABEL, SEVERITY_ORDER, type Severity } from "./import-model";
 
 export interface CheckStepProps {
   report: DryRunReport;
@@ -17,15 +17,14 @@ const VISIBLE = 20;
 
 export function CheckStep({ report, onImport }: CheckStepProps) {
   const [expanded, setExpanded] = useState(false);
-  const issues = useMemo(() => report.issues.map(issueRow), [report.issues]);
-  const grouped = useMemo(() => SEVERITY_ORDER.map((s) => ({ severity: s, items: issues.filter((i) => i.severity === s) })).filter((g) => g.items.length > 0), [issues]);
-  const errors = useMemo(() => new Set(issues.filter((i) => i.severity === "error").map((i) => i.row)).size, [issues]);
+  const grouped = useMemo(() => SEVERITY_ORDER.map((s) => ({ severity: s, items: report.issues.filter((i) => i.severity === s) })).filter((g) => g.items.length > 0), [report.issues]);
+  const errors = useMemo(() => errorRows(report.issues), [report.issues]);
   const total = report.rows;
-  const ready = Math.round(Math.max(0, Math.min(100, report.readyPercent <= 1 ? report.readyPercent * 100 : report.readyPercent)));
+  const ready = Math.round(Math.max(0, Math.min(100, report.readyPercent)));
   const keep = Math.max(0, total - errors);
 
-  let shown = 0;
-  const hiddenCount = Math.max(0, issues.length - VISIBLE);
+  const hiddenCount = Math.max(0, report.issues.length - VISIBLE);
+  const visible = useMemo(() => capGroups(grouped, expanded ? Infinity : VISIBLE), [grouped, expanded]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -49,27 +48,21 @@ export function CheckStep({ report, onImport }: CheckStepProps) {
 
       {grouped.length ? (
         <section aria-label="Issues" className="flex flex-col gap-4">
-          {grouped.map((g) => {
-            if (shown >= VISIBLE && !expanded) return null;
-            const room = expanded ? g.items.length : Math.max(0, VISIBLE - shown);
-            const items = g.items.slice(0, room);
-            shown += items.length;
-            return (
-              <div key={g.severity} className="flex flex-col gap-2">
-                <div className="flex items-baseline justify-between px-1">
-                  <h2 className={cn("text-[13px] font-medium", TONE[g.severity])}>{SEVERITY_LABEL[g.severity]}</h2>
-                  <span className="tabular text-[11.5px] text-fg-subtle">{formatCount(g.items.length)}</span>
-                </div>
-                <Surface padding="none">
-                  <ul className="divide-y divide-line">
-                    {items.map((i, idx) => (
-                      <IssueLine key={`${i.row}-${i.header}-${idx}`} i={i} />
-                    ))}
-                  </ul>
-                </Surface>
+          {visible.map((g) => (
+            <div key={g.severity} className="flex flex-col gap-2">
+              <div className="flex items-baseline justify-between px-1">
+                <h2 className={cn("text-[13px] font-medium", TONE[g.severity])}>{SEVERITY_LABEL[g.severity]}</h2>
+                <span className="tabular text-[11.5px] text-fg-subtle">{formatCount(grouped.find((x) => x.severity === g.severity)?.items.length ?? g.items.length)}</span>
               </div>
-            );
-          })}
+              <Surface padding="none">
+                <ul className="divide-y divide-line">
+                  {g.items.map((i, idx) => (
+                    <IssueLine key={`${i.row}-${i.header}-${idx}`} i={i} />
+                  ))}
+                </ul>
+              </Surface>
+            </div>
+          ))}
           {hiddenCount > 0 && !expanded ? (
             <Button variant="ghost" size="sm" onClick={() => setExpanded(true)} className="self-start">
               {formatCount(hiddenCount)} more
@@ -85,7 +78,24 @@ export function CheckStep({ report, onImport }: CheckStepProps) {
   );
 }
 
-const TONE: Record<Severity, string> = { error: "text-perf-issue", warning: "text-perf-attention", info: "text-fg-muted" };
+interface IssueGroup {
+  severity: Severity;
+  items: RowIssue[];
+}
+
+/** First `cap` issues across the groups, errors first. */
+function capGroups(groups: IssueGroup[], cap: number): IssueGroup[] {
+  const out: IssueGroup[] = [];
+  let room = cap;
+  for (const g of groups) {
+    const items = g.items.slice(0, Math.max(0, room));
+    room -= items.length;
+    if (items.length) out.push({ severity: g.severity, items });
+  }
+  return out;
+}
+
+const TONE: Record<Severity, string> ={ error: "text-perf-issue", warning: "text-perf-attention" };
 
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -99,13 +109,13 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
-function IssueLine({ i }: { i: IssueRow }) {
+function IssueLine({ i }: { i: RowIssue }) {
   return (
     <li className="flex items-start gap-3 px-4 py-2.5">
-      <span className="tabular mt-0.5 w-10 shrink-0 text-[12px] text-fg-subtle">{i.row ? `Row ${i.row}` : "File"}</span>
+      <span className="tabular mt-0.5 w-11 shrink-0 text-[12px] text-fg-subtle">Row {lineOf(i.row)}</span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-medium leading-tight text-fg">{i.header || i.problem}</span>
-        {i.header ? <span className="mt-0.5 block text-[12.5px] leading-snug text-fg-muted">{i.problem}</span> : null}
+        <span className="block truncate text-[13.5px] font-medium leading-tight text-fg">{i.header || "Row"}</span>
+        <span className="mt-0.5 block text-[12.5px] leading-snug text-fg-muted">{i.problem}</span>
         {i.value ? <span className="mt-0.5 block truncate font-mono text-[11.5px] text-fg-subtle">{i.value}</span> : null}
       </span>
     </li>

@@ -22,20 +22,31 @@ test.describe("Closer: Marcus", () => {
     const brief = sheet(page, "Brief");
     await expect(brief).toBeVisible();
     await expect(brief.getByText("Why you")).toBeVisible();
-    // The assignment explanation is a sentence, tagged Verified.
-    const why = brief.locator("div").filter({ has: page.getByText("Why you") }).last();
-    await expect(why).toContainText("Verified");
-    await expect(why.locator("p")).toHaveText(/\S+ \S+ \S+/);
+    // The assignment explanation is a sentence, tagged Verified, and never uses personality.
+    const why = brief.locator("div.py-2\\.5").filter({ hasText: "Why you" }).first();
+    await expect(why.getByText("Verified", { exact: true })).toBeVisible();
+    await expect(why.locator("p")).toHaveText(/^Assigned to .+; .+/);
+    await expect(why.locator("p")).toContainText("Personality information was not used");
 
+    // Every row carries provenance.
+    await expect(brief.getByText("Customer-stated").first()).toBeVisible();
+    await expect(brief.getByText("Verified", { exact: true }).first()).toBeVisible();
+    for (const row of ["Request", "Desired outcome", "Previous promises", "Offer version"]) {
+      await expect(brief.getByText(row, { exact: true })).toBeVisible();
+    }
+
+    // Fit: chips when assessed, an explicit "Not assessed" plus an Unknown otherwise. Never invented.
     await expect(brief.getByText("Verified fit")).toBeVisible();
-    const fitList = brief.locator("div").filter({ has: page.getByText("Verified fit", { exact: true }) }).last().getByRole("list");
-    const chips = fitList.getByRole("listitem");
-    await expect(chips.first()).toBeVisible();
-    expect(await chips.count()).toBeGreaterThan(0);
-    // Every chip carries a yes/partial/no verdict and a provenance tag.
-    for (const chip of await chips.all()) {
-      await expect(chip).toHaveText(/(yes|partial|no)/);
-      await expect(chip).toHaveText(/(Customer-stated|Verified|AI-proposed)/);
+    const fitBlock = brief.locator("div.py-2\\.5").filter({ hasText: "Verified fit" }).first();
+    const chips = fitBlock.getByRole("listitem");
+    if (await chips.count()) {
+      for (const chip of await chips.all()) {
+        await expect(chip).toHaveText(/(yes|partial|no)/);
+        await expect(chip).toHaveText(/(Customer-stated|Verified|AI-proposed)/);
+      }
+    } else {
+      await expect(fitBlock.getByText("Not assessed")).toBeVisible();
+      await expect(brief.getByRole("listitem").filter({ hasText: "Offer fit not assessed" })).toHaveCount(1);
     }
     await brief.getByRole("button", { name: "Ask for clarification" }).click();
     await expect(brief.getByRole("button", { name: "Clarification requested" })).toBeDisabled();
@@ -47,7 +58,8 @@ test.describe("Closer: Marcus", () => {
     const name = await page.getByRole("heading", { level: 2 }).first().innerText();
 
     await dock(page).click();
-    await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+    await expect(page.getByText(/^Connected/)).toBeVisible();
+    await expect(page.getByText("Provider", { exact: true })).toBeVisible();
     await expect(dock(page)).toHaveText("End call");
 
     const stages = page.getByRole("list", { name: "Stages" });
@@ -68,7 +80,7 @@ test.describe("Closer: Marcus", () => {
     await expect(page.getByText("Send proposal by Friday")).toBeVisible();
 
     await dock(page).click();
-    await expect(page.getByText("Ended", { exact: true })).toBeVisible();
+    await expect(page.getByText(/^Ended/)).toBeVisible();
     await expect(dock(page)).toHaveText("Save outcome");
     await expect(dock(page)).toBeDisabled();
     await page.getByRole("radio", { name: "Verbal yes" }).click();
@@ -84,7 +96,16 @@ test.describe("Closer: Marcus", () => {
     await expect(ladder.getByText("Now", { exact: true })).toHaveCount(1);
     const current = ladder.getByRole("listitem").filter({ hasText: "Now" });
     await expect(current).toHaveCount(1);
-    await expect(ladder.getByRole("listitem").filter({ hasText: "Collected" }).first()).toContainText("$0 collected");
+    await expect(current).toContainText("Verbal yes");
+    const steps = await ladder.getByRole("listitem").allInnerTexts();
+    expect(steps.map((s) => s.split("\n")[0])).toEqual(["Verbal yes", "Proposal sent", "Signed", "Payment authorized", "Collected", "Delivery accepted"]);
+
+    // Signed-unpaid rule: Collected shows "$0 collected" once signed with no ledger entry,
+    // and never a positive amount without a payment_collected entry. Before signing it shows no amount at all.
+    const collected = ladder.getByRole("listitem").filter({ hasText: "Collected" }).first();
+    const collectedText = (await collected.innerText()).replace(/\s+/g, " ").trim();
+    expect(collectedText === "Collected" || collectedText === "Collected $0 collected").toBe(true);
+    expect(collectedText).not.toMatch(/\$[1-9]/);
     await expect(dock(page)).toHaveText("Done");
 
     // The follow-up is a Due task in the queue.

@@ -2,27 +2,27 @@
 
 import { useMemo, useState } from "react";
 import { CaretDown } from "@phosphor-icons/react";
-import { PRESETS, type ColumnMapping, type ColumnProfile, type MappingPlan } from "@/domain/migration";
+import { PRESETS, type ColumnMapping, type ColumnProfile, type MappingPlan, type TargetField } from "@/domain/migration";
 import { cn } from "@/lib/cn";
 import { formatCount, formatFraction } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { ProgressRing } from "@/components/ui/ProgressRing";
 import { Surface } from "@/components/ui/Surface";
 import { LogoTile } from "@/components/connect/LogoTile";
-import { bestAlternative, confidencePercent, presetProvider, reviewHeaders, targetGroups, targetLabel } from "./import-model";
+import { bestAlternative, confidencePercent, IGNORE, presetProvider, reviewHeaders, targetGroups, targetLabel } from "./import-model";
 
 export interface MatchStepProps {
   fileName: string;
   rowCount: number;
   plan: MappingPlan;
   profiles: ColumnProfile[];
-  onChangeTarget: (header: string, target: string | null) => void;
+  onChangeTarget: (header: string, target: TargetField) => void;
   onNext: () => void;
 }
 
 export function MatchStep({ fileName, rowCount, plan, profiles, onChangeTarget, onNext }: MatchStepProps) {
   const [showAll, setShowAll] = useState(false);
-  const groups = useMemo(targetGroups, []);
+  const groups = useMemo(() => targetGroups(), []);
   const review = useMemo(() => reviewHeaders(plan), [plan]);
   const sampleOf = useMemo(() => new Map(profiles.map((p) => [p.header, p.sampleValues.filter(Boolean).slice(0, 2)])), [profiles]);
 
@@ -105,16 +105,16 @@ function CompactRow({ c }: { c: ColumnMapping }) {
   );
 }
 
-function TargetSelect({ header, value, groups, onChange }: { header: string; value: string | null; groups: ReturnType<typeof targetGroups>; onChange: (t: string | null) => void }) {
+function TargetSelect({ header, value, groups, onChange }: { header: string; value: TargetField; groups: ReturnType<typeof targetGroups>; onChange: (t: TargetField) => void }) {
   return (
     <div className="relative">
       <select
         aria-label={`Target for ${header}`}
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
         className="h-10 w-full appearance-none rounded-sm border border-line-strong bg-sunken pl-3 pr-9 text-[14px] text-fg focus:border-line-focus focus:outline-none"
       >
-        <option value="">Ignore</option>
+        <option value={IGNORE}>Ignore</option>
         {groups.map((g) => (
           <optgroup key={g.entity} label={g.label}>
             {g.fields.map((f) => (

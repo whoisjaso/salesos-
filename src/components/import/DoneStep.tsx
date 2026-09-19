@@ -7,7 +7,7 @@ import { PRESETS, type DryRunReport, type MappingPlan } from "@/domain/migration
 import { formatAsOf, formatCount } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
-import { targetLabel } from "./import-model";
+import { errorRows, IGNORE, targetLabel } from "./import-model";
 
 export interface DoneStepProps {
   fileName: string;
@@ -21,9 +21,9 @@ export interface DoneStepProps {
 export function DoneStep({ fileName, plan, report, at, onAgain }: DoneStepProps) {
   const reduce = useReducedMotion();
   const [receipt, setReceipt] = useState(false);
-  const skipped = report.issues.filter((i) => String((i as { severity?: unknown }).severity ?? "") === "error").length;
+  const skipped = errorRows(report.issues);
   const rowsIn = Math.max(0, report.rows - skipped);
-  const mapped = plan.columns.filter((c) => c.target);
+  const mapped = plan.columns.filter((c) => c.target !== IGNORE);
 
   return (
     <div className="flex flex-col items-center gap-6 pt-4 text-center">

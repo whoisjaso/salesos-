@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { applyManualMapping, detectPreset, dryRun, parseCsv, profileColumns, runImport, suggestMapping, type DryRunReport, type ImportResult, type MappingPlan } from "@/domain/migration";
+import { applyManualMapping, detectPreset, dryRun, parseCsv, profileColumns, runImport, suggestMapping, type DryRunReport, type ImportContext, type ImportResult, type MappingPlan, type TargetField } from "@/domain/migration";
 import type { IntakeContact } from "@/domain/intake";
 import { NOW, obaviaDataset, TENANT_ID } from "@/fixtures/obavia";
 import { useSession } from "@/lib/session";
@@ -36,7 +36,7 @@ interface Loaded {
   plan: MappingPlan;
 }
 
-const CTX = {
+const CTX: ImportContext = {
   tenantId: TENANT_ID,
   now: NOW,
   existingContacts: obaviaDataset.contacts as IntakeContact[],
@@ -63,8 +63,8 @@ function ImportBody() {
     setStep(2);
   }, []);
 
-  const onChangeTarget = useCallback((header: string, target: string | null) => {
-    setLoaded((l) => (l ? { ...l, plan: applyManualMapping(l.plan, header, target as string) } : l));
+  const onChangeTarget = useCallback((header: string, target: TargetField) => {
+    setLoaded((l) => (l ? { ...l, plan: applyManualMapping(l.plan, header, target) } : l));
   }, []);
 
   const onCheck = useCallback(() => {

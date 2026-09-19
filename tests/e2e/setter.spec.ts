@@ -54,7 +54,8 @@ test.describe("Setter: Tomasz", () => {
     // Dial through the provider: Reserving, Ringing, Connected.
     await watchProviderStates(page);
     await dock(page).click();
-    await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+    // The provider line reads "Connected" next to a "Provider" badge in the same element.
+    await expect(page.getByText(/^Connected/)).toBeVisible();
     await expect(page.getByText("Provider", { exact: true })).toBeVisible();
     await expect(dock(page)).toHaveText("End call");
     await expect
@@ -111,9 +112,21 @@ test.describe("Setter: Tomasz", () => {
     await expect(handoff.getByRole("heading", { name: "Problem, their words" })).toBeVisible();
     await expect(handoff.getByText("Customer-stated").first()).toBeVisible();
     await expect(handoff.getByText("Verified").first()).toBeVisible();
+    // Every line in every section carries exactly one provenance tag.
+    const provenanceSections = handoff.locator("section").filter({ hasNot: page.getByRole("heading", { name: "Missing", exact: true }) });
+    for (const line of await provenanceSections.locator("ul > li").all()) {
+      await expect(line.locator("span").filter({ hasText: /^(Customer-stated|Verified|AI-proposed)$/ })).toHaveCount(1);
+    }
+    // AI-proposed appears only where the model actually proposed something (a lens or an unconfirmed
+    // observed preference). Desmond's profile has neither, so its absence is the correct output.
     const lens = handoff.getByText("Coaching lens (hypothesis)");
-    if (await lens.count()) await lens.click();
-    await expect(handoff.getByText("AI-proposed").first()).toBeVisible();
+    if (await lens.count()) {
+      await lens.click();
+      await expect(handoff.getByText("AI-proposed").first()).toBeVisible();
+    } else {
+      await expect(handoff.getByText("AI-proposed")).toHaveCount(0);
+    }
+    await expect(handoff.getByRole("heading", { name: "Missing" })).toBeVisible();
     // The appointment just made is in the commitments.
     await expect(handoff.getByText(/^Appointment apt_new_\d+/)).toBeVisible();
     await handoff.getByRole("button", { name: "Send to closer" }).click();
@@ -145,11 +158,15 @@ test.describe("Setter: Tomasz", () => {
     await page.getByRole("tab", { name: /^Queue/ }).click();
     await page.getByRole("region", { name: "Queue" }).getByRole("button", { name: /Desmond/ }).click();
     await dock(page).click();
-    await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+    await expect(page.getByText(/^Connected/)).toBeVisible();
     const other = page.getByRole("region", { name: "Queue" }).getByRole("button").filter({ hasNotText: "Desmond" }).first();
+    const otherName = await other.innerText();
     await other.click();
-    await expect(page.getByRole("heading", { level: 2 }).first()).not.toBeVisible().catch(() => {});
-    await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+    // Still Desmond, still connected, still one End call.
+    await expect(page.getByText(/^Connected/)).toBeVisible();
+    await expect(page.locator("main").getByText("Desmond", { exact: false }).first()).toBeVisible();
+    await expect(page.getByRole("region", { name: "Queue" }).getByRole("button", { name: /Desmond/ })).toHaveAttribute("aria-current", "true");
+    expect(otherName).not.toContain("Desmond");
     await expect(dock(page)).toHaveText("End call");
   });
 });

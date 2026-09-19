@@ -1,12 +1,14 @@
 import type { IntegrationProvider } from "@/domain/integrations";
-import { PRESETS, TARGET_FIELDS, type ColumnMapping, type MappingPlan, type RowIssue, type SourcePreset } from "@/domain/migration";
-import * as migrationFixtures from "@/fixtures/migration";
+import { PRESETS, TARGET_FIELDS, type ColumnMapping, type MappingPlan, type RowIssue, type SourcePreset, type TargetField } from "@/domain/migration";
+import { MIGRATION_FIXTURES } from "@/fixtures/migration";
 
 /** The four steps. Only the current step word is shown. */
 export type Step = 1 | 2 | 3 | 4;
 export const STEP_WORD: Record<Step, string> = { 1: "Bring your data", 2: "We matched", 3: "Check", 4: "Done" };
 
-/** Presets with a sample file, in tile order. Close and Pipedrive have no Simple Icons mark, the tile falls back to a letter. */
+export const IGNORE: TargetField = "ignore";
+
+/** Presets with a tile, in order. Close and Pipedrive have no Simple Icons mark, the tile falls back to a letter. */
 export const PRESET_TILES: SourcePreset[] = ["hubspot", "gohighlevel", "salesforce", "pipedrive", "zoho", "close", "google_sheets"];
 
 const BRAND: Record<SourcePreset, string> = {
@@ -38,31 +40,23 @@ export function presetProvider(preset: SourcePreset): IntegrationProvider {
   };
 }
 
-const SAMPLE_KEY: Record<SourcePreset, string> = {
-  hubspot: "hubspotCsv",
-  gohighlevel: "gohighlevelCsv",
-  salesforce: "salesforceCsv",
-  pipedrive: "pipedriveCsv",
-  zoho: "zohoCsv",
-  close: "closeCsv",
-  google_sheets: "googleSheetsCsv",
-  generic: "messySheetCsv",
+const SAMPLE: Partial<Record<SourcePreset, string>> = {
+  hubspot: MIGRATION_FIXTURES.hubspot,
+  gohighlevel: MIGRATION_FIXTURES.gohighlevel,
+  google_sheets: MIGRATION_FIXTURES.messy,
 };
 
 /** Sample CSV text for a preset, or null when the fixtures do not carry one. */
 export function sampleCsv(preset: SourcePreset): string | null {
-  const bag = migrationFixtures as Record<string, unknown>;
-  const v = bag[SAMPLE_KEY[preset]];
-  return typeof v === "string" ? v : null;
+  return SAMPLE[preset] ?? null;
 }
 
 export function sampleLabel(preset: SourcePreset): string {
   return `Sample: ${PRESETS[preset].label} export`;
 }
 
-/** Target field label by field id. Unknown or empty reads "Ignore". */
-export function targetLabel(target: string | null | undefined): string {
-  if (!target) return "Ignore";
+/** Target field label by field id. "ignore" reads "Ignore". */
+export function targetLabel(target: TargetField): string {
   return TARGET_FIELDS.find((f) => f.field === target)?.label ?? target;
 }
 
@@ -77,13 +71,14 @@ export const ENTITY_LABEL: Record<string, string> = {
 export interface TargetGroup {
   entity: string;
   label: string;
-  fields: { field: string; label: string }[];
+  fields: { field: TargetField; label: string }[];
 }
 
-/** TARGET_FIELDS grouped by entity for a select, in first-seen order. */
+/** TARGET_FIELDS grouped by entity for a select, in first-seen order. Ignore is its own option. */
 export function targetGroups(): TargetGroup[] {
   const out: TargetGroup[] = [];
   for (const f of TARGET_FIELDS) {
+    if (f.field === IGNORE) continue;
     let g = out.find((x) => x.entity === f.entity);
     if (!g) {
       g = { entity: f.entity, label: ENTITY_LABEL[f.entity] ?? f.entity, fields: [] };
@@ -94,49 +89,31 @@ export function targetGroups(): TargetGroup[] {
   return out;
 }
 
-/** Headers the owner should look at: the plan's list, or anything unmapped or under 80 percent. */
 export function reviewHeaders(plan: MappingPlan): Set<string> {
-  const raw = (plan as { needsReview?: unknown }).needsReview;
-  if (Array.isArray(raw)) return new Set(raw.map((x) => (typeof x === "string" ? x : String((x as { header?: string }).header ?? ""))));
-  return new Set(plan.columns.filter((c) => !c.target || c.confidence < 0.8).map((c) => c.header));
+  return new Set(plan.needsReview.map((c) => c.header));
 }
 
-/** Best alternative target for a column, used to preselect the review select. */
-export function bestAlternative(c: ColumnMapping): string | null {
-  if (c.target) return c.target;
-  const first = (c.alternatives as unknown[] | undefined)?.[0];
-  if (!first) return null;
-  if (typeof first === "string") return first;
-  const t = (first as { target?: string | null; field?: string | null }).target ?? (first as { field?: string | null }).field;
-  return t ?? null;
+/** What the review select starts on: the current target, else the best alternative, else Ignore. */
+export function bestAlternative(c: ColumnMapping): TargetField {
+  if (c.target !== IGNORE) return c.target;
+  return c.alternatives.find((a) => a !== IGNORE) ?? IGNORE;
 }
 
 export function confidencePercent(c: ColumnMapping): string {
   return `${Math.round(Math.max(0, Math.min(1, c.confidence)) * 100)}%`;
 }
 
-export type Severity = "error" | "warning" | "info";
+export type Severity = RowIssue["severity"];
 
-export interface IssueRow {
-  row: number;
-  header: string;
-  problem: string;
-  value: string;
-  severity: Severity;
+export const SEVERITY_ORDER: Severity[] = ["error", "warning"];
+export const SEVERITY_LABEL: Record<Severity, string> = { error: "Skipped", warning: "Check" };
+
+/** Distinct data rows carrying an error. These are the rows the import skips. */
+export function errorRows(issues: RowIssue[]): number {
+  return new Set(issues.filter((i) => i.severity === "error").map((i) => i.row)).size;
 }
 
-/** One shape for the issue list regardless of the engine's field names. */
-export function issueRow(i: RowIssue): IssueRow {
-  const r = i as unknown as Record<string, unknown>;
-  const sev = String(r.severity ?? r.level ?? "warning");
-  return {
-    row: Number(r.row ?? r.rowIndex ?? r.line ?? 0),
-    header: String(r.header ?? r.column ?? ""),
-    problem: String(r.message ?? r.problem ?? r.reason ?? ""),
-    value: String(r.value ?? r.raw ?? ""),
-    severity: sev === "error" ? "error" : sev === "info" ? "info" : "warning",
-  };
+/** Spreadsheet line for a 0-based data row, counting the header as line 1. */
+export function lineOf(row: number): number {
+  return row + 2;
 }
-
-export const SEVERITY_ORDER: Severity[] = ["error", "warning", "info"];
-export const SEVERITY_LABEL: Record<Severity, string> = { error: "Skipped", warning: "Check", info: "Note" };

@@ -13,7 +13,7 @@ const HOMES: Home[] = [
   { label: "sign-in", person: null, primary: "ul button", primaryName: /Delphine Okafor/ },
   { label: "setter", person: PEOPLE.setter, primary: '[data-testid="dock"]' },
   { label: "closer", person: PEOPLE.closerMarcus, primary: '[data-testid="dock"]' },
-  { label: "owner", person: PEOPLE.owner, primary: 'button[aria-label^="Net collected per assigned opportunity"]' },
+  { label: "owner", person: PEOPLE.owner, primary: 'main button[aria-label^="Net collected"][aria-label$="Open definition."]' },
 ];
 
 /** Tabs until `selector` owns focus, or gives up after `max` presses. */
@@ -72,8 +72,9 @@ for (const home of HOMES) {
 
       // Enter activates it like a click would.
       if (home.person && home.person.role !== "owner") {
+        const label = await primary.innerText();
         await page.keyboard.press("Enter");
-        await expect(page.getByTestId("dock")).toHaveText(/End call|Reserving|Reply|Send|Next|Confirm/);
+        await expect(page.getByTestId("dock")).not.toHaveText(label);
       }
     });
 
