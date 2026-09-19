@@ -251,9 +251,10 @@ export class RuleBasedCallIntelligence implements CallIntelligence {
         unknowns.push(key);
         continue;
       }
-      const stems = keyStems(key);
-      const hits = conversational && stems.length > 0
-        ? spans.filter((s) => s.speaker !== "rep" && stems.every((st) => s.text.toLowerCase().includes(st)))
+      // The primary stem ("rooftop" for rooftop_count_known, "dms" for dms_compatible) must be spoken by someone other than the rep.
+      const stem = keyStems(key)[0];
+      const hits = conversational && stem
+        ? spans.filter((s) => s.speaker !== "rep" && s.text.toLowerCase().includes(stem))
         : [];
       if (hits.length === 0) {
         fitFacts[key] = { value: "unknown", spans: [] };

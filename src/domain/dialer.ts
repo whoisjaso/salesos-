@@ -350,7 +350,7 @@ export class WarmLeadDialer {
       return { ok: false, code: "consent_refused", reason: `${channel} consent for contact ${contact.contactId} is ${consent}; no dial` };
     }
     if (!user.active) return { ok: false, code: "user_inactive", reason: `user ${user.userId} is inactive` };
-    if (!actionable(task)) return { ok: false, code: "task_not_actionable", reason: `task ${task.taskId} is ${task.state}` };
+    if (!ACTIONABLE.has(task.state)) return { ok: false, code: "task_not_actionable", reason: `task ${task.taskId} is ${task.state}` };
     if (task.ownerUserId && task.ownerUserId !== user.userId) {
       return { ok: false, code: "not_task_owner", reason: `task ${task.taskId} is owned by ${task.ownerUserId}` };
     }
