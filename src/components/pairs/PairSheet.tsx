@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ArrowsLeftRight, CalendarBlank, CalendarCheck, CheckCircle, Hourglass } from "@phosphor-icons/react";
+import { CalendarBlank, CalendarCheck, CheckCircle, Hourglass } from "@phosphor-icons/react";
 import type { PairSide } from "@/domain/pairs";
 import { Funnel } from "@/components/metrics/Funnel";
 import type { FunnelCardMoney } from "@/components/metrics/FunnelCard";
@@ -162,11 +162,8 @@ export function PairSheet({ open, onClose, view, viewer, rates }: PairSheetProps
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="text-[13px] font-medium leading-snug text-fg">
                     {n.displayName}
-                    <span className="text-fg-muted">
-                      {", "}
-                      {n.side === "setter" ? "sets" : "closes"}
-                      {meSide === n.side ? ", you" : ""}
-                    </span>
+                    {meSide === n.side ? <span className="text-fg-muted"> (you)</span> : null}
+                    <span className="text-fg-muted">, {n.side === "setter" ? "sets" : "closes"}</span>
                   </span>
                   <span className="tabular text-[13.5px] leading-snug text-fg">{n.action}</span>
                 </span>
