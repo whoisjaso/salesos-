@@ -18,6 +18,7 @@ import {
   guardrailCounts,
   missionsForRep,
   opportunitiesProcessed,
+  pairListLines,
   rowRole,
   seasonDaysLeft,
   seasonPolicy,
@@ -112,6 +113,7 @@ export function TeamView() {
     () => buildPairViews(obaviaDatasetWithPairs, obaviaPairs, window, NOW, { minMaturedSample: basePolicy.minMaturedSample, policies: obaviaCommissionPolicies }),
     [window, basePolicy.minMaturedSample],
   );
+  const pairLines = useMemo(() => pairListLines(pairViews, basePolicy.minMaturedSample), [pairViews, basePolicy.minMaturedSample]);
   const player = useMemo(() => (meId ? playerState(dataset, meId, NOW, window, []) : null), [meId, window]);
   const teamTrack = useMemo(() => {
     const events = deriveGameEvents(dataset).filter((e) => repIds.has(e.userId) && e.occurredAt <= NOW);
@@ -186,7 +188,7 @@ export function TeamView() {
             ) : segment === "pairs" ? (
               pairViews.length > 0 ? (
                 <div className="flex flex-col gap-2">
-                  <div className="px-1 text-[12px] text-fg-subtle">Net collected cash, per assigned opportunity</div>
+                  <StandingsHeader lines={pairLines} holdLabel={pairLines.holdLabel} holdLine={pairLines.holdLine} />
                   <ol className="surface px-4" aria-label="Pairs">
                     {pairViews.map((v) => (
                       <PairCard key={v.pair.pairId} view={v} meId={meId} onOpen={setOpenPair} />

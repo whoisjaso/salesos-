@@ -368,7 +368,7 @@ function isRefundLike(e: LedgerEntry): boolean {
  * the number. Four spec files outside this module pin the accessible name to this
  * exact prefix, so the phrase is defined once, here.
  */
-export const PER_OPPORTUNITY_NAME = "Net collected per assigned opportunity";
+export const PER_OPPORTUNITY_NAME = "Net collected cash per assigned opportunity";
 
 function plural(n: number, one: string, many = `${one}s`): string {
   return `${formatCount(n)} ${n === 1 ? one : many}`;

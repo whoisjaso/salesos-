@@ -13,7 +13,7 @@ const HOMES: Home[] = [
   { label: "sign-in", person: null, primary: "ul button", primaryName: /Delphine Okafor/ },
   { label: "setter", person: PEOPLE.setter, primary: '[data-testid="dock"]' },
   { label: "closer", person: PEOPLE.closerMarcus, primary: '[data-testid="dock"]' },
-  { label: "owner", person: PEOPLE.owner, primary: 'main button[aria-label^="Net collected per assigned opportunity"][aria-label$="Tap for details."]' },
+  { label: "owner", person: PEOPLE.owner, primary: 'main button[aria-label^="Net collected cash per assigned opportunity"][aria-label$="Tap for details."]' },
 ];
 
 /** Tabs until `selector` owns focus, or gives up after `max` presses. */

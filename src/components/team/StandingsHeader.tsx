@@ -13,8 +13,9 @@ export interface StandingsHeaderProps {
   /** What ranking waits on and who owns it. Null when nothing holds it. */
   holdLine: string | null;
   /** True while the descriptive override is showing ranks that are not standings. */
-  descriptive: boolean;
-  onOpen: () => void;
+  descriptive?: boolean;
+  /** Opens the standings sheet. Without it the hold is stated in place, unbordered. */
+  onOpen?: () => void;
   /** The role switch, on the same line as the kind. */
   control?: ReactNode;
 }
@@ -26,7 +27,7 @@ export interface StandingsHeaderProps {
  * (docs/DECISIONS.md, "Never show a list that looks ranked when ranking is not
  * established").
  */
-export function StandingsHeader({ lines, holdLabel, holdLine, descriptive, onOpen, control }: StandingsHeaderProps) {
+export function StandingsHeader({ lines, holdLabel, holdLine, descriptive = false, onOpen, control }: StandingsHeaderProps) {
   const KindIcon = lines.kind === "ranked" ? ListNumbers : ListDashes;
   return (
     <div className="flex flex-col gap-2">
@@ -40,7 +41,7 @@ export function StandingsHeader({ lines, holdLabel, holdLine, descriptive, onOpe
       <p className="px-1 text-[12px] leading-snug text-fg-subtle" data-testid="standings-order">
         {lines.orderLine}
       </p>
-      {holdLine ? (
+      {holdLine && onOpen ? (
         <div className="surface">
           <DetailsRow
             leading={<Hourglass size={16} weight="bold" aria-hidden className="text-fg-muted" />}
@@ -50,6 +51,11 @@ export function StandingsHeader({ lines, holdLabel, holdLine, descriptive, onOpe
             data-testid="ranks-paused"
           />
         </div>
+      ) : holdLine ? (
+        <p className="flex items-start gap-1.5 px-1 text-[12px] leading-snug text-fg-subtle">
+          <Hourglass size={13} weight="bold" aria-hidden className="mt-[2px] shrink-0" />
+          <span>{holdLine}</span>
+        </p>
       ) : null}
     </div>
   );

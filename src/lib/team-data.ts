@@ -653,7 +653,10 @@ export function buildPairView(dataset: Dataset, pairs: Pair[], pair: Pair, seaso
 /**
  * The pair board: active pairs in pairLeaderboard order (ranked first, then
  * provisional by value), followed by active pairs with nothing in the season.
- * Pairs only; never merged with an individual board.
+ * When no pair has an eligible rank the list is alphabetical instead, because a
+ * list ordered by value with no ranks still reads as a ranking
+ * (docs/DECISIONS.md, "Never show a list that looks ranked when ranking is not
+ * established"). Pairs only; never merged with an individual board.
  */
 export function buildPairViews(dataset: Dataset, pairs: Pair[], season: SeasonWindow, now: ISODateTime, options: PairViewOptions): PairView[] {
   const active = activePairs(pairs, now);
@@ -665,7 +668,29 @@ export function buildPairViews(dataset: Dataset, pairs: Pair[], season: SeasonWi
     if (p) ordered.push(p);
   }
   for (const p of active) if (!rows.some((r) => r.pairId === p.pairId)) ordered.push(p);
-  return ordered.map((p) => buildPairView(dataset, pairs, p, season, now, options, rows));
+  const views = ordered.map((p) => buildPairView(dataset, pairs, p, season, now, options, rows));
+  if (views.some((v) => v.row?.rank !== null && v.row?.rank !== undefined)) return views;
+  return [...views].sort((a, b) =>
+    pairTitle(a.setterDisplayName, a.closerDisplayName).localeCompare(pairTitle(b.setterDisplayName, b.closerDisplayName)),
+  );
+}
+
+/**
+ * What the pair list is and the order it is in, in the same words the individual
+ * board uses. Pairs are ranked only when at least one pair has an eligible rank.
+ */
+export function pairListLines(views: PairView[], minMaturedSample: number): StandingsLines {
+  const ranked = views.some((v) => v.row?.rank !== null && v.row?.rank !== undefined);
+  const measure = "Net collected cash per assigned opportunity";
+  return ranked
+    ? { kind: "ranked", kindLabel: "Ranked", orderLine: `${measure}, pairs only.`, holdLabel: "No ranking yet", holdLine: null }
+    : {
+        kind: "roster",
+        kindLabel: "Roster, not a ranking",
+        orderLine: `${measure}, in alphabetical order.`,
+        holdLabel: "No ranking yet",
+        holdLine: `No pair has reached the ${formatUnits(minMaturedSample, "matured opportunity", "matured opportunities")} an eligible rank needs.`,
+      };
 }
 
 /** The rep's active pair. With several, the one carrying the most opportunities. */

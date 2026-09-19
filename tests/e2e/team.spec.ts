@@ -80,7 +80,7 @@ test.describe("Team and Me: Renata", () => {
     await expect(zeroRanked.getByText("$0", { exact: true })).toBeVisible();
     await expect(zeroRanked.getByText("collected", { exact: true })).toBeVisible();
     await expect(zeroRanked.getByText("Payment data not available")).toHaveCount(0);
-    await expect(heldRow).toContainText("Shown anyway");
+    await expect(heldRow).toContainText("ranks shown anyway");
     await expect(page.getByRole("region", { name: "Season" })).toContainText(/#\d+/);
     await page.getByRole("region", { name: "Season" }).getByRole("button", { name: /open details$/ }).click();
     await expect(page.getByRole("dialog")).toContainText(/#\d+, descriptive/);

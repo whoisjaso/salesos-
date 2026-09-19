@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { CaretRight, Hourglass } from "@phosphor-icons/react";
 import { Sheet } from "@/components/ui/Sheet";
-import { XP_TABLE, type GameTrack } from "@/domain/game";
-import { holdFor } from "@/domain/incidents";
+import { XP_TABLE, type GameEventKind, type GameTrack } from "@/domain/game";
+import { holdFor, type SurfaceStatus } from "@/domain/incidents";
 import { Fields } from "./Fields";
 import type { GameView } from "@/lib/workspace-game";
 
@@ -14,15 +14,37 @@ const TRACK_LABEL: Record<GameTrack, string> = {
   team: "Team XP",
 };
 
+/** Our own short word for an XP kind that can wait on a measurement. */
+const HOLD_WORD: Partial<Record<GameEventKind, string>> = {
+  attended_show: "Show",
+  cash_collected: "Cash",
+};
+
+function holdWords(kinds: GameEventKind[]): string {
+  const words = kinds.map((k) => HOLD_WORD[k] ?? XP_TABLE[k].label);
+  if (words.length <= 1) return words[0] ?? "Some";
+  return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1].toLowerCase()}`;
+}
+
+function upperFirst(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** Why this XP is waiting, in our words, from the surface's own state. */
+function reasonFor(status: SurfaceStatus | null): string {
+  if (!status) return "a measurement it rests on is not settled";
+  return `the ${status.label.toLowerCase()} ${status.disposition === "withheld" ? "is not established yet" : "is provisional"}`;
+}
+
 /**
- * One quiet line under the hero, and only when a specific XP track is waiting on a
+ * One short line under the hero, and only when a specific kind of XP is waiting on a
  * measurement (docs/DECISIONS.md, "A held measurement never holds the person").
  *
  * A data incident holds the XP kinds that rest on the surface it makes unreliable and
- * nothing else, so this line names that track and what it waits on. It never says
- * progress is paused, because it is not: the level, the streak and every other verified
- * event keep running. The owner, the action and what keeps accruing sit behind the tap.
- * With nothing held, nothing renders.
+ * nothing else, so the line names those kinds and nothing more. It never says progress
+ * is paused, because it is not: the level, the streak and every other verified event
+ * keep running. The whole sentence, what lifts it, who owns it and what keeps accruing
+ * sit behind the tap. With nothing held, nothing renders.
  */
 export function GateLine({ game }: { game: GameView }) {
   const [open, setOpen] = useState(false);
@@ -31,8 +53,8 @@ export function GateLine({ game }: { game: GameView }) {
   if (!hold) return null;
 
   const status = holdFor(scope, hold.surfaces);
-  const track = TRACK_LABEL[hold.track];
-  const waiting = hold.held.map((k) => XP_TABLE[k].label).join(" and ");
+  const waiting = holdWords(hold.held);
+  const line = `${waiting} XP on hold`;
   const keeps = hold.accruing.map((k) => XP_TABLE[k].label).join(", ");
 
   return (
@@ -40,25 +62,25 @@ export function GateLine({ game }: { game: GameView }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="-mx-1 flex w-full items-start gap-2 rounded-sm px-1 py-1.5 text-left hover:bg-hover"
+        className="-mx-1 flex h-9 w-full items-center gap-2 rounded-sm px-1 text-left hover:bg-hover"
         data-testid="gate-line"
       >
-        <Hourglass size={13} weight="bold" aria-hidden className="mt-[3px] shrink-0 text-fg-subtle" />
-        <span className="min-w-0 flex-1 text-[12.5px] leading-snug text-fg-muted">
-          {track}: {waiting} waits on {status?.waitingOn ?? hold.statement}. {status?.ownerLabel ?? "Sales ops"} owns it.
-        </span>
-        <CaretRight size={12} weight="bold" aria-hidden className="mt-[3px] shrink-0 text-fg-subtle" />
+        <Hourglass size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
+        <span className="min-w-0 flex-1 truncate text-[13px] text-fg-muted">{line}</span>
+        <CaretRight size={12} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
       </button>
 
-      <Sheet open={open} onClose={() => setOpen(false)} title={track} description={`${waiting} is waiting`}>
-        <p className="mb-3 text-[14px] leading-snug text-fg">{hold.statement}</p>
+      <Sheet open={open} onClose={() => setOpen(false)} title={line} description={TRACK_LABEL[hold.track]}>
+        <p className="mb-3 text-[14px] leading-snug text-fg">
+          {waiting} XP is on hold because {reasonFor(status)}. Your level, your streak and every other kind of XP keep counting.
+        </p>
         <Fields
           items={[
-            { label: "Waiting on", value: status?.waitingOn ?? hold.statement },
+            { label: "Lifts when", value: upperFirst(status?.waitingOn ?? "the measurement behind it is settled") },
             { label: "Who resolves it", value: status?.ownerLabel ?? "Sales ops" },
-            { label: "Action", value: status?.action ?? "resolve the measurement this rests on" },
-            { label: "Still accruing", value: keeps || "Every other track" },
-            { label: "Your level and streak", value: "Untouched. Nothing you earned is removed." },
+            { label: "What they do", value: upperFirst(status?.action ?? "resolve the measurement this rests on") },
+            { label: "Still counting", value: keeps || "Every other kind of XP" },
+            { label: "Already earned", value: "Kept. Nothing is removed and nothing is lost." },
           ]}
         />
       </Sheet>

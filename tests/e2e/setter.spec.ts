@@ -181,10 +181,10 @@ test.describe("Setter: Tomasz", () => {
 
   test("the hero is a name, one line and one action; the rest is behind Details and Today", async ({ page }) => {
     await page.goto("/");
-    // No consent chips, no quote, no stats on the screen.
+    // No consent chips and no quote on the screen. Dials stay behind the Today row: the
+    // strip under the list carries verified progress, not activity counts.
     await expect(page.locator("main").getByText(/SMS (unknown|revoked)/)).toHaveCount(0);
     await expect(page.locator("main").getByText("Dials", { exact: true })).toHaveCount(0);
-    await expect(page.locator("main").getByText("Two-way")).toHaveCount(0);
 
     await page.getByRole("button", { name: "Details" }).click();
     const details = sheet(page, "Details");
@@ -202,6 +202,76 @@ test.describe("Setter: Tomasz", () => {
       await expect(todaySheet.getByText(label, { exact: true })).toBeVisible();
     }
     await closeSheet(page);
+  });
+
+  test("under the list, today's verified progress, and never a fake zero", async ({ page }) => {
+    await page.goto("/");
+    const strip = page.getByTestId("today-focus");
+    await expect(strip).toHaveAttribute("data-focus", "progress");
+    await expect(strip.getByText("Progress so far")).toBeVisible();
+
+    // One count, because one stage has evidence today. Each states what it counts.
+    const counts = strip.getByTestId("today-count");
+    await expect(counts).toHaveCount(1);
+    await expect(counts.first()).toContainText("conversations");
+    await expect(counts.first()).toContainText("two-way and confirmed, from 2 calls today");
+    // No booking or attendance count is invented for a day that has neither.
+    await expect(strip.locator('[data-count="bookings"]')).toHaveCount(0);
+    await expect(strip.locator('[data-count="attended"]')).toHaveCount(0);
+    // Never a global pause. The one XP kind that waits is named, with its reason on tap.
+    await expect(page.locator("main").getByText(/XP paused|Paused/)).toHaveCount(0);
+    const gate = page.getByTestId("gate-line");
+    if (await gate.count()) {
+      await expect(gate).toHaveText(/XP on hold$/);
+      await gate.click();
+      const sheetEl = sheet(page, /XP on hold/);
+      await expect(sheetEl.getByText("Lifts when")).toBeVisible();
+      await expect(sheetEl.getByText("Who resolves it")).toBeVisible();
+      await closeSheet(page);
+    }
+  });
+
+  test("after a reviewed call the strip is the next improvement, linked to the moment", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("tab", { name: /^Queue/ }).click();
+    await page.getByRole("region", { name: "Queue" }).getByRole("button", { name: /Desmond/ }).click();
+    await dock(page).click();
+    await expect(page.getByText(/^Connected/)).toBeVisible();
+    await dock(page).click();
+
+    const strip = page.getByTestId("today-focus");
+    await expect(strip).toHaveAttribute("data-focus", "improvement");
+    await expect(strip.getByTestId("improvement-label")).toHaveText("An objection was left open");
+    await expect(strip.getByTestId("improvement-sentence")).toHaveText(/^Name it back in their words/);
+    // One improvement, not a list, and never one that is waiting on data.
+    await expect(strip.getByTestId("improvement-sentence")).toHaveCount(1);
+    await expect(strip).not.toContainText("Waiting on data");
+
+    const link = strip.getByTestId("improvement-link");
+    await expect(link).toHaveAttribute("href", "/review?call=call_016&span=52800");
+    await expect(link).toContainText("0:52");
+    await link.click();
+    await expect(page).toHaveURL(/\/review\?call=call_016&span=52800$/);
+  });
+
+  test("on a desktop the customer stands beside the call, never behind it", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "Desktop layout only; the phone keeps the facts behind Details.");
+    await page.goto("/");
+    await page.getByRole("tab", { name: /^Queue/ }).click();
+    await page.getByRole("region", { name: "Queue" }).getByRole("button", { name: /Desmond/ }).click();
+
+    const context = page.getByRole("region", { name: "Who this is" });
+    await expect(context).toBeVisible();
+    await expect(context).toContainText("Desmond");
+    await expect(context).toContainText("Source");
+
+    // The queue stays beside the call too, and both survive the call going live.
+    await expect(page.getByRole("region", { name: "Queue" })).toBeVisible();
+    await dock(page).click();
+    await expect(page.getByText(/^Connected/)).toBeVisible();
+    await expect(context).toBeVisible();
+    await expect(page.getByRole("region", { name: "Queue" })).toBeVisible();
+    await expect(dock(page)).toBeInViewport();
   });
 
   test("the hero never swaps under a live call", async ({ page }) => {

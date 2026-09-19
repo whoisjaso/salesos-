@@ -342,15 +342,17 @@ export function SetterWorkspace({ userId }: { userId: string }) {
           <GateLine game={game} />
         </div>
 
-        {/* Today connects to improvement: verified progress, or the next improvement with its moment. */}
-        <TodayFocus focus={focus} className="order-6" />
+        {/* Today connects to improvement: verified progress, or the next improvement with its moment.
+            One waiting line per screen: when an XP track already names what it waits on above, the
+            held coaching note stays in the coach's own list rather than repeating the wait here. */}
+        <TodayFocus focus={game.player.gate.holds.length > 0 ? { ...focus, held: undefined } : focus} className="order-6" />
         </div>
 
         <div className="contents lg:sticky lg:top-[72px] lg:flex lg:flex-col lg:gap-4">
         {/* The facts behind Details, standing beside the call on a desktop so opening
             anything else never costs the rep the person they are talking to. */}
         {active ? (
-          <Surface padding="md" className="order-3 hidden lg:flex lg:flex-col lg:gap-1" aria-label="Who this is">
+          <Surface padding="md" as="section" className="order-3 hidden lg:flex lg:flex-col lg:gap-1" aria-label="Who this is">
             <span className="section-label">Who this is</span>
             <span className="text-[15px] font-medium leading-tight text-fg">{active.contact.displayName}</span>
             <Fields items={heroFields(active)} />

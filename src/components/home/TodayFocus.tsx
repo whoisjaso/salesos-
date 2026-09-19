@@ -10,13 +10,22 @@ import { Fields } from "@/components/workspace/Fields";
 import { cn } from "@/lib/cn";
 import type { TodayCount, TodayCountId, TodayFocus as TodayFocusModel, TodayHeldNote } from "./today-focus";
 
+function upperFirst(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 const COUNT_ICON: Record<TodayCountId, ComponentType<IconProps>> = {
   conversations: ChatsCircle,
   bookings: CalendarCheck,
   attended: SealCheck,
 };
 
-export const PROGRESS_LABEL = "Today so far";
+/**
+ * The strip's own name. It deliberately avoids the word Today, which already names the
+ * list of today's appointments on the closer screen; two regions with the same name are
+ * two things a screen reader reads the same way.
+ */
+export const PROGRESS_LABEL = "Progress so far";
 export const IMPROVEMENT_LABEL = "Next improvement";
 export const EMPTY_PROGRESS_LINE = "Nothing verified yet today. Your first call starts it.";
 
@@ -104,22 +113,23 @@ function HeldNote({ note }: { note: TodayHeldNote }) {
         type="button"
         onClick={() => setOpen(true)}
         data-testid="today-held"
-        className="-mx-1 flex w-full items-start gap-2 rounded-sm px-1 py-1.5 text-left hover:bg-hover"
+        className="-mx-1 flex h-9 w-full items-center gap-2 rounded-sm px-1 text-left hover:bg-hover"
       >
-        <Hourglass size={13} weight="bold" aria-hidden className="mt-[3px] shrink-0 text-fg-subtle" />
-        <span className="min-w-0 flex-1 text-[12px] leading-snug text-fg-muted">
-          Waiting on data: {note.title}. {note.ownerLabel} owns it.
-        </span>
-        <CaretRight size={12} weight="bold" aria-hidden className="mt-[3px] shrink-0 text-fg-subtle" />
+        <Hourglass size={13} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
+        <span className="min-w-0 flex-1 truncate text-[12.5px] text-fg-muted">One more waits on data</span>
+        <CaretRight size={12} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
       </button>
-      <Sheet open={open} onClose={() => setOpen(false)} title="Waiting on data" description={note.title}>
-        <p className="mb-3 text-[14px] leading-snug text-fg">{note.statement}</p>
+      <Sheet open={open} onClose={() => setOpen(false)} title="One more waits on data" description={note.title}>
+        <p className="mb-3 text-[14px] leading-snug text-fg">
+          One more thing to work on is held until the numbers behind it are settled: {note.title.toLowerCase()}. {note.ownerLabel} resolves it, and coaching read from
+          your conversations is unaffected.
+        </p>
         <Fields
           items={[
-            { label: "Waiting on", value: note.waitingOn },
+            { label: "Lifts when", value: upperFirst(note.waitingOn) },
             { label: "Who resolves it", value: note.ownerLabel },
-            { label: "Action", value: note.action },
-            { label: "What keeps running", value: "Calling, appointments, and coaching read from your conversations are unaffected." },
+            { label: "What they do", value: upperFirst(note.action) },
+            { label: "What keeps running", value: "Calling, appointments, and coaching read from your conversations." },
           ]}
         />
       </Sheet>

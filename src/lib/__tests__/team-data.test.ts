@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { NOW, obaviaDataset, obaviaDatasetWithPairs, obaviaPairs } from "@/fixtures/obavia";
+import { NOW, obaviaCommissionPolicies, obaviaDataset, obaviaDatasetWithPairs, obaviaPairs } from "@/fixtures/obavia";
 import { buildStandings, ownStanding } from "@/domain/leaderboard";
 import { pairDiagnostic, pairFunnel } from "@/domain/pairs";
 import type { Assignment } from "@/domain/types";
 import {
   attendedRead,
+  buildPairViews,
   descriptivePolicy,
+  pairListLines,
   pairResponsibilities,
   rowMoneyRead,
   seasonPolicy,
@@ -20,9 +22,9 @@ describe("standingsLines", () => {
     const lines = standingsLines(roster());
     expect(lines.kind).toBe("roster");
     expect(lines.kindLabel).toBe("Roster, not a ranking");
-    expect(lines.orderLine).toBe("Roster in alphabetical order, not a ranking.");
+    expect(lines.orderLine).toBe("Net collected cash per assigned opportunity, in alphabetical order.");
     expect(lines.holdLabel).toBe("Ranking on hold");
-    expect(lines.holdLine).toMatch(/^Ranking waits until /);
+    expect(lines.holdLine).toMatch(/^Waits until /);
     expect(lines.holdLine).toContain("unlinked payment");
     expect(lines.holdLine).toContain("Finance owns that.");
   });
@@ -31,7 +33,7 @@ describe("standingsLines", () => {
     const lines = standingsLines(ranked(), true);
     expect(lines.kind).toBe("ranked");
     expect(lines.kindLabel).toBe("Ranked, descriptive only");
-    expect(lines.orderLine).toMatch(/^Ranked by net collected cash per assigned opportunity/);
+    expect(lines.orderLine).toBe("By net collected cash per assigned opportunity, within role and lead tier.");
     expect(lines.holdLine).toBeNull();
   });
 
@@ -97,6 +99,23 @@ describe("a rep's own standing and the board agree", () => {
         expect(own.kind).toBe(standings.kind);
       }
     }
+  });
+});
+
+describe("pairListLines", () => {
+  const views = buildPairViews(obaviaDatasetWithPairs, obaviaPairs, { from: "2026-09-01T00:00:00Z", to: "2026-10-01T00:00:00Z" }, NOW, {
+    minMaturedSample: 25,
+    policies: obaviaCommissionPolicies,
+  });
+
+  it("calls an unranked pair list a roster and orders it alphabetically", () => {
+    const lines = pairListLines(views, 25);
+    expect(lines.kind).toBe("roster");
+    expect(lines.kindLabel).toBe("Roster, not a ranking");
+    expect(lines.orderLine).toBe("Net collected cash per assigned opportunity, in alphabetical order.");
+    expect(lines.holdLine).toBe("No pair has reached the 25 matured opportunities an eligible rank needs.");
+    const titles = views.map((v) => `${v.setterDisplayName} ${v.closerDisplayName}`);
+    expect(titles).toEqual([...titles].sort());
   });
 });
 

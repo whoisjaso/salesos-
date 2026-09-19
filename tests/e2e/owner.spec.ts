@@ -10,7 +10,7 @@ import { test, expect, PEOPLE, sheet, closeSheet, tabLabels } from "./fixtures";
 /** Name, value, what it is over with its count, the period, and how sure it is. */
 const PERIOD = String.raw`\w{3} \d{1,2} to \w{3} \d{1,2}, \d{4}`;
 const HERO_NAME = new RegExp(
-  String.raw`^Net collected per assigned opportunity, \$[\d,]+\.\d{2}\. Net collected cash over [\d,]+ assigned opportunities(, [^.]+)?\. ${PERIOD}\.( Provisional: .+\.)? Tap for details\.$`,
+  String.raw`^Net collected cash per assigned opportunity, \$[\d,]+\.\d{2}\. Net collected cash over [\d,]+ assigned opportunities(, [^.]+)?\. ${PERIOD}\.( Provisional: .+\.)? Tap for details\.$`,
 );
 
 function hero(page: import("@playwright/test").Page) {
@@ -26,7 +26,7 @@ test.describe("Owner: Delphine", () => {
     await expect(hero(page).getByText(/^\$[\d,]+\.\d{2}$/)).toBeVisible();
     // The whole measurement, under the number: the name with its denominator in words,
     // what it is over with its count, the period, and the word Provisional where it is read.
-    await expect(hero(page)).toContainText("Net collected per assigned opportunity");
+    await expect(hero(page)).toContainText("Net collected cash per assigned opportunity");
     await expect(hero(page)).toContainText(/Net collected cash over [\d,]+ assigned opportunities/);
     await expect(hero(page)).toContainText(new RegExp(PERIOD));
     await expect(hero(page)).toContainText("Provisional");

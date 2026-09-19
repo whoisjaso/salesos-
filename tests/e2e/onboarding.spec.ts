@@ -174,7 +174,7 @@ test.describe("Onboarding from zero", () => {
     await expect(hero.getByRole("link", { name: "Connect a source" })).toHaveAttribute("href", "/connect");
     await expect(hero.getByRole("link", { name: "Import history" })).toHaveAttribute("href", "/import");
     await expect(hero.getByRole("link", { name: "Invite team" })).toHaveAttribute("href", "/team");
-    await expect(page.getByRole("button", { name: /^Net collected per assigned opportunity/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Net collected cash per assigned opportunity/ })).toHaveCount(0);
     await expect(page.getByRole("list", { name: /^Funnel stages/ })).toHaveCount(0);
 
     // Team: no reps, roster with the owner, Invite in the header.
@@ -393,7 +393,7 @@ test.describe("Onboarding from zero", () => {
     for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "Next" }).click();
     await page.getByRole("button", { name: "Done" }).click();
     expect(await tabLabels(page)).toEqual(["Business", "Team", "Me"]);
-    await expect(page.getByRole("button", { name: /^Net collected per assigned opportunity/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Net collected cash per assigned opportunity/ })).toBeVisible();
     // The demo owner has the same Invite control on Team.
     await page.goto("/team");
     await page.getByRole("button", { name: "Invite" }).first().click();

@@ -8,7 +8,7 @@ test.describe("Route gating: setter", () => {
     await expect(page).toHaveURL(/\/$/);
     await expect(dock(page)).toBeVisible();
     await expect(page.getByRole("heading", { level: 2 }).first()).toBeVisible();
-    await expect(page.getByText("Net collected per assigned opportunity")).toHaveCount(0);
+    await expect(page.getByText("Net collected cash per assigned opportunity")).toHaveCount(0);
     await expect(page.getByRole("radiogroup", { name: "View" })).toHaveCount(0);
   });
 
@@ -45,7 +45,7 @@ test.describe("Route gating: owner", () => {
   test("/owner and /coach resolve to Business and Me", async ({ page }) => {
     await page.goto("/owner");
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole("button", { name: /Net collected per assigned opportunity/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Net collected cash per assigned opportunity/ })).toBeVisible();
     await page.goto("/coach");
     await expect(page).toHaveURL(/\/me$/);
     await expect(page.getByRole("link", { name: "Connect" })).toBeVisible();
