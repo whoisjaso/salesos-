@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { applyManualMapping, detectPreset, dryRun, parseCsv, profileColumns, runImport, suggestMapping, type DryRunReport, type ImportContext, type ImportResult, type MappingPlan, type TargetField } from "@/domain/migration";
+import { applyManualMapping, detectPreset, dryRun, profileColumns, runImport, suggestMapping, type DryRunReport, type ImportContext, type ImportResult, type MappingPlan, type TargetField } from "@/domain/migration";
 import type { IntakeContact } from "@/domain/intake";
 import { NOW, obaviaDataset, TENANT_ID } from "@/fixtures/obavia";
+import { migrationUsers } from "@/fixtures/migration";
 import { useSession } from "@/lib/session";
 import { StepDots } from "./StepDots";
-import { DropStep, type LoadedFile } from "./DropStep";
+import { BringStep, type LoadedTable } from "./BringStep";
 import { MatchStep } from "./MatchStep";
 import { CheckStep } from "./CheckStep";
 import { DoneStep } from "./DoneStep";
@@ -29,9 +30,7 @@ export function ImportScreen() {
 }
 
 interface Loaded {
-  file: LoadedFile;
-  headers: string[];
-  rows: string[][];
+  table: LoadedTable;
   profiles: ReturnType<typeof profileColumns>;
   plan: MappingPlan;
 }
@@ -41,7 +40,7 @@ const CTX: ImportContext = {
   now: NOW,
   existingContacts: obaviaDataset.contacts as IntakeContact[],
   defaultCurrency: "USD",
-  users: obaviaDataset.users,
+  users: [...obaviaDataset.users, ...migrationUsers],
 };
 
 /** Client-only state. The import result lives in memory and is never written anywhere. */
@@ -52,12 +51,11 @@ function ImportBody() {
   const [report, setReport] = useState<DryRunReport | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
 
-  const onLoad = useCallback((file: LoadedFile) => {
-    const { headers, rows } = parseCsv(file.text);
-    const profiles = profileColumns(headers, rows);
-    const preset = file.preset ?? detectPreset(headers).preset;
+  const onLoad = useCallback((table: LoadedTable) => {
+    const profiles = profileColumns(table.headers, table.rows);
+    const preset = table.preset ?? detectPreset(table.headers).preset;
     const plan = suggestMapping(profiles, preset);
-    setLoaded({ file, headers, rows, profiles, plan });
+    setLoaded({ table, profiles, plan });
     setReport(null);
     setResult(null);
     setStep(2);
@@ -69,13 +67,13 @@ function ImportBody() {
 
   const onCheck = useCallback(() => {
     if (!loaded) return;
-    setReport(dryRun(loaded.plan, loaded.headers, loaded.rows, CTX));
+    setReport(dryRun(loaded.plan, loaded.table.headers, loaded.table.rows, CTX));
     setStep(3);
   }, [loaded]);
 
   const onImport = useCallback(() => {
     if (!loaded) return;
-    setResult(runImport(loaded.plan, loaded.headers, loaded.rows, CTX));
+    setResult(runImport(loaded.plan, loaded.table.headers, loaded.table.rows, CTX));
     setStep(4);
   }, [loaded]);
 
@@ -93,10 +91,10 @@ function ImportBody() {
       <StepDots step={step} />
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={step} {...fade} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}>
-          {step === 1 ? <DropStep onLoad={onLoad} /> : null}
-          {step === 2 && loaded ? <MatchStep fileName={loaded.file.name} rowCount={loaded.rows.length} plan={loaded.plan} profiles={loaded.profiles} onChangeTarget={onChangeTarget} onNext={onCheck} /> : null}
+          {step === 1 ? <BringStep tenantId={TENANT_ID} onLoad={onLoad} /> : null}
+          {step === 2 && loaded ? <MatchStep fileName={loaded.table.name} rowCount={loaded.table.rows.length} plan={loaded.plan} profiles={loaded.profiles} onChangeTarget={onChangeTarget} onNext={onCheck} /> : null}
           {step === 3 && report ? <CheckStep report={report} onImport={onImport} /> : null}
-          {step === 4 && loaded && result ? <DoneStep fileName={loaded.file.name} plan={loaded.plan} report={result.report} at={NOW} onAgain={onAgain} /> : null}
+          {step === 4 && loaded && result ? <DoneStep fileName={loaded.table.name} plan={loaded.plan} report={result.report} at={NOW} onAgain={onAgain} /> : null}
         </motion.div>
       </AnimatePresence>
     </div>
