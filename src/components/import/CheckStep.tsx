@@ -103,7 +103,7 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
       <span className="text-[12px] font-medium text-fg-muted">{label}</span>
       <span>
         <span className="tabular block text-[24px] font-semibold leading-none tracking-tight text-fg">{value}</span>
-        {sub ? <span className="tabular mt-1 block truncate text-[11.5px] text-fg-subtle">{sub}</span> : null}
+        <span className="tabular mt-1 block min-h-[15px] truncate text-[11.5px] leading-[15px] text-fg-subtle">{sub ?? ""}</span>
       </span>
     </Surface>
   );
@@ -115,8 +115,10 @@ function IssueLine({ i }: { i: RowIssue }) {
       <span className="tabular mt-0.5 w-11 shrink-0 text-[12px] text-fg-subtle">Row {lineOf(i.row)}</span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13.5px] font-medium leading-tight text-fg">{i.header || "Row"}</span>
-        <span className="mt-0.5 block text-[12.5px] leading-snug text-fg-muted">{i.problem}</span>
-        {i.value ? <span className="mt-0.5 block truncate font-mono text-[11.5px] text-fg-subtle">{i.value}</span> : null}
+        <span className="mt-0.5 flex items-baseline gap-2 text-[12.5px] leading-snug text-fg-muted">
+          <span className="shrink-0">{i.problem}</span>
+          {i.value ? <span className="min-w-0 truncate font-mono text-[11.5px] text-fg-subtle">{i.value}</span> : null}
+        </span>
       </span>
     </li>
   );
