@@ -1,0 +1,185 @@
+{
+  "title": "Sales OS Modular Markdown Specification Pack",
+  "version": "1.0.0",
+  "prepared_for": "Jason / Obavia",
+  "document_date": "2026-09-18",
+  "generated_at_utc": "2026-09-19T04:28:24.841056+00:00",
+  "modular_markdown_files": 33,
+  "numbered_documents": 31,
+  "approximate_modular_word_count": 37012,
+  "combined_reading_copy": "Sales_OS_Complete_Specification.md",
+  "status": "Documentation only. No production application or integrations built or tested.",
+  "files": [
+    {
+      "path": "00_PRODUCT_BRIEF.md",
+      "bytes": 7370,
+      "sha256": "18ecf416050adab2c223433aa880905bcba783310b254f088f10861053905df5"
+    },
+    {
+      "path": "01_SOURCE_AUDIT_AND_CORRECTIONS.md",
+      "bytes": 7729,
+      "sha256": "f0a69b10cff941f3fb0cad4d615789f2455be7d884eb22191991df8deda66b7c"
+    },
+    {
+      "path": "02_METRIC_CONTRACTS.md",
+      "bytes": 9845,
+      "sha256": "167c842dd5c80d8681659d9b09489c39169bd53dc18d2d076f70c45b4e4a7553"
+    },
+    {
+      "path": "03_DOMAIN_MODEL_AND_EVENTS.md",
+      "bytes": 7847,
+      "sha256": "7f1e57c0a96549caebefe5de36f78687f29fd07bd466b8fd0779f49229bc2b40"
+    },
+    {
+      "path": "04_INTEGRATIONS_AND_AUTOMATIC_TRACKING.md",
+      "bytes": 7454,
+      "sha256": "cab06f292d0a0a8c10512494a9f70e781d6e6b45c46a719e4f7a6e6994ec3bfe"
+    },
+    {
+      "path": "05_ATTRIBUTION_AND_DATA_QUALITY.md",
+      "bytes": 6602,
+      "sha256": "38f1196d52f3008cf60d0f3c53f2fb743b13d1a5425e9153580fffce76e7ba53"
+    },
+    {
+      "path": "06_LEAD_ROUTING_AND_CAPACITY.md",
+      "bytes": 7744,
+      "sha256": "64db5ce2ce94599e85322ffd4a162bfcba236dff6b79f39d92b83717ae82ade1"
+    },
+    {
+      "path": "07_RELATIONAL_PAIRING_AND_ARCHETYPES.md",
+      "bytes": 10451,
+      "sha256": "db5e1dfcff2da427a41080cf6becfc3d3e6dcf8a3133cd3df102fb8fa9e4b59f"
+    },
+    {
+      "path": "08_PSYCHOLOGY_AND_ADAPTIVE_COMMUNICATION.md",
+      "bytes": 7867,
+      "sha256": "42973243e7f8bcb955292ce043dac977fc16c8264bd9dca99eb8ed83cb7db7cb"
+    },
+    {
+      "path": "09_SETTER_WORKSPACE.md",
+      "bytes": 6211,
+      "sha256": "271e250b93c8ea84a4e6974e268033016c2cb9930ca3e5c539eb223dc3c901be"
+    },
+    {
+      "path": "10_CLOSER_WORKSPACE.md",
+      "bytes": 6196,
+      "sha256": "58259eb3030c70b1a978b516c7dc8afdbf7630aef767a248ba79a9fbaa5a5913"
+    },
+    {
+      "path": "11_SALES_PROCESS_AND_STAGE_SOPS.md",
+      "bytes": 9980,
+      "sha256": "57981f0211cf0b4ec676b7c0e86805ec41ac10257ca1bfd23a94f1334bb60432"
+    },
+    {
+      "path": "12_SCHEDULING_ATTENDANCE_AND_RECOVERY.md",
+      "bytes": 6348,
+      "sha256": "3c42a500de2ad62710c1193176b5811ca4d97e7e2815d7f6cade47086e6c9fad"
+    },
+    {
+      "path": "13_QUALIFICATION_AND_DQ_GOVERNANCE.md",
+      "bytes": 6450,
+      "sha256": "081308b7d92e43e965892948a50ee4bf60f1f4961c9108fdfb7e89029658f318"
+    },
+    {
+      "path": "14_LEADERBOARDS_AND_FAIR_COMPARISONS.md",
+      "bytes": 6899,
+      "sha256": "e3a309827067559732e75529a1bfea08a2cf1af2732d69a1278a2917b56ee4e5"
+    },
+    {
+      "path": "15_GAMIFICATION_AND_TEAM_PROGRESSION.md",
+      "bytes": 6944,
+      "sha256": "af2220673c52e3b15ebe6c54c9ed616c02b3bef068bfd1b505086876867f3748"
+    },
+    {
+      "path": "16_AI_COACHING_AND_EARNINGS_OPPORTUNITIES.md",
+      "bytes": 8938,
+      "sha256": "124069c9cdbed3dae6105d18c156b75ca5105e43616e4cf14a3a80240e76f5cc"
+    },
+    {
+      "path": "17_PLAYBOOKS_AND_KNOWLEDGE_LIBRARY.md",
+      "bytes": 5994,
+      "sha256": "eb0467db08c3b1fcb97e46b2cb5b52d8d70809f2e0e1da327541de3db6a87e3e"
+    },
+    {
+      "path": "18_EXPERIMENTS_AND_SCRIPT_EVOLUTION.md",
+      "bytes": 6616,
+      "sha256": "2c19d8f1f15af5530778a2539bf5c520b6aa704926d48e63fd4ce64134e4325b"
+    },
+    {
+      "path": "19_REVENUE_COMMISSIONS_AND_FORECASTS.md",
+      "bytes": 7177,
+      "sha256": "9754cf825a84283f4df79e7c511a21e0a8faf2dc9b0276245ae1fb5c075c29aa"
+    },
+    {
+      "path": "20_UX_AND_VISUAL_METRIC_LANGUAGE.md",
+      "bytes": 6979,
+      "sha256": "10fdadfc02661ee8ba52ba8a53fe59ee05573054b07bbf5cf5c05567f00c0602"
+    },
+    {
+      "path": "21_OWNER_ANALYTICS_AND_BOTTLENECKS.md",
+      "bytes": 7176,
+      "sha256": "bf59c317ab2c83741ab439ef0cd4781a6b0624424a3e35c3adaa1ce6700d9df5"
+    },
+    {
+      "path": "22_TECHNICAL_ARCHITECTURE.md",
+      "bytes": 8054,
+      "sha256": "7dfb9a7e04eb381a0a59a9f07e1632332256b8bf9047feaa06cbcb5733a55fae"
+    },
+    {
+      "path": "23_SECURITY_CONSENT_AND_AI_CONTROLS.md",
+      "bytes": 7860,
+      "sha256": "7f265be982b29dff1879fbd570629931842dd68e20eedcf0a6207a970a96d238"
+    },
+    {
+      "path": "24_LEVERAGE_OWNERSHIP_AND_CONTINUITY.md",
+      "bytes": 9181,
+      "sha256": "93697b8d06c5330b26cf46b45ff55c89256982480226685b573a03aebe0db5a0"
+    },
+    {
+      "path": "25_BUILD_BUY_AND_DELIVERY_GATES.md",
+      "bytes": 7706,
+      "sha256": "7520c826e4cb597d5d0dc99fe8fc70d0ab0f75341bb33d38943bffeaf48f468a"
+    },
+    {
+      "path": "26_ACCEPTANCE_TESTS_AND_SCENARIOS.md",
+      "bytes": 10326,
+      "sha256": "c06d36302389947c626d74af2b679e565523c5968d2d613963d14c900fd6c85e"
+    },
+    {
+      "path": "27_AGENT_PROMPTS_AND_HANDOFFS.md",
+      "bytes": 7600,
+      "sha256": "10428857174f332dc1e702f9694ea84443d6282edc927fdf6a2081c4682cff5f"
+    },
+    {
+      "path": "28_TRACEABILITY_AND_OPEN_DECISIONS.md",
+      "bytes": 9147,
+      "sha256": "808e29541120102e09dc7d536e623baeb5b035ee380f6c56f484501da83cf49c"
+    },
+    {
+      "path": "29_SOURCES_AND_RESEARCH.md",
+      "bytes": 8529,
+      "sha256": "fcd40baca29146ec21a677217f48a11d56be4c74e2b7eae912395e17ce82ee01"
+    },
+    {
+      "path": "30_USER_SUPPLIED_TRANSCRIPT.md",
+      "bytes": 20755,
+      "sha256": "713840e9a66137f48a377dac6605e9982993ae1b548e571a1db17230fd730e4f"
+    },
+    {
+      "path": "AGENTS.md",
+      "bytes": 6110,
+      "sha256": "6946e33a421d06c26eadfbee7e1587de24a75f350824b09c8d7675aacf95566f"
+    },
+    {
+      "path": "README.md",
+      "bytes": 8554,
+      "sha256": "5bfd239fb7cb68f94c5be9bea3e505699729e06bcd3699b718048c189d8640bc"
+    },
+    {
+      "path": "assets/IMG_4629.png",
+      "bytes": 945257,
+      "sha256": "fdfa6f7d5dd923a4c2a5952cc56e1ba0c00994adf123343fd6124d0488e8cd04"
+    }
+  ],
+  "combined_sha256": "0e989c99025ccaa2adce6d31fa6c8dfe166fb037bdb2a05a02565f5e325c2dce"
+}

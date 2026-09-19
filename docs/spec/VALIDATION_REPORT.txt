@@ -1,0 +1,378 @@
+SALES OS MARKDOWN PACK: ARTIFACT VALIDATION
+Version: 1.0.0
+Scope: documentation packaging, syntax, internal links, and arithmetic fixtures only
+Status: PASS
+
+Modular Markdown files: 33
+Numbered documents: 31
+Approximate modular word count: 37,012
+Local source/module links checked: 141
+JSON examples parsed: 5
+YAML blocks/front matter parsed: 32
+Future application acceptance scenarios specified: 56
+Checks passed: 358
+Checks failed: 0
+
+IMPORTANT: The 56 future application scenarios have not been executed against an application. No CRM, dialer, payment integration, or routing/AI model was created by this documentation task.
+
+The original screenshot was visually reviewed. The transcript is user-supplied and is not independently verified. Provider/source limitations are stated in SOS-29.
+
+CHECK DETAILS
+PASS | Expected 33 modular Markdown files exist
+PASS | Numbered modules are contiguous from 00 through 30
+PASS | README.md: file exists and is non-empty
+PASS | README.md: valid clean UTF-8 text
+PASS | README.md: top-level title present
+PASS | README.md: balanced fenced blocks
+PASS | README.md: local link resolves: AGENTS.md
+PASS | README.md: local link resolves: 00_PRODUCT_BRIEF.md
+PASS | README.md: local link resolves: 01_SOURCE_AUDIT_AND_CORRECTIONS.md
+PASS | README.md: local link resolves: 02_METRIC_CONTRACTS.md
+PASS | README.md: local link resolves: 25_BUILD_BUY_AND_DELIVERY_GATES.md
+PASS | README.md: local link resolves: 21_OWNER_ANALYTICS_AND_BOTTLENECKS.md
+PASS | README.md: local link resolves: 28_TRACEABILITY_AND_OPEN_DECISIONS.md
+PASS | README.md: local link resolves: 07_RELATIONAL_PAIRING_AND_ARCHETYPES.md
+PASS | README.md: local link resolves: 08_PSYCHOLOGY_AND_ADAPTIVE_COMMUNICATION.md
+PASS | README.md: local link resolves: 14_LEADERBOARDS_AND_FAIR_COMPARISONS.md
+PASS | README.md: local link resolves: 15_GAMIFICATION_AND_TEAM_PROGRESSION.md
+PASS | README.md: local link resolves: 16_AI_COACHING_AND_EARNINGS_OPPORTUNITIES.md
+PASS | README.md: local link resolves: 00_PRODUCT_BRIEF.md
+PASS | README.md: local link resolves: 01_SOURCE_AUDIT_AND_CORRECTIONS.md
+PASS | README.md: local link resolves: 02_METRIC_CONTRACTS.md
+PASS | README.md: local link resolves: 03_DOMAIN_MODEL_AND_EVENTS.md
+PASS | README.md: local link resolves: 04_INTEGRATIONS_AND_AUTOMATIC_TRACKING.md
+PASS | README.md: local link resolves: 05_ATTRIBUTION_AND_DATA_QUALITY.md
+PASS | README.md: local link resolves: 06_LEAD_ROUTING_AND_CAPACITY.md
+PASS | README.md: local link resolves: 07_RELATIONAL_PAIRING_AND_ARCHETYPES.md
+PASS | README.md: local link resolves: 08_PSYCHOLOGY_AND_ADAPTIVE_COMMUNICATION.md
+PASS | README.md: local link resolves: 09_SETTER_WORKSPACE.md
+PASS | README.md: local link resolves: 10_CLOSER_WORKSPACE.md
+PASS | README.md: local link resolves: 11_SALES_PROCESS_AND_STAGE_SOPS.md
+PASS | README.md: local link resolves: 12_SCHEDULING_ATTENDANCE_AND_RECOVERY.md
+PASS | README.md: local link resolves: 13_QUALIFICATION_AND_DQ_GOVERNANCE.md
+PASS | README.md: local link resolves: 14_LEADERBOARDS_AND_FAIR_COMPARISONS.md
+PASS | README.md: local link resolves: 15_GAMIFICATION_AND_TEAM_PROGRESSION.md
+PASS | README.md: local link resolves: 16_AI_COACHING_AND_EARNINGS_OPPORTUNITIES.md
+PASS | README.md: local link resolves: 17_PLAYBOOKS_AND_KNOWLEDGE_LIBRARY.md
+PASS | README.md: local link resolves: 18_EXPERIMENTS_AND_SCRIPT_EVOLUTION.md
+PASS | README.md: local link resolves: 19_REVENUE_COMMISSIONS_AND_FORECASTS.md
+PASS | README.md: local link resolves: 20_UX_AND_VISUAL_METRIC_LANGUAGE.md
+PASS | README.md: local link resolves: 21_OWNER_ANALYTICS_AND_BOTTLENECKS.md
+PASS | README.md: local link resolves: 22_TECHNICAL_ARCHITECTURE.md
+PASS | README.md: local link resolves: 23_SECURITY_CONSENT_AND_AI_CONTROLS.md
+PASS | README.md: local link resolves: 24_LEVERAGE_OWNERSHIP_AND_CONTINUITY.md
+PASS | README.md: local link resolves: 25_BUILD_BUY_AND_DELIVERY_GATES.md
+PASS | README.md: local link resolves: 26_ACCEPTANCE_TESTS_AND_SCENARIOS.md
+PASS | README.md: local link resolves: 27_AGENT_PROMPTS_AND_HANDOFFS.md
+PASS | README.md: local link resolves: 28_TRACEABILITY_AND_OPEN_DECISIONS.md
+PASS | README.md: local link resolves: 29_SOURCES_AND_RESEARCH.md
+PASS | README.md: local link resolves: 30_USER_SUPPLIED_TRANSCRIPT.md
+PASS | README.md: local link resolves: 29_SOURCES_AND_RESEARCH.md
+PASS | AGENTS.md: file exists and is non-empty
+PASS | AGENTS.md: valid clean UTF-8 text
+PASS | AGENTS.md: top-level title present
+PASS | AGENTS.md: balanced fenced blocks
+PASS | 00_PRODUCT_BRIEF.md: file exists and is non-empty
+PASS | 00_PRODUCT_BRIEF.md: valid clean UTF-8 text
+PASS | 00_PRODUCT_BRIEF.md: top-level title present
+PASS | 00_PRODUCT_BRIEF.md: balanced fenced blocks
+PASS | 00_PRODUCT_BRIEF.md: front matter has correct document ID
+PASS | 00_PRODUCT_BRIEF.md: reusable agent prompt present
+PASS | 01_SOURCE_AUDIT_AND_CORRECTIONS.md: file exists and is non-empty
+PASS | 01_SOURCE_AUDIT_AND_CORRECTIONS.md: valid clean UTF-8 text
+PASS | 01_SOURCE_AUDIT_AND_CORRECTIONS.md: top-level title present
+PASS | 01_SOURCE_AUDIT_AND_CORRECTIONS.md: balanced fenced blocks
+PASS | 01_SOURCE_AUDIT_AND_CORRECTIONS.md: front matter has correct document ID
+PASS | 01_SOURCE_AUDIT_AND_CORRECTIONS.md: reusable agent prompt present
+PASS | 01_SOURCE_AUDIT_AND_CORRECTIONS.md: local link resolves: 02_METRIC_CONTRACTS.md
+PASS | 01_SOURCE_AUDIT_AND_CORRECTIONS.md: local link resolves: 29_SOURCES_AND_RESEARCH.md
+PASS | 02_METRIC_CONTRACTS.md: file exists and is non-empty
+PASS | 02_METRIC_CONTRACTS.md: valid clean UTF-8 text
+PASS | 02_METRIC_CONTRACTS.md: top-level title present
+PASS | 02_METRIC_CONTRACTS.md: balanced fenced blocks
+PASS | 02_METRIC_CONTRACTS.md: front matter has correct document ID
+PASS | 02_METRIC_CONTRACTS.md: reusable agent prompt present
+PASS | 02_METRIC_CONTRACTS.md: local link resolves: 01_SOURCE_AUDIT_AND_CORRECTIONS.md
+PASS | 02_METRIC_CONTRACTS.md: local link resolves: 03_DOMAIN_MODEL_AND_EVENTS.md
+PASS | 03_DOMAIN_MODEL_AND_EVENTS.md: file exists and is non-empty
+PASS | 03_DOMAIN_MODEL_AND_EVENTS.md: valid clean UTF-8 text
+PASS | 03_DOMAIN_MODEL_AND_EVENTS.md: top-level title present
+PASS | 03_DOMAIN_MODEL_AND_EVENTS.md: balanced fenced blocks
+PASS | 03_DOMAIN_MODEL_AND_EVENTS.md: front matter has correct document ID
+PASS | 03_DOMAIN_MODEL_AND_EVENTS.md: reusable agent prompt present
+PASS | 03_DOMAIN_MODEL_AND_EVENTS.md: local link resolves: 02_METRIC_CONTRACTS.md
+PASS | 03_DOMAIN_MODEL_AND_EVENTS.md: local link resolves: 22_TECHNICAL_ARCHITECTURE.md
+PASS | 04_INTEGRATIONS_AND_AUTOMATIC_TRACKING.md: file exists and is non-empty
+PASS | 04_INTEGRATIONS_AND_AUTOMATIC_TRACKING.md: valid clean UTF-8 text
+PASS | 04_INTEGRATIONS_AND_AUTOMATIC_TRACKING.md: top-level title present
+PASS | 04_INTEGRATIONS_AND_AUTOMATIC_TRACKING.md: balanced fenced blocks
+PASS | 04_INTEGRATIONS_AND_AUTOMATIC_TRACKING.md: front matter has correct document ID
+PASS | 04_INTEGRATIONS_AND_AUTOMATIC_TRACKING.md: reusable agent prompt present
+PASS | 04_INTEGRATIONS_AND_AUTOMATIC_TRACKING.md: local link resolves: 03_DOMAIN_MODEL_AND_EVENTS.md
+PASS | 04_INTEGRATIONS_AND_AUTOMATIC_TRACKING.md: local link resolves: 23_SECURITY_CONSENT_AND_AI_CONTROLS.md
+PASS | 04_INTEGRATIONS_AND_AUTOMATIC_TRACKING.md: local link resolves: 29_SOURCES_AND_RESEARCH.md
+PASS | 04_INTEGRATIONS_AND_AUTOMATIC_TRACKING.md: local link resolves: 29_SOURCES_AND_RESEARCH.md
+PASS | 05_ATTRIBUTION_AND_DATA_QUALITY.md: file exists and is non-empty
+PASS | 05_ATTRIBUTION_AND_DATA_QUALITY.md: valid clean UTF-8 text
+PASS | 05_ATTRIBUTION_AND_DATA_QUALITY.md: top-level title present
+PASS | 05_ATTRIBUTION_AND_DATA_QUALITY.md: balanced fenced blocks
+PASS | 05_ATTRIBUTION_AND_DATA_QUALITY.md: front matter has correct document ID
+PASS | 05_ATTRIBUTION_AND_DATA_QUALITY.md: reusable agent prompt present
+PASS | 05_ATTRIBUTION_AND_DATA_QUALITY.md: local link resolves: 02_METRIC_CONTRACTS.md
+PASS | 05_ATTRIBUTION_AND_DATA_QUALITY.md: local link resolves: 03_DOMAIN_MODEL_AND_EVENTS.md
+PASS | 06_LEAD_ROUTING_AND_CAPACITY.md: file exists and is non-empty
+PASS | 06_LEAD_ROUTING_AND_CAPACITY.md: valid clean UTF-8 text
+PASS | 06_LEAD_ROUTING_AND_CAPACITY.md: top-level title present
+PASS | 06_LEAD_ROUTING_AND_CAPACITY.md: balanced fenced blocks
+PASS | 06_LEAD_ROUTING_AND_CAPACITY.md: front matter has correct document ID
+PASS | 06_LEAD_ROUTING_AND_CAPACITY.md: reusable agent prompt present
+PASS | 06_LEAD_ROUTING_AND_CAPACITY.md: local link resolves: 07_RELATIONAL_PAIRING_AND_ARCHETYPES.md
+PASS | 06_LEAD_ROUTING_AND_CAPACITY.md: local link resolves: 14_LEADERBOARDS_AND_FAIR_COMPARISONS.md
+PASS | 06_LEAD_ROUTING_AND_CAPACITY.md: local link resolves: 23_SECURITY_CONSENT_AND_AI_CONTROLS.md
+PASS | 07_RELATIONAL_PAIRING_AND_ARCHETYPES.md: file exists and is non-empty
+PASS | 07_RELATIONAL_PAIRING_AND_ARCHETYPES.md: valid clean UTF-8 text
+PASS | 07_RELATIONAL_PAIRING_AND_ARCHETYPES.md: top-level title present
+PASS | 07_RELATIONAL_PAIRING_AND_ARCHETYPES.md: balanced fenced blocks
+PASS | 07_RELATIONAL_PAIRING_AND_ARCHETYPES.md: front matter has correct document ID
+PASS | 07_RELATIONAL_PAIRING_AND_ARCHETYPES.md: reusable agent prompt present
+PASS | 07_RELATIONAL_PAIRING_AND_ARCHETYPES.md: local link resolves: 06_LEAD_ROUTING_AND_CAPACITY.md
+PASS | 07_RELATIONAL_PAIRING_AND_ARCHETYPES.md: local link resolves: 08_PSYCHOLOGY_AND_ADAPTIVE_COMMUNICATION.md
+PASS | 07_RELATIONAL_PAIRING_AND_ARCHETYPES.md: local link resolves: 18_EXPERIMENTS_AND_SCRIPT_EVOLUTION.md
+PASS | 08_PSYCHOLOGY_AND_ADAPTIVE_COMMUNICATION.md: file exists and is non-empty
+PASS | 08_PSYCHOLOGY_AND_ADAPTIVE_COMMUNICATION.md: valid clean UTF-8 text
+PASS | 08_PSYCHOLOGY_AND_ADAPTIVE_COMMUNICATION.md: top-level title present
+PASS | 08_PSYCHOLOGY_AND_ADAPTIVE_COMMUNICATION.md: balanced fenced blocks
+PASS | 08_PSYCHOLOGY_AND_ADAPTIVE_COMMUNICATION.md: front matter has correct document ID
+PASS | 08_PSYCHOLOGY_AND_ADAPTIVE_COMMUNICATION.md: reusable agent prompt present
+PASS | 08_PSYCHOLOGY_AND_ADAPTIVE_COMMUNICATION.md: local link resolves: 07_RELATIONAL_PAIRING_AND_ARCHETYPES.md
+PASS | 08_PSYCHOLOGY_AND_ADAPTIVE_COMMUNICATION.md: local link resolves: 11_SALES_PROCESS_AND_STAGE_SOPS.md
+PASS | 08_PSYCHOLOGY_AND_ADAPTIVE_COMMUNICATION.md: local link resolves: 17_PLAYBOOKS_AND_KNOWLEDGE_LIBRARY.md
+PASS | 09_SETTER_WORKSPACE.md: file exists and is non-empty
+PASS | 09_SETTER_WORKSPACE.md: valid clean UTF-8 text
+PASS | 09_SETTER_WORKSPACE.md: top-level title present
+PASS | 09_SETTER_WORKSPACE.md: balanced fenced blocks
+PASS | 09_SETTER_WORKSPACE.md: front matter has correct document ID
+PASS | 09_SETTER_WORKSPACE.md: reusable agent prompt present
+PASS | 09_SETTER_WORKSPACE.md: local link resolves: 06_LEAD_ROUTING_AND_CAPACITY.md
+PASS | 09_SETTER_WORKSPACE.md: local link resolves: 12_SCHEDULING_ATTENDANCE_AND_RECOVERY.md
+PASS | 09_SETTER_WORKSPACE.md: local link resolves: 20_UX_AND_VISUAL_METRIC_LANGUAGE.md
+PASS | 10_CLOSER_WORKSPACE.md: file exists and is non-empty
+PASS | 10_CLOSER_WORKSPACE.md: valid clean UTF-8 text
+PASS | 10_CLOSER_WORKSPACE.md: top-level title present
+PASS | 10_CLOSER_WORKSPACE.md: balanced fenced blocks
+PASS | 10_CLOSER_WORKSPACE.md: front matter has correct document ID
+PASS | 10_CLOSER_WORKSPACE.md: reusable agent prompt present
+PASS | 10_CLOSER_WORKSPACE.md: local link resolves: 11_SALES_PROCESS_AND_STAGE_SOPS.md
+PASS | 10_CLOSER_WORKSPACE.md: local link resolves: 19_REVENUE_COMMISSIONS_AND_FORECASTS.md
+PASS | 10_CLOSER_WORKSPACE.md: local link resolves: 20_UX_AND_VISUAL_METRIC_LANGUAGE.md
+PASS | 11_SALES_PROCESS_AND_STAGE_SOPS.md: file exists and is non-empty
+PASS | 11_SALES_PROCESS_AND_STAGE_SOPS.md: valid clean UTF-8 text
+PASS | 11_SALES_PROCESS_AND_STAGE_SOPS.md: top-level title present
+PASS | 11_SALES_PROCESS_AND_STAGE_SOPS.md: balanced fenced blocks
+PASS | 11_SALES_PROCESS_AND_STAGE_SOPS.md: front matter has correct document ID
+PASS | 11_SALES_PROCESS_AND_STAGE_SOPS.md: reusable agent prompt present
+PASS | 11_SALES_PROCESS_AND_STAGE_SOPS.md: local link resolves: 02_METRIC_CONTRACTS.md
+PASS | 11_SALES_PROCESS_AND_STAGE_SOPS.md: local link resolves: 08_PSYCHOLOGY_AND_ADAPTIVE_COMMUNICATION.md
+PASS | 11_SALES_PROCESS_AND_STAGE_SOPS.md: local link resolves: 17_PLAYBOOKS_AND_KNOWLEDGE_LIBRARY.md
+PASS | 12_SCHEDULING_ATTENDANCE_AND_RECOVERY.md: file exists and is non-empty
+PASS | 12_SCHEDULING_ATTENDANCE_AND_RECOVERY.md: valid clean UTF-8 text
+PASS | 12_SCHEDULING_ATTENDANCE_AND_RECOVERY.md: top-level title present
+PASS | 12_SCHEDULING_ATTENDANCE_AND_RECOVERY.md: balanced fenced blocks
+PASS | 12_SCHEDULING_ATTENDANCE_AND_RECOVERY.md: front matter has correct document ID
+PASS | 12_SCHEDULING_ATTENDANCE_AND_RECOVERY.md: reusable agent prompt present
+PASS | 12_SCHEDULING_ATTENDANCE_AND_RECOVERY.md: local link resolves: 02_METRIC_CONTRACTS.md
+PASS | 12_SCHEDULING_ATTENDANCE_AND_RECOVERY.md: local link resolves: 04_INTEGRATIONS_AND_AUTOMATIC_TRACKING.md
+PASS | 12_SCHEDULING_ATTENDANCE_AND_RECOVERY.md: local link resolves: 06_LEAD_ROUTING_AND_CAPACITY.md
+PASS | 13_QUALIFICATION_AND_DQ_GOVERNANCE.md: file exists and is non-empty
+PASS | 13_QUALIFICATION_AND_DQ_GOVERNANCE.md: valid clean UTF-8 text
+PASS | 13_QUALIFICATION_AND_DQ_GOVERNANCE.md: top-level title present
+PASS | 13_QUALIFICATION_AND_DQ_GOVERNANCE.md: balanced fenced blocks
+PASS | 13_QUALIFICATION_AND_DQ_GOVERNANCE.md: front matter has correct document ID
+PASS | 13_QUALIFICATION_AND_DQ_GOVERNANCE.md: reusable agent prompt present
+PASS | 13_QUALIFICATION_AND_DQ_GOVERNANCE.md: local link resolves: 02_METRIC_CONTRACTS.md
+PASS | 13_QUALIFICATION_AND_DQ_GOVERNANCE.md: local link resolves: 08_PSYCHOLOGY_AND_ADAPTIVE_COMMUNICATION.md
+PASS | 13_QUALIFICATION_AND_DQ_GOVERNANCE.md: local link resolves: 05_ATTRIBUTION_AND_DATA_QUALITY.md
+PASS | 14_LEADERBOARDS_AND_FAIR_COMPARISONS.md: file exists and is non-empty
+PASS | 14_LEADERBOARDS_AND_FAIR_COMPARISONS.md: valid clean UTF-8 text
+PASS | 14_LEADERBOARDS_AND_FAIR_COMPARISONS.md: top-level title present
+PASS | 14_LEADERBOARDS_AND_FAIR_COMPARISONS.md: balanced fenced blocks
+PASS | 14_LEADERBOARDS_AND_FAIR_COMPARISONS.md: front matter has correct document ID
+PASS | 14_LEADERBOARDS_AND_FAIR_COMPARISONS.md: reusable agent prompt present
+PASS | 14_LEADERBOARDS_AND_FAIR_COMPARISONS.md: local link resolves: 02_METRIC_CONTRACTS.md
+PASS | 14_LEADERBOARDS_AND_FAIR_COMPARISONS.md: local link resolves: 05_ATTRIBUTION_AND_DATA_QUALITY.md
+PASS | 14_LEADERBOARDS_AND_FAIR_COMPARISONS.md: local link resolves: 15_GAMIFICATION_AND_TEAM_PROGRESSION.md
+PASS | 15_GAMIFICATION_AND_TEAM_PROGRESSION.md: file exists and is non-empty
+PASS | 15_GAMIFICATION_AND_TEAM_PROGRESSION.md: valid clean UTF-8 text
+PASS | 15_GAMIFICATION_AND_TEAM_PROGRESSION.md: top-level title present
+PASS | 15_GAMIFICATION_AND_TEAM_PROGRESSION.md: balanced fenced blocks
+PASS | 15_GAMIFICATION_AND_TEAM_PROGRESSION.md: front matter has correct document ID
+PASS | 15_GAMIFICATION_AND_TEAM_PROGRESSION.md: reusable agent prompt present
+PASS | 15_GAMIFICATION_AND_TEAM_PROGRESSION.md: local link resolves: 14_LEADERBOARDS_AND_FAIR_COMPARISONS.md
+PASS | 15_GAMIFICATION_AND_TEAM_PROGRESSION.md: local link resolves: 16_AI_COACHING_AND_EARNINGS_OPPORTUNITIES.md
+PASS | 15_GAMIFICATION_AND_TEAM_PROGRESSION.md: local link resolves: 19_REVENUE_COMMISSIONS_AND_FORECASTS.md
+PASS | 16_AI_COACHING_AND_EARNINGS_OPPORTUNITIES.md: file exists and is non-empty
+PASS | 16_AI_COACHING_AND_EARNINGS_OPPORTUNITIES.md: valid clean UTF-8 text
+PASS | 16_AI_COACHING_AND_EARNINGS_OPPORTUNITIES.md: top-level title present
+PASS | 16_AI_COACHING_AND_EARNINGS_OPPORTUNITIES.md: balanced fenced blocks
+PASS | 16_AI_COACHING_AND_EARNINGS_OPPORTUNITIES.md: front matter has correct document ID
+PASS | 16_AI_COACHING_AND_EARNINGS_OPPORTUNITIES.md: reusable agent prompt present
+PASS | 16_AI_COACHING_AND_EARNINGS_OPPORTUNITIES.md: local link resolves: 02_METRIC_CONTRACTS.md
+PASS | 16_AI_COACHING_AND_EARNINGS_OPPORTUNITIES.md: local link resolves: 13_QUALIFICATION_AND_DQ_GOVERNANCE.md
+PASS | 16_AI_COACHING_AND_EARNINGS_OPPORTUNITIES.md: local link resolves: 18_EXPERIMENTS_AND_SCRIPT_EVOLUTION.md
+PASS | 16_AI_COACHING_AND_EARNINGS_OPPORTUNITIES.md: local link resolves: 19_REVENUE_COMMISSIONS_AND_FORECASTS.md
+PASS | 17_PLAYBOOKS_AND_KNOWLEDGE_LIBRARY.md: file exists and is non-empty
+PASS | 17_PLAYBOOKS_AND_KNOWLEDGE_LIBRARY.md: valid clean UTF-8 text
+PASS | 17_PLAYBOOKS_AND_KNOWLEDGE_LIBRARY.md: top-level title present
+PASS | 17_PLAYBOOKS_AND_KNOWLEDGE_LIBRARY.md: balanced fenced blocks
+PASS | 17_PLAYBOOKS_AND_KNOWLEDGE_LIBRARY.md: front matter has correct document ID
+PASS | 17_PLAYBOOKS_AND_KNOWLEDGE_LIBRARY.md: reusable agent prompt present
+PASS | 17_PLAYBOOKS_AND_KNOWLEDGE_LIBRARY.md: local link resolves: 11_SALES_PROCESS_AND_STAGE_SOPS.md
+PASS | 17_PLAYBOOKS_AND_KNOWLEDGE_LIBRARY.md: local link resolves: 18_EXPERIMENTS_AND_SCRIPT_EVOLUTION.md
+PASS | 17_PLAYBOOKS_AND_KNOWLEDGE_LIBRARY.md: local link resolves: 23_SECURITY_CONSENT_AND_AI_CONTROLS.md
+PASS | 18_EXPERIMENTS_AND_SCRIPT_EVOLUTION.md: file exists and is non-empty
+PASS | 18_EXPERIMENTS_AND_SCRIPT_EVOLUTION.md: valid clean UTF-8 text
+PASS | 18_EXPERIMENTS_AND_SCRIPT_EVOLUTION.md: top-level title present
+PASS | 18_EXPERIMENTS_AND_SCRIPT_EVOLUTION.md: balanced fenced blocks
+PASS | 18_EXPERIMENTS_AND_SCRIPT_EVOLUTION.md: front matter has correct document ID
+PASS | 18_EXPERIMENTS_AND_SCRIPT_EVOLUTION.md: reusable agent prompt present
+PASS | 18_EXPERIMENTS_AND_SCRIPT_EVOLUTION.md: local link resolves: 02_METRIC_CONTRACTS.md
+PASS | 18_EXPERIMENTS_AND_SCRIPT_EVOLUTION.md: local link resolves: 07_RELATIONAL_PAIRING_AND_ARCHETYPES.md
+PASS | 18_EXPERIMENTS_AND_SCRIPT_EVOLUTION.md: local link resolves: 17_PLAYBOOKS_AND_KNOWLEDGE_LIBRARY.md
+PASS | 19_REVENUE_COMMISSIONS_AND_FORECASTS.md: file exists and is non-empty
+PASS | 19_REVENUE_COMMISSIONS_AND_FORECASTS.md: valid clean UTF-8 text
+PASS | 19_REVENUE_COMMISSIONS_AND_FORECASTS.md: top-level title present
+PASS | 19_REVENUE_COMMISSIONS_AND_FORECASTS.md: balanced fenced blocks
+PASS | 19_REVENUE_COMMISSIONS_AND_FORECASTS.md: front matter has correct document ID
+PASS | 19_REVENUE_COMMISSIONS_AND_FORECASTS.md: reusable agent prompt present
+PASS | 19_REVENUE_COMMISSIONS_AND_FORECASTS.md: local link resolves: 02_METRIC_CONTRACTS.md
+PASS | 19_REVENUE_COMMISSIONS_AND_FORECASTS.md: local link resolves: 05_ATTRIBUTION_AND_DATA_QUALITY.md
+PASS | 19_REVENUE_COMMISSIONS_AND_FORECASTS.md: local link resolves: 29_SOURCES_AND_RESEARCH.md
+PASS | 20_UX_AND_VISUAL_METRIC_LANGUAGE.md: file exists and is non-empty
+PASS | 20_UX_AND_VISUAL_METRIC_LANGUAGE.md: valid clean UTF-8 text
+PASS | 20_UX_AND_VISUAL_METRIC_LANGUAGE.md: top-level title present
+PASS | 20_UX_AND_VISUAL_METRIC_LANGUAGE.md: balanced fenced blocks
+PASS | 20_UX_AND_VISUAL_METRIC_LANGUAGE.md: front matter has correct document ID
+PASS | 20_UX_AND_VISUAL_METRIC_LANGUAGE.md: reusable agent prompt present
+PASS | 20_UX_AND_VISUAL_METRIC_LANGUAGE.md: local link resolves: 02_METRIC_CONTRACTS.md
+PASS | 20_UX_AND_VISUAL_METRIC_LANGUAGE.md: local link resolves: 09_SETTER_WORKSPACE.md
+PASS | 20_UX_AND_VISUAL_METRIC_LANGUAGE.md: local link resolves: 10_CLOSER_WORKSPACE.md
+PASS | 20_UX_AND_VISUAL_METRIC_LANGUAGE.md: local link resolves: 14_LEADERBOARDS_AND_FAIR_COMPARISONS.md
+PASS | 20_UX_AND_VISUAL_METRIC_LANGUAGE.md: local link resolves: 29_SOURCES_AND_RESEARCH.md
+PASS | 21_OWNER_ANALYTICS_AND_BOTTLENECKS.md: file exists and is non-empty
+PASS | 21_OWNER_ANALYTICS_AND_BOTTLENECKS.md: valid clean UTF-8 text
+PASS | 21_OWNER_ANALYTICS_AND_BOTTLENECKS.md: top-level title present
+PASS | 21_OWNER_ANALYTICS_AND_BOTTLENECKS.md: balanced fenced blocks
+PASS | 21_OWNER_ANALYTICS_AND_BOTTLENECKS.md: front matter has correct document ID
+PASS | 21_OWNER_ANALYTICS_AND_BOTTLENECKS.md: reusable agent prompt present
+PASS | 21_OWNER_ANALYTICS_AND_BOTTLENECKS.md: local link resolves: 02_METRIC_CONTRACTS.md
+PASS | 21_OWNER_ANALYTICS_AND_BOTTLENECKS.md: local link resolves: 16_AI_COACHING_AND_EARNINGS_OPPORTUNITIES.md
+PASS | 21_OWNER_ANALYTICS_AND_BOTTLENECKS.md: local link resolves: 19_REVENUE_COMMISSIONS_AND_FORECASTS.md
+PASS | 22_TECHNICAL_ARCHITECTURE.md: file exists and is non-empty
+PASS | 22_TECHNICAL_ARCHITECTURE.md: valid clean UTF-8 text
+PASS | 22_TECHNICAL_ARCHITECTURE.md: top-level title present
+PASS | 22_TECHNICAL_ARCHITECTURE.md: balanced fenced blocks
+PASS | 22_TECHNICAL_ARCHITECTURE.md: front matter has correct document ID
+PASS | 22_TECHNICAL_ARCHITECTURE.md: reusable agent prompt present
+PASS | 22_TECHNICAL_ARCHITECTURE.md: local link resolves: 03_DOMAIN_MODEL_AND_EVENTS.md
+PASS | 22_TECHNICAL_ARCHITECTURE.md: local link resolves: 04_INTEGRATIONS_AND_AUTOMATIC_TRACKING.md
+PASS | 22_TECHNICAL_ARCHITECTURE.md: local link resolves: 23_SECURITY_CONSENT_AND_AI_CONTROLS.md
+PASS | 22_TECHNICAL_ARCHITECTURE.md: local link resolves: 25_BUILD_BUY_AND_DELIVERY_GATES.md
+PASS | 23_SECURITY_CONSENT_AND_AI_CONTROLS.md: file exists and is non-empty
+PASS | 23_SECURITY_CONSENT_AND_AI_CONTROLS.md: valid clean UTF-8 text
+PASS | 23_SECURITY_CONSENT_AND_AI_CONTROLS.md: top-level title present
+PASS | 23_SECURITY_CONSENT_AND_AI_CONTROLS.md: balanced fenced blocks
+PASS | 23_SECURITY_CONSENT_AND_AI_CONTROLS.md: front matter has correct document ID
+PASS | 23_SECURITY_CONSENT_AND_AI_CONTROLS.md: reusable agent prompt present
+PASS | 23_SECURITY_CONSENT_AND_AI_CONTROLS.md: local link resolves: 07_RELATIONAL_PAIRING_AND_ARCHETYPES.md
+PASS | 23_SECURITY_CONSENT_AND_AI_CONTROLS.md: local link resolves: 22_TECHNICAL_ARCHITECTURE.md
+PASS | 23_SECURITY_CONSENT_AND_AI_CONTROLS.md: local link resolves: 24_LEVERAGE_OWNERSHIP_AND_CONTINUITY.md
+PASS | 23_SECURITY_CONSENT_AND_AI_CONTROLS.md: local link resolves: 29_SOURCES_AND_RESEARCH.md
+PASS | 24_LEVERAGE_OWNERSHIP_AND_CONTINUITY.md: file exists and is non-empty
+PASS | 24_LEVERAGE_OWNERSHIP_AND_CONTINUITY.md: valid clean UTF-8 text
+PASS | 24_LEVERAGE_OWNERSHIP_AND_CONTINUITY.md: top-level title present
+PASS | 24_LEVERAGE_OWNERSHIP_AND_CONTINUITY.md: balanced fenced blocks
+PASS | 24_LEVERAGE_OWNERSHIP_AND_CONTINUITY.md: front matter has correct document ID
+PASS | 24_LEVERAGE_OWNERSHIP_AND_CONTINUITY.md: reusable agent prompt present
+PASS | 24_LEVERAGE_OWNERSHIP_AND_CONTINUITY.md: local link resolves: 19_REVENUE_COMMISSIONS_AND_FORECASTS.md
+PASS | 24_LEVERAGE_OWNERSHIP_AND_CONTINUITY.md: local link resolves: 22_TECHNICAL_ARCHITECTURE.md
+PASS | 24_LEVERAGE_OWNERSHIP_AND_CONTINUITY.md: local link resolves: 23_SECURITY_CONSENT_AND_AI_CONTROLS.md
+PASS | 25_BUILD_BUY_AND_DELIVERY_GATES.md: file exists and is non-empty
+PASS | 25_BUILD_BUY_AND_DELIVERY_GATES.md: valid clean UTF-8 text
+PASS | 25_BUILD_BUY_AND_DELIVERY_GATES.md: top-level title present
+PASS | 25_BUILD_BUY_AND_DELIVERY_GATES.md: balanced fenced blocks
+PASS | 25_BUILD_BUY_AND_DELIVERY_GATES.md: front matter has correct document ID
+PASS | 25_BUILD_BUY_AND_DELIVERY_GATES.md: reusable agent prompt present
+PASS | 25_BUILD_BUY_AND_DELIVERY_GATES.md: local link resolves: 00_PRODUCT_BRIEF.md
+PASS | 25_BUILD_BUY_AND_DELIVERY_GATES.md: local link resolves: 22_TECHNICAL_ARCHITECTURE.md
+PASS | 25_BUILD_BUY_AND_DELIVERY_GATES.md: local link resolves: 24_LEVERAGE_OWNERSHIP_AND_CONTINUITY.md
+PASS | 25_BUILD_BUY_AND_DELIVERY_GATES.md: local link resolves: 26_ACCEPTANCE_TESTS_AND_SCENARIOS.md
+PASS | 25_BUILD_BUY_AND_DELIVERY_GATES.md: local link resolves: 29_SOURCES_AND_RESEARCH.md
+PASS | 26_ACCEPTANCE_TESTS_AND_SCENARIOS.md: file exists and is non-empty
+PASS | 26_ACCEPTANCE_TESTS_AND_SCENARIOS.md: valid clean UTF-8 text
+PASS | 26_ACCEPTANCE_TESTS_AND_SCENARIOS.md: top-level title present
+PASS | 26_ACCEPTANCE_TESTS_AND_SCENARIOS.md: balanced fenced blocks
+PASS | 26_ACCEPTANCE_TESTS_AND_SCENARIOS.md: front matter has correct document ID
+PASS | 26_ACCEPTANCE_TESTS_AND_SCENARIOS.md: reusable agent prompt present
+PASS | 26_ACCEPTANCE_TESTS_AND_SCENARIOS.md: local link resolves: 01_SOURCE_AUDIT_AND_CORRECTIONS.md
+PASS | 26_ACCEPTANCE_TESTS_AND_SCENARIOS.md: local link resolves: 02_METRIC_CONTRACTS.md
+PASS | 26_ACCEPTANCE_TESTS_AND_SCENARIOS.md: local link resolves: 22_TECHNICAL_ARCHITECTURE.md
+PASS | 27_AGENT_PROMPTS_AND_HANDOFFS.md: file exists and is non-empty
+PASS | 27_AGENT_PROMPTS_AND_HANDOFFS.md: valid clean UTF-8 text
+PASS | 27_AGENT_PROMPTS_AND_HANDOFFS.md: top-level title present
+PASS | 27_AGENT_PROMPTS_AND_HANDOFFS.md: balanced fenced blocks
+PASS | 27_AGENT_PROMPTS_AND_HANDOFFS.md: front matter has correct document ID
+PASS | 27_AGENT_PROMPTS_AND_HANDOFFS.md: reusable agent prompt present
+PASS | 27_AGENT_PROMPTS_AND_HANDOFFS.md: local link resolves: 28_TRACEABILITY_AND_OPEN_DECISIONS.md
+PASS | 27_AGENT_PROMPTS_AND_HANDOFFS.md: local link resolves: 25_BUILD_BUY_AND_DELIVERY_GATES.md
+PASS | 28_TRACEABILITY_AND_OPEN_DECISIONS.md: file exists and is non-empty
+PASS | 28_TRACEABILITY_AND_OPEN_DECISIONS.md: valid clean UTF-8 text
+PASS | 28_TRACEABILITY_AND_OPEN_DECISIONS.md: top-level title present
+PASS | 28_TRACEABILITY_AND_OPEN_DECISIONS.md: balanced fenced blocks
+PASS | 28_TRACEABILITY_AND_OPEN_DECISIONS.md: front matter has correct document ID
+PASS | 28_TRACEABILITY_AND_OPEN_DECISIONS.md: reusable agent prompt present
+PASS | 28_TRACEABILITY_AND_OPEN_DECISIONS.md: local link resolves: 01_SOURCE_AUDIT_AND_CORRECTIONS.md
+PASS | 28_TRACEABILITY_AND_OPEN_DECISIONS.md: local link resolves: 25_BUILD_BUY_AND_DELIVERY_GATES.md
+PASS | 28_TRACEABILITY_AND_OPEN_DECISIONS.md: local link resolves: 29_SOURCES_AND_RESEARCH.md
+PASS | 28_TRACEABILITY_AND_OPEN_DECISIONS.md: local link resolves: 30_USER_SUPPLIED_TRANSCRIPT.md
+PASS | 29_SOURCES_AND_RESEARCH.md: file exists and is non-empty
+PASS | 29_SOURCES_AND_RESEARCH.md: valid clean UTF-8 text
+PASS | 29_SOURCES_AND_RESEARCH.md: top-level title present
+PASS | 29_SOURCES_AND_RESEARCH.md: balanced fenced blocks
+PASS | 29_SOURCES_AND_RESEARCH.md: front matter has correct document ID
+PASS | 29_SOURCES_AND_RESEARCH.md: reusable agent prompt present
+PASS | 29_SOURCES_AND_RESEARCH.md: local link resolves: 01_SOURCE_AUDIT_AND_CORRECTIONS.md
+PASS | 29_SOURCES_AND_RESEARCH.md: local link resolves: 28_TRACEABILITY_AND_OPEN_DECISIONS.md
+PASS | 29_SOURCES_AND_RESEARCH.md: local link resolves: 28_TRACEABILITY_AND_OPEN_DECISIONS.md
+PASS | 29_SOURCES_AND_RESEARCH.md: local link resolves: 30_USER_SUPPLIED_TRANSCRIPT.md
+PASS | 29_SOURCES_AND_RESEARCH.md: local link resolves: assets/IMG_4629.png
+PASS | 29_SOURCES_AND_RESEARCH.md: local link resolves: 01_SOURCE_AUDIT_AND_CORRECTIONS.md
+PASS | 30_USER_SUPPLIED_TRANSCRIPT.md: file exists and is non-empty
+PASS | 30_USER_SUPPLIED_TRANSCRIPT.md: valid clean UTF-8 text
+PASS | 30_USER_SUPPLIED_TRANSCRIPT.md: top-level title present
+PASS | 30_USER_SUPPLIED_TRANSCRIPT.md: balanced fenced blocks
+PASS | 30_USER_SUPPLIED_TRANSCRIPT.md: front matter has correct document ID
+PASS | 30_USER_SUPPLIED_TRANSCRIPT.md: local link resolves: 01_SOURCE_AUDIT_AND_CORRECTIONS.md
+PASS | 30_USER_SUPPLIED_TRANSCRIPT.md: local link resolves: 28_TRACEABILITY_AND_OPEN_DECISIONS.md
+PASS | 30_USER_SUPPLIED_TRANSCRIPT.md: local link resolves: 29_SOURCES_AND_RESEARCH.md
+PASS | Source arithmetic: Retained-booking rate = 65.89% / 61.21%
+PASS | Source arithmetic: Pre-call DQ complement = 34.11% / 38.79%
+PASS | Source arithmetic: Show rate = 83.53% / 33.47%
+PASS | Source arithmetic: Perceived qualified-show rate = 81.69% / 68.55%
+PASS | Source arithmetic: Win / perceived qualified = 36.21% / 35.78%
+PASS | Source arithmetic: Show-to-win rate = 29.58% / 24.53%
+PASS | Source arithmetic: Lead-to-win rate = 16.28% / 5.03%
+PASS | Source arithmetic: Leads needed per win = 6.14 / 19.90
+PASS | Source arithmetic: Revenue per lead = $5,317.83 / $1,590.21
+PASS | Source arithmetic: Revenue per retained booking = $8,070.59 / $2,597.89
+PASS | Source arithmetic: Revenue per win = $32,666.67 / $31,641.03
+PASS | Source scaled-RPL scenario agrees with Decimal arithmetic
+PASS | Source attendance counterfactual rounds to approximately $1.845 million
+PASS | Coaching sensitivity scenario at 0.55 recalculates
+PASS | Coaching sensitivity scenario at 0.60 recalculates
+PASS | Coaching sensitivity scenario at 0.65 recalculates
+PASS | Illustrative overbooking collision arithmetic is 23.04%
+PASS | Original screenshot source asset exists
+PASS | Future acceptance catalog contains all 56 unique scenarios
+PASS | All combined-copy internal module links resolve
+PASS | Combined copy includes all 33 module anchors
+PASS | Combined copy fenced blocks are balanced
