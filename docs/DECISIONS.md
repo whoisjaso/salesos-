@@ -14,4 +14,6 @@ Owner decisions made during the build, in order. Each one updates the relevant s
 
 **Warm-lead power dialer.** Queue ordered by promise time, reply urgency, lead freshness. One tap dials the next lead through the business number, consent checked at dial time, lease prevents double dialing. Auto-advance mode later. Never cold or random numbers. Phase 7, blocked on D04 and D05.
 
+**Native by role.** A person signs in as who they are and never sees another role's world. Reps: Today, Team, Me. Owner: Business, Team, Me. Three tabs, no role switcher, no page headers or subtitles, no persona pickers. Learning the app should take zero explanation. Applies to the shell and every route.
+
 **Personality routing signals.** Customer's own words and texting style: allowed as hypotheses that a real exchange must confirm (SOS-07 lens library). One explicit question in the funnel ("Numbers first, or see how it works?") is the primary pairing signal. Profile-picture or appearance inference: rejected. Unreliable and a legal exposure; the spec already excludes it (SOS-07, SOS-23).
