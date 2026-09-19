@@ -34,14 +34,15 @@ export function Hero({ model }: { model: TodayModel }) {
           centerText={`L${track.level}`}
           className="shrink-0 [&>span]:text-[12px] [&>span]:font-semibold"
         />
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[15px] font-semibold leading-tight text-fg">{model.displayName}</h2>
-          <p className="tabular mt-0.5 text-[12px] leading-tight text-fg-subtle">
-            {levelWord} {track.level}
-            <span className="ml-2">{toNext === null ? "Max level" : `${formatCount(toNext)} XP to next`}</span>
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-[15px] font-semibold leading-tight text-fg">{model.displayName}</h2>
+            <p className="tabular mt-0.5 whitespace-nowrap text-[12px] leading-tight text-fg-subtle">
+              {levelWord} {track.level}
+              <span className="ml-2">{toNext === null ? "Max level" : `${formatCount(toNext)} XP to next`}</span>
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
           <span
             className={
               model.streakDays > 0
@@ -53,6 +54,7 @@ export function Hero({ model }: { model: TodayModel }) {
             {model.streakDays > 0 ? `${model.streakDays} day streak` : "No streak"}
           </span>
           {model.xpPaused ? <StateChip state="attention" label="XP paused" /> : null}
+          </div>
         </div>
       </motion.div>
     </Surface>

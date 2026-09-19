@@ -106,6 +106,26 @@ export interface Opportunity {
   contractState: "none" | "proposed" | "signed";
   paymentState: "none" | "authorized" | "partially_collected" | "collected" | "refunded" | "disputed";
   dqReason?: string;
+  /** The setter-closer pair that carried this opportunity from setter to closer. Set at handoff acceptance (SOS-06). */
+  pairId?: Id;
+}
+
+/**
+ * A setter-closer pair (SOS-06, SOS-07). Pairs are relational: the two people
+ * share the opportunities that pass through the handoff, so their funnels
+ * converge and gaps can be located by side and stage, never by person.
+ */
+export interface Pair {
+  tenantId: Id;
+  pairId: Id;
+  setterUserId: Id;
+  closerUserId: Id;
+  /** Who chose the pairing. Closers choose setters, setters choose closers, or the owner assigns. */
+  chosenBy: "closer" | "setter" | "owner";
+  startedAt: ISODateTime;
+  endedAt?: ISODateTime;
+  active: boolean;
+  note?: string;
 }
 
 export interface Assignment {
@@ -330,6 +350,8 @@ export interface CommissionPolicy {
   basis: RevenueBasis;
   ratePercent: number;
   hypothetical: boolean; // true until an actual agreement is supplied (D06)
+  /** Role this rate applies to. Undefined applies to every role. Setters and closers sit in different brackets. */
+  role?: "setter" | "closer";
 }
 
 export interface CommissionEntry {

@@ -17,13 +17,12 @@ export interface BriefSheetProps {
 }
 
 /**
- * Pre-call brief: why you, the short labeled rows, verified fit. Unknowns, preferences and
- * the coaching lens sit under More. Every assertion carries its provenance (SOS-10).
+ * Pre-call brief: why you, the short labeled rows, verified fit, unknowns. Communication
+ * preferences and the coaching lens sit under More. Every assertion carries its provenance (SOS-10).
  */
 export function BriefSheet({ open, onClose, item, brief }: BriefSheetProps) {
   const [asked, setAsked] = useState(false);
   const lens = brief.lensHypothesis ? lensByName[brief.lensHypothesis] : undefined;
-  const moreCount = brief.unknowns.length;
   return (
     <Sheet
       open={open}
@@ -71,28 +70,27 @@ export function BriefSheet({ open, onClose, item, brief }: BriefSheetProps) {
           )}
         </div>
 
+        <div className="py-2.5">
+          <div className="section-label mb-1.5">Unknowns</div>
+          {brief.unknowns.length === 0 ? (
+            <p className="text-[13px] text-fg-subtle">None flagged</p>
+          ) : (
+            <ul className="flex flex-wrap gap-1.5">
+              {brief.unknowns.map((u) => (
+                <li key={u} className="chip border-dashed text-fg-muted">
+                  {u}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         <details className="group">
           <summary className="flex h-11 cursor-pointer list-none items-center gap-1.5 text-[13px] font-medium text-fg-muted">
             <CaretRight size={12} weight="bold" aria-hidden className="transition-transform group-open:rotate-90 motion-reduce:transition-none" />
             More
-            {moreCount ? <span className="text-[12px] font-normal text-fg-subtle">{moreCount} unknown</span> : null}
           </summary>
           <div className="divide-y divide-line border-t border-line">
-            <div className="py-2.5">
-              <div className="section-label mb-1.5">Unknowns</div>
-              {brief.unknowns.length === 0 ? (
-                <p className="text-[13px] text-fg-subtle">None flagged</p>
-              ) : (
-                <ul className="flex flex-wrap gap-1.5">
-                  {brief.unknowns.map((u) => (
-                    <li key={u} className="chip border-dashed text-fg-muted">
-                      {u}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
             <div className="py-2.5">
               <div className="section-label mb-1.5">Communication preferences</div>
               {brief.preferences.length === 0 ? (

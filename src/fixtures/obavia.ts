@@ -25,6 +25,7 @@ import type {
   LedgerEntry,
   Offer,
   Opportunity,
+  Pair,
   QualificationAssessment,
   Task,
   TaskPriorityReason,
@@ -33,6 +34,7 @@ import type {
 } from "@/domain/types";
 import type { Dataset, TrackedWorkHours } from "@/domain/metrics";
 import { fromDollars, scale } from "@/domain/money";
+import { type DatasetWithPairs, pairFor } from "@/domain/pairs";
 
 export const NOW: ISODateTime = "2026-09-18T20:00:00Z";
 export const TENANT_ID = "obavia";
@@ -116,6 +118,69 @@ export const commissionPolicy: CommissionPolicy = {
   hypothetical: true,
 };
 
+/**
+ * Role-scoped HYPOTHETICAL commission policies (D06). Setters and closers sit
+ * in different brackets: setter 5%, closer 10% of net collected cash.
+ */
+export const setterCommissionPolicy: CommissionPolicy = {
+  tenantId: TENANT_ID,
+  policyVersion: "commission-hypothetical-setter-0.1",
+  effectiveFrom: "2026-08-01T00:00:00Z",
+  basis: "net_collected_cash",
+  ratePercent: 5,
+  hypothetical: true,
+  role: "setter",
+};
+
+export const closerCommissionPolicy: CommissionPolicy = {
+  tenantId: TENANT_ID,
+  policyVersion: "commission-hypothetical-closer-0.1",
+  effectiveFrom: "2026-08-01T00:00:00Z",
+  basis: "net_collected_cash",
+  ratePercent: 10,
+  hypothetical: true,
+  role: "closer",
+};
+
+export const obaviaCommissionPolicies: CommissionPolicy[] = [setterCommissionPolicy, closerCommissionPolicy];
+
+/**
+ * Setter-closer pairs (synthetic). Tomasz and Marcus were chosen by the closer;
+ * the owner paired Priya with Renata; Priya picked Devin when he started.
+ */
+export const obaviaPairs: Pair[] = [
+  {
+    tenantId: TENANT_ID,
+    pairId: "pair_tomasz_marcus",
+    setterUserId: "usr_setter_tomasz",
+    closerUserId: "usr_closer_marcus",
+    chosenBy: "closer",
+    startedAt: "2026-08-01T00:00:00Z",
+    active: true,
+    note: "Marcus asked for Tomasz after two clean handoffs in July.",
+  },
+  {
+    tenantId: TENANT_ID,
+    pairId: "pair_priya_renata",
+    setterUserId: "usr_setter_priya",
+    closerUserId: "usr_closer_renata",
+    chosenBy: "owner",
+    startedAt: "2026-08-01T00:00:00Z",
+    active: true,
+    note: "Owner pairing: Spanish coverage on the closer side.",
+  },
+  {
+    tenantId: TENANT_ID,
+    pairId: "pair_priya_devin",
+    setterUserId: "usr_setter_priya",
+    closerUserId: "usr_closer_devin",
+    chosenBy: "setter",
+    startedAt: "2026-09-01T13:00:00Z",
+    active: true,
+    note: "Priya chose Devin when he joined the development pool.",
+  },
+];
+
 const FIRST_NAMES = [
   "Rosalind", "Ephraim", "Kenji", "Marguerite", "Thaddeus", "Ines", "Olamide", "Bartholomew", "Svetlana", "Cormac",
   "Yusuf", "Annelise", "Desmond", "Priyanka", "Lucero", "Hollis", "Oksana", "Ignatius", "Temperance", "Wendell",
@@ -177,7 +242,7 @@ function pad(n: number): string {
   return String(n).padStart(3, "0");
 }
 
-export function generateObaviaDataset(seed = 20260918): Dataset {
+export function generateObaviaDataset(seed = 20260918): DatasetWithPairs {
   const rng = mulberry32(seed);
   const b: Build = {
     contacts: [], submissions: [], opportunities: [], assignments: [], tasks: [], calls: [], appointments: [],
@@ -400,15 +465,28 @@ export function generateObaviaDataset(seed = 20260918): Dataset {
               commercialCategory: "new_customer",
             });
             opp.paymentState = "collected";
+            const entryState = paidMs + 7 * DAY <= NOW_MS ? "payable" : "accrued";
             b.commissionEntries.push({
               tenantId: TENANT_ID,
               entryId: `com_${pad(n)}`,
               userId: closerId,
               opportunityId: oppId,
-              policyVersion: commissionPolicy.policyVersion,
-              amount: scale(value, commissionPolicy.ratePercent / 100),
-              state: paidMs + 7 * DAY <= NOW_MS ? "payable" : "accrued",
+              policyVersion: closerCommissionPolicy.policyVersion,
+              amount: scale(value, closerCommissionPolicy.ratePercent / 100),
+              state: entryState,
             });
+            if (opp.currentOwner.setter) {
+              // The setter who carried the handoff earns at the setter bracket on the same cash.
+              b.commissionEntries.push({
+                tenantId: TENANT_ID,
+                entryId: `com_${pad(n)}_setter`,
+                userId: opp.currentOwner.setter,
+                opportunityId: oppId,
+                policyVersion: setterCommissionPolicy.policyVersion,
+                amount: scale(value, setterCommissionPolicy.ratePercent / 100),
+                state: entryState,
+              });
+            }
           } else {
             opp.paymentState = "none"; // signed but unpaid: contracted value moves, cash does not
             b.tasks.push({
@@ -542,8 +620,18 @@ export function generateObaviaDataset(seed = 20260918): Dataset {
     });
     const refundedOpp = b.opportunities.find((o) => o.opportunityId === firstPayment.opportunityId);
     if (refundedOpp) refundedOpp.paymentState = "refunded";
-    const com = b.commissionEntries.find((c) => c.opportunityId === firstPayment.opportunityId);
-    if (com) com.state = "adjusted";
+    for (const com of b.commissionEntries.filter((c) => c.opportunityId === firstPayment.opportunityId)) com.state = "adjusted";
+  }
+
+  // Pair stamping: an opportunity that reached a closer through a setter carries the pair that was
+  // active when the closer assignment was decided (handoff acceptance). Unpaired combinations stay unstamped.
+  for (const opp of b.opportunities) {
+    const setterId = opp.currentOwner.setter;
+    const closerId = opp.currentOwner.closer;
+    if (!setterId || !closerId) continue;
+    const handoff = b.assignments.find((a) => a.opportunityId === opp.opportunityId && a.role === "closer" && a.userId === closerId);
+    const pair = pairFor(obaviaPairs, setterId, closerId, handoff?.acceptedAt ?? handoff?.decidedAt);
+    if (pair) opp.pairId = pair.pairId;
   }
 
   // One unlinked payment: exception queue.
@@ -665,10 +753,14 @@ export function generateObaviaDataset(seed = 20260918): Dataset {
     communicationProfiles: b.communicationProfiles,
     trackedWorkHours: b.trackedWorkHours,
     synthetic: true,
+    pairs: obaviaPairs,
+    commissionPolicies: obaviaCommissionPolicies,
   };
 }
 
-export const obaviaDataset: Dataset = generateObaviaDataset();
+/** The dataset with pairs and role policies attached (same object as obaviaDataset). */
+export const obaviaDatasetWithPairs: DatasetWithPairs = generateObaviaDataset();
+export const obaviaDataset: Dataset = obaviaDatasetWithPairs;
 
 /** The opted-out contact and its opportunity, for routing and consent tests. */
 export const OPTED_OUT_CONTACT_ID = "ct_090";

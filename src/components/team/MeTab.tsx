@@ -44,12 +44,10 @@ export function MeTab({ player, missions, paths, milestone }: MeTabProps) {
         {TRACKS.map((t) => {
           const lvl = player[t.key];
           return (
-            <div key={t.key} className="flex items-center gap-3 px-4 py-3">
+            <div key={t.key} className="flex flex-col items-center gap-1.5 px-2 py-3">
               <ProgressRing value={lvl.progress} size={44} strokeWidth={4} label={`${t.label} level ${lvl.level}`} centerText={`L${lvl.level}`} className="shrink-0 [&>span]:font-semibold" />
-              <div className="min-w-0">
-                <div className="text-[13px] font-medium leading-tight text-fg">{t.label}</div>
-                <div className="tabular mt-0.5 text-[11px] leading-tight text-fg-subtle">{formatCount(lvl.xp)} XP</div>
-              </div>
+              <div className="text-[12px] font-medium leading-tight text-fg">{t.label}</div>
+              <div className="tabular whitespace-nowrap text-[11px] leading-tight text-fg-subtle">{formatCount(lvl.xp)} XP</div>
             </div>
           );
         })}
