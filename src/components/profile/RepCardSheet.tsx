@@ -1,12 +1,10 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { CaretRight, Flame, PencilSimple } from "@phosphor-icons/react";
+import { CaretRight, Flame } from "@phosphor-icons/react";
 import { NOW, obaviaDataset, obaviaPairs } from "@/fixtures/obavia";
 import { Avatar } from "@/components/ui/Avatar";
-import { Button } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
-import { TierBadge } from "@/components/cash/TierBadge";
 import { ACCENT_HEX, useProfiles } from "@/lib/profiles";
 import { useSession } from "@/lib/session";
 import { formatCount, formatMoneyMinor } from "@/lib/format";
@@ -48,7 +46,10 @@ export interface RepCardSheetProps {
   onOpen: (userId: string) => void;
 }
 
-/** Player card: photo with level ring and tier badge, handle, one line, four verified numbers, the pair. */
+/**
+ * Player card, kept quiet: photo with level ring and tier badge, name, one line,
+ * one number, one line of secondary numbers, the partner, edit. Nothing self-reported in the numbers.
+ */
 export function RepCardSheet({ userId, onClose, onOpen }: RepCardSheetProps) {
   const { get } = useProfiles();
   const { session } = useSession();
@@ -79,89 +80,79 @@ export function RepCardSheet({ userId, onClose, onOpen }: RepCardSheetProps) {
         ) : (
           <div className="-mx-4 -mt-3 sm:-mx-5 sm:-mt-4">
             <div
-              className="flex flex-col items-center px-4 pt-7 pb-5 text-center"
-              style={{ background: `linear-gradient(180deg, color-mix(in srgb, ${hex} 22%, transparent) 0%, transparent 100%)` }}
+              className="flex flex-col items-center px-6 pt-10 pb-8 text-center"
+              style={{ background: `linear-gradient(180deg, color-mix(in srgb, ${hex} 18%, transparent) 0%, transparent 100%)` }}
             >
               <Avatar
                 userId={id}
-                size={96}
+                size={128}
                 ring={level?.progress ?? 0}
                 ringLabel={`Level ${card.level}, ${Math.round((level?.progress ?? 0) * 100)}% to next`}
                 badge={tier}
               />
-              <h3 className="mt-4 text-[22px] font-semibold leading-none tracking-tight text-fg">{profile.displayName}</h3>
-              <div className="mt-1.5 flex items-center gap-2 text-[13px] text-fg-muted">
-                <span>@{profile.handle}</span>
-                <span aria-hidden className="text-fg-faint">
-                  &middot;
-                </span>
-                <span>{ROLE_WORD[card.role]}</span>
-                <span aria-hidden className="text-fg-faint">
+              <h3 className="mt-5 text-[24px] font-semibold leading-none tracking-tight text-fg">{profile.displayName}</h3>
+              <p className="mt-2 text-[13px] text-fg-muted">
+                {ROLE_WORD[card.role]}
+                <span aria-hidden className="mx-2 text-fg-faint">
                   &middot;
                 </span>
                 <span className="tabular">Level {card.level}</span>
-              </div>
-              {profile.howISell ? <p className="mt-3 max-w-[300px] text-[15px] leading-snug text-fg">&ldquo;{profile.howISell}&rdquo;</p> : null}
-            </div>
-
-            <div className="px-4 pb-4 sm:px-5">
-              <div className="flex items-center justify-between">
-                <span className="section-label">{card.seasonLabel}</span>
-                {tier ? (
-                  <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-fg-muted">
-                    <TierBadge tier={tier} size={16} />
-                    {tier.label}
-                  </span>
+                {card.streakDays > 0 ? (
+                  <>
+                    <span aria-hidden className="mx-2 text-fg-faint">
+                      &middot;
+                    </span>
+                    <span className="inline-flex items-center gap-1 tabular">
+                      <Flame size={12} weight="fill" aria-hidden className="text-[color:var(--perf-attention-fg)]" />
+                      {formatCount(card.streakDays)}
+                    </span>
+                  </>
                 ) : null}
-              </div>
-              <dl className="mt-2 grid grid-cols-2 gap-2">
-                <Stat label="Net collected" value={formatMoneyMinor(card.netCollectedMinor, card.currency)} />
-                <Stat label="Wins" value={formatCount(card.wins)} />
-                <Stat label="Shows" value={formatCount(card.attended)} />
-                <Stat
-                  label="Streak"
-                  value={card.streakDays > 0 ? `${formatCount(card.streakDays)} ${card.streakDays === 1 ? "day" : "days"}` : "None"}
-                  icon={card.streakDays > 0 ? <Flame size={14} weight="fill" aria-hidden className="text-[color:var(--perf-attention-fg)]" /> : undefined}
-                />
-              </dl>
-              <p className="mt-2 text-[11px] text-fg-subtle">Verified from stage events and the ledger. Nothing self-reported.</p>
-
-              {card.partner ? (
-                <button
-                  type="button"
-                  onClick={() => onOpen(card.partner!.userId)}
-                  className="surface mt-4 flex h-14 w-full items-center gap-3 px-3 text-left transition-colors hover:bg-hover motion-reduce:transition-none"
-                >
-                  <Avatar userId={card.partner.userId} size={32} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14px] font-medium leading-tight text-fg">Runs with {card.partner.displayName}</span>
-                    <span className="block text-[12px] text-fg-subtle">{ROLE_WORD[card.partner.role]}</span>
-                  </span>
-                  <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
-                </button>
-              ) : null}
-
-              {mine ? (
-                <Button variant="secondary" size="lg" leading={<PencilSimple size={16} weight="bold" />} onClick={() => setEditing(true)} className="mt-4 w-full">
-                  Edit profile
-                </Button>
-              ) : null}
+              </p>
+              {profile.howISell ? <p className="mt-5 max-w-[280px] text-[15px] leading-snug text-fg-muted">&ldquo;{profile.howISell}&rdquo;</p> : null}
             </div>
+
+            <div className="px-6 pb-6 text-center">
+              <div className="tabular text-[36px] font-semibold leading-none tracking-tight text-fg">
+                {formatMoneyMinor(card.netCollectedMinor, card.currency)}
+              </div>
+              <p className="mt-2 text-[12px] text-fg-subtle">Net collected, {card.seasonLabel}</p>
+              <p className="tabular mt-4 text-[14px] text-fg-muted">
+                {formatCount(card.wins)} {card.wins === 1 ? "win" : "wins"}
+                <span aria-hidden className="mx-2 text-fg-faint">
+                  &middot;
+                </span>
+                {formatCount(card.attended)} {card.attended === 1 ? "show" : "shows"}
+              </p>
+            </div>
+
+            {card.partner ? (
+              <button
+                type="button"
+                onClick={() => onOpen(card.partner!.userId)}
+                className="flex h-16 w-full items-center gap-3 border-t border-line px-6 text-left transition-colors hover:bg-hover motion-reduce:transition-none"
+              >
+                <Avatar userId={card.partner.userId} size={40} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-medium leading-tight text-fg">{card.partner.displayName}</span>
+                  <span className="block text-[12px] text-fg-subtle">Runs with</span>
+                </span>
+                <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
+              </button>
+            ) : null}
+
+            {mine ? (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="flex h-14 w-full items-center justify-center border-t border-line text-[14px] font-medium text-accent transition-colors hover:bg-hover motion-reduce:transition-none"
+              >
+                Edit profile
+              </button>
+            ) : null}
           </div>
         )
       ) : null}
     </Sheet>
-  );
-}
-
-function Stat({ label, value, icon }: { label: string; value: string; icon?: ReactNode }) {
-  return (
-    <div className="surface flex flex-col gap-1 p-3">
-      <dt className="text-[11px] font-medium text-fg-subtle">{label}</dt>
-      <dd className="tabular flex items-center gap-1.5 text-[20px] font-semibold leading-none tracking-tight text-fg">
-        {icon}
-        {value}
-      </dd>
-    </div>
   );
 }
