@@ -84,20 +84,20 @@ export function CashHero({ summary, policy = DEFAULT_TIER_POLICY }: CashHeroProp
     const prev = previousTotal.current;
     previousTotal.current = total;
     if (prev !== null && total <= prev) return;
-    const travel = (bodyRef.current?.offsetHeight ?? 240) + 72;
-    const count = 14 + Math.floor(Math.random() * 11);
+    const travel = (bodyRef.current?.offsetHeight ?? 240) + 120;
+    const count = 44 + Math.floor(Math.random() * 17);
     const stamp = Date.now();
     setDrops(
       Array.from({ length: count }, (_, i) => ({
         id: `${stamp}-${i}`,
-        x: 3 + Math.random() * 94,
-        delay: Math.random() * 0.8,
-        size: 13 + Math.random() * 11,
-        rotate: (Math.random() - 0.5) * 70,
+        x: -2 + Math.random() * 104,
+        delay: Math.random() * 1.4,
+        size: 22 + Math.random() * 26,
+        rotate: (Math.random() - 0.5) * 540,
         travel,
       })),
     );
-    const timer = window.setTimeout(() => setDrops([]), 2600);
+    const timer = window.setTimeout(() => setDrops([]), 4200);
     return () => window.clearTimeout(timer);
   }, [total, reduce]);
 
@@ -108,18 +108,36 @@ export function CashHero({ summary, policy = DEFAULT_TIER_POLICY }: CashHeroProp
       <div ref={bodyRef} className="relative p-5 sm:p-6">
         {drops.length > 0 ? (
           <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-            {drops.map((d) => (
-              <motion.span
-                key={d.id}
-                className="absolute"
-                style={{ left: `${d.x}%`, top: -36, color: tier.hue }}
-                initial={{ y: 0, opacity: 0, rotate: 0 }}
-                animate={{ y: d.travel, opacity: [0, 0.38, 0.38, 0], rotate: d.rotate }}
-                transition={{ duration: 1.2, delay: d.delay, ease: "easeIn", opacity: { duration: 1.2, delay: d.delay, times: [0, 0.15, 0.7, 1] } }}
-              >
-                <DropIcon size={d.size} weight="duotone" />
-              </motion.span>
-            ))}
+            <motion.div
+              className="absolute inset-0"
+              style={{ background: `radial-gradient(60% 50% at 20% 30%, color-mix(in srgb, ${tier.hue} 34%, transparent), transparent 70%)` }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 1, 0] }}
+              transition={{ duration: 2.4, times: [0, 0.2, 1], ease: "easeOut" }}
+            />
+            {drops.map((d, i) => {
+              const dur = 1.5 + (i % 5) * 0.18;
+              const sway = (i % 2 === 0 ? 1 : -1) * (10 + (i % 4) * 8);
+              return (
+                <motion.span
+                  key={d.id}
+                  className="absolute"
+                  style={{ left: `${d.x}%`, top: -56, color: tier.hue, filter: `drop-shadow(0 6px 14px color-mix(in srgb, ${tier.hue} 55%, transparent))` }}
+                  initial={{ y: 0, x: 0, opacity: 0, rotate: 0, scale: 0.4 }}
+                  animate={{ y: d.travel, x: [0, sway, -sway, 0], opacity: [0, 0.95, 0.95, 0.85, 0], rotate: d.rotate, scale: [0.4, 1.15, 1, 1, 0.9] }}
+                  transition={{
+                    duration: dur,
+                    delay: d.delay,
+                    ease: [0.3, 0, 0.8, 0.4],
+                    x: { duration: dur, delay: d.delay, ease: "easeInOut" },
+                    opacity: { duration: dur, delay: d.delay, times: [0, 0.1, 0.6, 0.85, 1] },
+                    scale: { duration: dur, delay: d.delay, times: [0, 0.12, 0.3, 0.85, 1] },
+                  }}
+                >
+                  <DropIcon size={d.size} weight="fill" />
+                </motion.span>
+              );
+            })}
           </div>
         ) : null}
 
@@ -130,7 +148,13 @@ export function CashHero({ summary, policy = DEFAULT_TIER_POLICY }: CashHeroProp
           className="relative flex flex-col gap-5"
         >
           <div className="flex items-start gap-4">
-            <TierBadge tier={tier} size={72} className="mt-0.5" />
+            <motion.div
+              className="mt-0.5"
+              animate={drops.length > 0 && !reduce ? { scale: [1, 1.18, 0.96, 1.06, 1], rotate: [0, -6, 5, -2, 0] } : { scale: 1, rotate: 0 }}
+              transition={{ duration: 1.1, ease: "easeOut" }}
+            >
+              <TierBadge tier={tier} size={72} />
+            </motion.div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-subtle">This month</span>
