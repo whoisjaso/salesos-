@@ -19,7 +19,7 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/Button";
-import { ConfidenceDot, ReadBar } from "@/components/workspace/BriefSheet";
+import { ConfidenceDot, ReadBlock } from "@/components/workspace/BriefSheet";
 import { Sheet } from "@/components/ui/Sheet";
 import { Surface } from "@/components/ui/Surface";
 import { cn } from "@/lib/cn";
@@ -33,7 +33,6 @@ import {
   isGoodExample,
   NEVER_LINE,
   policyWithDisputes,
-  READ_CAPTION,
   type Moment,
   type MomentKind,
   type Review,
@@ -289,6 +288,7 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
 
           {/* ----- Buyer mode: nine rows, the approach, the read. Labels, not sentences. ----- */}
           <section className="flex flex-col gap-2" aria-label="Buyer mode" data-testid="review-buyer-mode">
+            <ReadBlock read={review.buyerMode.read} />
             <span className="section-label">Buyer mode</span>
             <ul className="flex flex-col">
               {review.buyerMode.rows.map((r) => {
@@ -323,29 +323,6 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
                       {line}
                     </li>
                   ))}
-                </ul>
-              </div>
-            ) : null}
-            {review.buyerMode.read.length > 0 ? (
-              <div className="flex flex-col gap-1">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="section-label">Read</span>
-                  <span className="text-[11px] text-fg-subtle">{READ_CAPTION}</span>
-                </div>
-                <ul className="flex flex-col">
-                  {review.buyerMode.read.map((r) => {
-                    const target = r.spanIndexes[0];
-                    return (
-                      <li key={r.name} data-testid="review-read-row">
-                        <button type="button" onClick={() => target !== undefined && jumpFromSheet(target)} className="-mx-1 flex h-9 w-full items-center gap-3 rounded-md px-1 text-left hover:bg-hover">
-                          <span className="tabular w-[132px] shrink-0 truncate text-[13.5px] text-fg">
-                            {r.label} <span className="text-fg-muted">{r.percent}%</span>
-                          </span>
-                          <ReadBar percent={r.percent} />
-                        </button>
-                      </li>
-                    );
-                  })}
                 </ul>
               </div>
             ) : null}

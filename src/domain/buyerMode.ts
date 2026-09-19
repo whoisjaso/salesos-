@@ -483,3 +483,30 @@ export function validateArchetypeRead(read: unknown): string[] {
   });
   return errors;
 }
+
+// ---------- Words for the read ----------
+
+/** What the customer values, in plain words: the hero of the brief's people section. Never the lens name. */
+export const VALUE_WORD: Record<LensName, string> = {
+  competence_intelligence: "Proof",
+  autonomy_control: "Control",
+  safety_certainty: "Certainty",
+  achievement_growth: "Growth",
+  significance_status: "Standing out",
+  connection_trust: "A known contact",
+  approval_recognition: "Reassurance",
+  care_contribution: "Their people",
+  family_provider: "Their family",
+  novelty_opportunity: "What's new",
+  efficiency_simplicity: "Simplicity",
+  legacy_durability: "Something lasting",
+};
+
+export type ConfidenceWord = "High" | "Medium" | "Low";
+
+/** High at 0.7 and above, Medium at 0.4 and above, Low below. */
+export function confidenceWordFor(probability: number): ConfidenceWord {
+  if (probability >= 0.7) return "High";
+  if (probability >= 0.4) return "Medium";
+  return "Low";
+}

@@ -129,6 +129,8 @@ export interface ReadRow {
   label: string;
   /** 0..100, rounded. */
   percent: number;
+  /** The customer's own words, exactly as spoken. */
+  quotes: string[];
   spanIndexes: number[];
 }
 
@@ -499,7 +501,7 @@ export function buildBuyerModeView(mode: BuyerMode | undefined, read: ArchetypeR
     const known = v.value !== UNKNOWN_VALUE;
     return { dimension, label: BUYER_MODE_LABEL[dimension], value: v.value, confidence: v.confidence, confident: isConfident(v), known, spanIndexes: known ? indexes(transcript, v.spans) : [] };
   });
-  const readRows: ReadRow[] = (read ?? []).map((r) => ({ name: r.name, label: lensByName[r.name]?.label ?? r.name, percent: Math.round(r.probability * 100), spanIndexes: indexes(transcript, r.spans) }));
+  const readRows: ReadRow[] = (read ?? []).map((r) => ({ name: r.name, label: lensByName[r.name]?.label ?? r.name, percent: Math.round(r.probability * 100), quotes: r.spans.map((s) => s.text.trim()), spanIndexes: indexes(transcript, r.spans) }));
   return { rows, approach: m.approach ?? [], read: readRows, empty: rows.every((r) => !r.known) && readRows.length === 0 };
 }
 

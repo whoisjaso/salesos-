@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { ArrowRight, CaretRight, Question, ShuffleAngular } from "@phosphor-icons/react";
-import type { BuyerModeBriefRow, CloserBrief, ReadBriefRow, UpcomingAppointment } from "@/lib/workspace-closer";
+import type { BuyerModeBriefRow, CloserBrief, UpcomingAppointment } from "@/lib/workspace-closer";
 import { NO_SIGNAL_WORD } from "@/lib/workspace-closer";
 import { READ_CAPTION } from "@/lib/review";
-import { lensByName } from "@/content/lenses";
+import { LENS_NAMES, VALUE_WORD, confidenceWordFor } from "@/domain/buyerMode";
+import type { LensName } from "@/domain/types";
+import { lensByName, lenses } from "@/content/lenses";
 import { Button } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
 import { cn } from "@/lib/cn";
@@ -74,18 +76,78 @@ function DimensionRow({ row, open, onToggle }: { row: BuyerModeBriefRow; open: b
   );
 }
 
-function ReadRow({ row, open, onToggle }: { row: ReadBriefRow; open: boolean; onToggle: () => void }) {
+/** One line of the read, as any surface shows it. */
+export interface ReadLine {
+  name: LensName;
+  label: string;
+  /** 0..100, rounded. */
+  percent: number;
+  /** The customer's own words, exactly as spoken. */
+  quotes: string[];
+}
+
+export const NO_SIGNAL_SHORT = "No signal";
+export const THEY_VALUE = "They value";
+
+/** The twelve archetypes alphabetically by label, each with its read (or 0% and no words). */
+function allTwelve(read: ReadLine[]): ReadLine[] {
+  return [...lenses]
+    .sort((a, b) => a.label.localeCompare(b.label))
+    .map((l) => read.find((r) => r.name === l.name) ?? { name: l.name, label: l.label, percent: 0, quotes: [] });
+}
+
+/**
+ * The read: what the customer values, as the biggest text on the card, from the top archetype's
+ * value word; the archetype label and percentage as a muted subheader; details on tap listing
+ * all twelve alphabetically with a slim bar, a confidence word, and the cited words. Nothing
+ * scoring reads "No signal yet". Never a type label; the lens name stays a subheader.
+ */
+export function ReadBlock({ read, className }: { read: ReadLine[]; className?: string }) {
+  const [open, setOpen] = useState(false);
+  const top = read[0];
+  const list = allTwelve(read);
   return (
-    <li className="flex flex-col" data-testid="read-row">
-      <button type="button" onClick={onToggle} aria-expanded={open} className="-mx-1 flex h-10 items-center gap-3 rounded-md px-1 text-left hover:bg-hover">
-        <span className="tabular w-[132px] shrink-0 truncate text-[13.5px] text-fg">
-          {row.label} <span className="text-fg-muted">{row.percent}%</span>
-        </span>
-        <ReadBar percent={row.percent} />
-        <CaretRight size={12} weight="bold" aria-hidden className={cn("text-fg-subtle transition-transform motion-reduce:transition-none", open && "rotate-90")} />
-      </button>
-      {open ? <QuoteList quotes={row.quotes} /> : null}
-    </li>
+    <div className={cn("flex flex-col", className)} data-testid="read-block">
+      {top ? (
+        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="-mx-1 flex flex-col items-start rounded-md px-1 py-1 text-left hover:bg-hover">
+          <span className="text-[11px] text-fg-subtle">{THEY_VALUE}</span>
+          <span className="text-[30px] font-semibold leading-tight tracking-tight text-fg" data-testid="read-value">
+            {VALUE_WORD[top.name]}
+          </span>
+          <span className="tabular text-[13px] text-fg-muted" data-testid="read-top">
+            {top.label} · {top.percent}%
+          </span>
+          <span className="mt-0.5 text-[12px] text-fg-subtle">{open ? "Hide details" : "Tap for details"}</span>
+        </button>
+      ) : (
+        <div className="flex flex-col py-1">
+          <span className="text-[11px] text-fg-subtle">{THEY_VALUE}</span>
+          <span className="text-[30px] font-semibold leading-tight tracking-tight text-fg-subtle" data-testid="read-value">
+            {NO_SIGNAL_WORD}
+          </span>
+        </div>
+      )}
+      {open ? (
+        <div className="mt-1 flex flex-col gap-1">
+          <span className="text-[11px] text-fg-subtle">{READ_CAPTION}</span>
+          <ul className="flex flex-col" data-testid="read-list">
+            {list.map((r) => {
+              const none = r.percent === 0;
+              return (
+                <li key={r.name} className={cn("flex flex-col gap-1 py-1.5", none && "opacity-60")} data-testid="read-row" data-signal={!none}>
+                  <div className="flex items-center gap-3">
+                    <span className="w-[104px] shrink-0 truncate text-[13px] text-fg">{r.label}</span>
+                    <ReadBar percent={r.percent} />
+                    <span className="tabular w-[76px] shrink-0 text-right text-[12px] text-fg-muted">{none ? NO_SIGNAL_SHORT : `${r.percent}%, ${confidenceWordFor(r.percent / 100)}`}</span>
+                  </div>
+                  {r.quotes.length > 0 ? <QuoteList quotes={r.quotes} /> : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -164,11 +226,12 @@ export function BriefSheet({ open, onClose, item, brief }: BriefSheetProps) {
 
         {/* ----- Buyer mode: how they decide, from their words. Preferences fold in as evidence. ----- */}
         <section className="py-2.5" aria-label="Buyer mode" data-testid="buyer-mode">
+          <ReadBlock read={bm.read} className="mb-2" />
           <div className="mb-1 flex items-center justify-between">
             <span className="section-label">Buyer mode</span>
-            {bm.empty ? null : <EvidenceTag label="Customer-stated" />}
+            {bm.rows.length === 0 ? null : <EvidenceTag label="Customer-stated" />}
           </div>
-          {bm.empty ? (
+          {bm.rows.length === 0 ? (
             <p className="text-[13px] text-fg-subtle" data-testid="buyer-mode-empty">
               {NO_SIGNAL_WORD}
             </p>
@@ -190,19 +253,6 @@ export function BriefSheet({ open, onClose, item, brief }: BriefSheetProps) {
                         <ArrowRight size={13} weight="bold" aria-hidden className="mt-[3px] shrink-0 text-fg-subtle" />
                         {line}
                       </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {bm.read.length > 0 ? (
-                <div className="mt-2">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="section-label">Read</span>
-                    <span className="text-[11px] text-fg-subtle">{READ_CAPTION}</span>
-                  </div>
-                  <ul className="flex flex-col">
-                    {bm.read.map((r) => (
-                      <ReadRow key={r.name} row={r} open={openRow === `read:${r.name}`} onToggle={() => toggle(`read:${r.name}`)} />
                     ))}
                   </ul>
                 </div>

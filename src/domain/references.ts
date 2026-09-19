@@ -631,7 +631,8 @@ yeah yes yet you your yours yourself yourselves
 monday tuesday wednesday friday saturday sunday january february march april june july august september october november december
 minute minutes hour hours second seconds night nights month months year years thirty forty fifty hundred thousand
 lead leads call calls calling called follow followup follow-up team teams price prices pricing cost costs fee fees month deal deals appointment appointments store stores rep reps sales system tool tools software vendor vendors people person customer customers business company website email text texts number numbers work works working manager partner guy guys thing stuff
-anyone anymore actually basically literally obviously exactly probably definitely kinda sorta gonna wanna maybe fine sure okay alright thanks thank please hi hello bye`
+anyone anymore actually basically literally obviously exactly probably definitely kinda sorta gonna wanna maybe fine sure okay alright thanks thank please hi hello bye
+open opens opened handle handles handled decide decides decided answer answers answered start starts started run runs running show shows showed sign signs signed sit sits wait waits buy buys bought sell sells sold pay pays paid read reads keep keeps log logs update updates check checks ask asks asked grab grabs move moves moved`
     .split(/\s+/)
     .filter(Boolean),
 );
