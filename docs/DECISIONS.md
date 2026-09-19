@@ -4,7 +4,7 @@ Owner decisions made during the build, in order. Each one updates the relevant s
 
 ## 2026-09-19
 
-**Design law: one hero, one number, one action.** Every role screen shows one hero card, one primary number, and one primary action above the fold on a phone. Everything else lives behind a segmented control (Now / Queue / Me for reps; Now / Money / Team / Source for the owner) or a Sheet. Explanatory sentences are cut to labels. Applies to SOS-09, SOS-10, SOS-20, SOS-21 implementations.
+**Design law: one hero, one number, one action.** Every role screen shows one hero card, one primary number, and one primary action above the fold on a phone. Everything else lives behind a segmented control (Now / Queue for reps, with Me as its own tab; Now / Money / Source for the owner, with Team as its own tab) or a Sheet. Explanatory sentences are cut to labels. Applies to SOS-09, SOS-10, SOS-20, SOS-21 implementations.
 
 **Gamification is first-class, evidence-only.** XP comes only from verified stage events (two-way contact, retained booking, attended show, verified fit, signed, cash collected, accepted handoff, completed practice). Three tracks: commercial, mastery, team. Levels, monthly season, streaks tolerant of approved leave, one active mission with its proof rule. Quality incidents pause the mechanic per rep. Implemented in `src/domain/game.ts`. Never converts to pay (SOS-15, D06).
 
