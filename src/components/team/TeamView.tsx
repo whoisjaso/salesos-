@@ -2,10 +2,10 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { PauseCircle } from "@phosphor-icons/react";
 import { obaviaCommissionPolicies, obaviaDataset, obaviaDatasetWithPairs, obaviaPairs, NOW } from "@/fixtures/obavia";
 import { commissionPolicyFor } from "@/domain/cashTiers";
-import { buildLeaderboard } from "@/domain/leaderboard";
+import { buildStandings, ownStanding } from "@/domain/leaderboard";
+import { scopeIncidents } from "@/domain/incidents";
 import { computeFunnel } from "@/domain/metrics";
 import { deriveGameEvents, levelFor, playerState, streakDays as streakOf, XP_TABLE } from "@/domain/game";
 import { personalMilestone, seasonFor } from "@/domain/gamification";
@@ -18,13 +18,13 @@ import {
   guardrailCounts,
   missionsForRep,
   opportunitiesProcessed,
-  pauseConditions,
   rowRole,
   seasonDaysLeft,
   seasonPolicy,
   seasonTitle,
   skillPathsForRep,
   stageChampions,
+  standingsLines,
   type PairView,
 } from "@/lib/team-data";
 import { PairCard } from "@/components/pairs/PairCard";
@@ -34,7 +34,8 @@ import { Sheet } from "@/components/ui/Sheet";
 import { Segmented } from "./Segmented";
 import { SeasonHero } from "./SeasonHero";
 import { SeasonSheet } from "./SeasonSheet";
-import { RanksSheet, pauseSummary } from "./RanksSheet";
+import { StandingsHeader } from "./StandingsHeader";
+import { StandingsSheet } from "./StandingsSheet";
 import { LeaderboardRow } from "./LeaderboardRow";
 import { StageChampions } from "./StageChampions";
 import { MissionsList } from "./MissionsList";
@@ -92,9 +93,17 @@ export function TeamView() {
   const season = useMemo(() => seasonFor(NOW), []);
   const basePolicy = useMemo(() => seasonPolicy(NOW), []);
   const policy = useMemo(() => (descriptive ? descriptivePolicy(NOW) : basePolicy), [descriptive, basePolicy]);
-  const rows = useMemo(() => buildLeaderboard(dataset, "comparable_performance", policy, NOW), [policy]);
+  const scope = useMemo(() => scopeIncidents(dataset, { now: NOW }), []);
+  // The standings as the policy really stands: the hold survives the descriptive override.
+  const baseStandings = useMemo(() => buildStandings(dataset, "comparable_performance", basePolicy, NOW, scope), [basePolicy, scope]);
+  const standings = useMemo(
+    () => (descriptive ? buildStandings(dataset, "comparable_performance", policy, NOW, scope) : baseStandings),
+    [descriptive, policy, scope, baseStandings],
+  );
+  const rows = standings.rows;
   const visible = useMemo(() => rows.filter((r) => r.role === role), [rows, role]);
-  const pause = useMemo(() => pauseConditions(dataset, NOW), []);
+  const baseLines = useMemo(() => standingsLines(baseStandings), [baseStandings]);
+  const lines = useMemo(() => standingsLines(standings, descriptive), [standings, descriptive]);
   const guardrails = useMemo(() => guardrailCounts(dataset), []);
   const champions = useMemo(() => stageChampions(dataset, visible, policy, NOW), [visible, policy]);
 
@@ -110,7 +119,11 @@ export function TeamView() {
     const xp = inSeason.filter((e) => XP_TABLE[e.kind].track === "commercial").reduce((acc, e) => acc + XP_TABLE[e.kind].xp, 0);
     return { level: levelFor(xp), streakDays: streakOf(events, NOW) };
   }, [window]);
-  const myRow = meId ? rows.find((r) => r.userId === meId) : undefined;
+  // A rep's own standing comes from the board's own rows, never from a local count.
+  const own = useMemo(
+    () => (meId && session && session.role !== "owner" ? ownStanding(standings, meId, session.role) : null),
+    [standings, meId, session],
+  );
   const missions = useMemo(() => (meId ? missionsForRep(RulesCoachingEngine.recommend(dataset, meId, NOW), dataset, meId, NOW) : []), [meId]);
   const paths = useMemo(() => (meId ? skillPathsForRep(dataset, meId) : []), [meId]);
   const milestone = useMemo(() => (meId ? personalMilestone(meId, opportunitiesProcessed(dataset, meId), 777, "accountable opportunities processed") : null), [meId]);
@@ -119,9 +132,6 @@ export function TeamView() {
     for (const r of rows) out[`${r.userId}:${r.role}`] = computeFunnel(dataset, { userId: r.userId, role: rowRole(r), from: policy.periodFrom, to: policy.periodTo }, NOW).stages;
     return out;
   }, [rows, policy]);
-
-  // Ranks pause on unresolved data (SOS-14). The line stays while the data is unfixed so the override stays reachable.
-  const ranksPaused = basePolicy.pauseOnUnresolvedData && pauseSummary(pause).length > 0;
 
   const fade = reduce ? {} : { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -4 }, transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] as const } };
   const segments = isOwner ? OWNER_SEGMENTS : REP_SEGMENTS;
@@ -137,13 +147,7 @@ export function TeamView() {
   return (
     <>
       <div className="flex flex-col gap-4">
-        <SeasonHero title={title} daysLeft={daysLeft} level={level} myRow={player ? myRow : undefined} team={!player} onOpen={() => setSeasonOpen(true)} action={isOwner && session ? <InviteButton data={tenantData} by={session.userId} /> : null} />
-
-        {ranksPaused && segment === "board" ? (
-          <div className="surface">
-            <DetailsRow leading={<PauseCircle size={16} weight="bold" aria-hidden className="text-perf-attention" />} label="Ranks paused" value={descriptive ? "Shown anyway" : undefined} onClick={() => setRanksOpen(true)} data-testid="ranks-paused" />
-          </div>
-        ) : null}
+        <SeasonHero title={title} daysLeft={daysLeft} level={level} own={player ? own : null} team={!player} onOpen={() => setSeasonOpen(true)} action={isOwner && session ? <InviteButton data={tenantData} by={session.userId} /> : null} />
 
         <Segmented options={segments} value={segment} onChange={setSegment} label="View" size="md" className="w-full [&>button]:flex-1" />
 

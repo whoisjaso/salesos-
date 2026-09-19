@@ -2,7 +2,7 @@
  * Pure helpers for the Team and Coach pages. No React, no fixtures baked in:
  * every function takes the dataset and `now` so the pages stay deterministic.
  */
-import type { CoachingRecommendation, CommissionPolicy, ISODateTime, Id, LeaderboardRow, MetricId, Mission, Pair, SkillPath } from "@/domain/types";
+import type { CoachingRecommendation, CommissionPolicy, FunnelStage, ISODateTime, Id, LeaderboardRow, MetricId, Mission, Pair, SkillPath } from "@/domain/types";
 import type { Dataset } from "@/domain/metrics";
 import {
   activePairs,
@@ -20,8 +20,9 @@ import {
   type PairSide,
 } from "@/domain/pairs";
 import type { SeasonWindow } from "@/domain/cashTiers";
-import { computeMetric } from "@/domain/metrics";
-import { DEFAULT_LEADERBOARD_POLICY, type LeaderboardPolicy } from "@/domain/leaderboard";
+import { attendedOpportunityIds, computeMetric, perceivedQualifiedIds } from "@/domain/metrics";
+import { DEFAULT_LEADERBOARD_POLICY, type LeaderboardPolicy, type Standings } from "@/domain/leaderboard";
+import { MONEY_NOT_AVAILABLE, formatCount, formatMoneyMinor, formatUnits } from "@/lib/format";
 import { COACHING_ENGINE_VERSION, STAGE_ACTION_LIBRARY, perceptionGap, sensitivityTable, type PerceptionGap, type StageAction } from "@/domain/coaching";
 import { defaultSkillPaths, missionFromRecommendation, seasonFor } from "@/domain/gamification";
 import type { StageChampion } from "@/domain/game";
@@ -59,17 +60,84 @@ export function seasonDaysLeft(now: ISODateTime): number {
   return Math.max(0, Math.ceil((end - Date.parse(now)) / 86_400_000));
 }
 
-export interface PauseConditions {
-  unlinkedPayments: number;
-  unresolvedAttendance: number;
+// ---------- Standings: ranked list or roster ----------
+
+/** The first sentence of a domain statement, so a phone line stays one thought. */
+function firstSentence(text: string): string {
+  const end = text.indexOf(". ");
+  return end === -1 ? text : text.slice(0, end + 1);
 }
 
-/** Tenant-wide pause conditions (SOS-14): unlinked payments and unresolved attendance outcomes. */
-export function pauseConditions(dataset: Dataset, now: ISODateTime): PauseConditions {
+function restAfterFirstSentence(text: string): string {
+  const end = text.indexOf(". ");
+  return end === -1 ? "" : text.slice(end + 2).trim();
+}
+
+/**
+ * What the board says above the list. A roster never borrows the words of a
+ * ranking: the kind is stated, the order is stated, and the hold names what it
+ * waits on and who owns it ("Never show a list that looks ranked when ranking
+ * is not established", docs/DECISIONS.md).
+ */
+export interface StandingsLines {
+  kind: Standings["kind"];
+  /** "Ranked" or "Roster, not a ranking". Always paired with an icon on screen. */
+  kindLabel: string;
+  /** The order the list is in, one sentence, above the list. */
+  orderLine: string;
+  /** Short label for the row that opens the standings sheet. */
+  holdLabel: string;
+  /** What ranking waits on and who owns it. Null when nothing holds it. */
+  holdLine: string | null;
+}
+
+export function standingsLines(standings: Standings, descriptive = false): StandingsLines {
+  const held = standings.heldBy;
+  const kindLabel = standings.kind === "ranked" ? (descriptive ? "Ranked, descriptive only" : "Ranked") : "Roster, not a ranking";
+  const orderLine = firstSentence(standings.orderLabel);
+  const holdLine = held
+    ? `Ranking waits until ${held.waitingOn}. ${held.ownerLabel ?? "The owner"} owns that.`
+    : standings.kind === "roster"
+      ? restAfterFirstSentence(standings.orderLabel) || null
+      : null;
   return {
-    unlinkedPayments: dataset.ledger.filter((e) => e.opportunityId === undefined).length,
-    unresolvedAttendance: computeMetric("M08", dataset, {}, now).unknownCount,
+    kind: standings.kind,
+    kindLabel,
+    orderLine,
+    holdLabel: held ? "Ranking on hold" : "No ranking yet",
+    holdLine,
   };
+}
+
+/**
+ * The money on a board row. A verified zero and a missing figure are different
+ * facts and never render alike; an amount that can still move says so in words.
+ */
+export type MoneyRead =
+  | { kind: "amount"; text: string; provisional: boolean }
+  | { kind: "verified_zero"; text: string; provisional: false }
+  | { kind: "unavailable"; text: string; provisional: false };
+
+export const MONEY_VERIFIED_ZERO = "$0 collected";
+
+export function rowMoneyRead(row: LeaderboardRow): MoneyRead {
+  if (row.revenueState === "unavailable") return { kind: "unavailable", text: MONEY_NOT_AVAILABLE, provisional: false };
+  if (row.revenueState === "verified_zero") return { kind: "verified_zero", text: MONEY_VERIFIED_ZERO, provisional: false };
+  const value = row.revenuePerLead.value;
+  const currency = row.revenuePerLead.currency ?? row.totalRevenue.currency;
+  return {
+    kind: "amount",
+    text: value === null ? MONEY_NOT_AVAILABLE : formatMoneyMinor(Math.round(value), currency, { cents: true }),
+    provisional: row.revenueProvisional,
+  };
+}
+
+/** "At least 5 attended, 2 outcomes unresolved" or "5 attended". Never a false exact. */
+export function attendedRead(row: LeaderboardRow): string {
+  if (row.attendedState === "at_least") {
+    return `At least ${formatCount(row.attendedAppointments)} attended, ${formatUnits(row.unresolvedAttendanceCount, "outcome")} unresolved`;
+  }
+  return `${formatCount(row.attendedAppointments)} attended`;
 }
 
 export interface GuardrailCounts {
@@ -374,6 +442,168 @@ export function pairTitle(setterDisplayName: string, closerDisplayName: string):
   return `${firstName(setterDisplayName)} and ${firstName(closerDisplayName)}`;
 }
 
+// ---------- Pairs: what the two people owe each other ----------
+
+export interface PairWaitingHandoff {
+  opportunityId: Id;
+  /** The business or person the handoff is about. */
+  label: string;
+  hoursWaiting: number;
+}
+
+export interface PairUpcoming {
+  opportunityId: Id;
+  label: string;
+  startsAt: ISODateTime;
+  confirmed: boolean;
+  /** "Sep 21, 16:26 UTC". */
+  when: string;
+}
+
+/** One shared stage result: the label, and one figure with its denominator in words. */
+export interface PairSharedResult {
+  label: string;
+  value: string;
+}
+
+export interface PairNextAction {
+  userId: Id;
+  displayName: string;
+  side: "setter" | "closer";
+  /** One sentence naming the thing and its count. Never an adjective. */
+  action: string;
+}
+
+/**
+ * What a pair screen answers before any comparison (docs/DECISIONS.md, "A pair
+ * screen answers what we owe each other"): what the two are responsible for
+ * together, and what each of them does next.
+ */
+export interface PairResponsibilities {
+  /** Handoffs waiting on the closer's acceptance, oldest first. */
+  waiting: PairWaitingHandoff[];
+  /** Shared opportunities with a meeting still to come, soonest first. */
+  upcoming: PairUpcoming[];
+  /** The pair's results through the stages both people touch. */
+  shared: PairSharedResult[];
+  next: { setter: PairNextAction; closer: PairNextAction };
+  /** The one specific thing true of this pair right now, or null. Never a bare adjective. */
+  headline: string | null;
+}
+
+/** "31 hours", "45 minutes", "3 days". Rounded, never a false precision. */
+export function hoursWord(hours: number): string {
+  if (hours < 1) return formatUnits(Math.max(1, Math.round(hours * 60)), "minute");
+  if (hours < 48) return formatUnits(Math.round(hours), "hour");
+  return formatUnits(Math.round(hours / 24), "day");
+}
+
+/** "Sep 21, 16:26 UTC". UTC so the label never drifts with the reader's zone. */
+export function shortWhen(iso: ISODateTime): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "unknown time";
+  const date = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(d);
+  const time = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" }).format(d);
+  return `${date}, ${time} UTC`;
+}
+
+function stageCount(stages: FunnelStage[], stageId: string): FunnelStage | undefined {
+  return stages.find((s) => s.stageId === stageId);
+}
+
+/**
+ * The coordination answer for one pair, built from what the domain already has:
+ * handoff acceptance records, the pair's scheduled meetings, and the pair funnel.
+ * Nothing is invented: when nothing specific is true, `headline` is null and the
+ * row says nothing rather than naming a state.
+ */
+export function pairResponsibilities(dataset: Dataset, pair: Pair, funnel: PairFunnel, diagnostic: PairDiagnostic, now: ISODateTime): PairResponsibilities {
+  const opps = pairOpportunities(dataset, pair.pairId);
+  const ids = new Set(opps.map((o) => o.opportunityId));
+  const contacts = new Map(dataset.contacts.map((c) => [c.contactId, c]));
+  const names = new Map(dataset.users.map((u) => [u.userId, u.displayName]));
+  const nowMs = Date.parse(now);
+  const labelOf = (opportunityId: Id): string => {
+    const opp = opps.find((o) => o.opportunityId === opportunityId);
+    const contact = opp ? contacts.get(opp.primaryContactId) : undefined;
+    return contact?.organizationName ?? contact?.displayName ?? opportunityId;
+  };
+
+  const waiting: PairWaitingHandoff[] = dataset.assignments
+    .filter((a) => a.role === "closer" && ids.has(a.opportunityId) && !a.acceptedAt && !a.endedAt)
+    .map((a) => ({ opportunityId: a.opportunityId, label: labelOf(a.opportunityId), hoursWaiting: Math.max(0, (nowMs - Date.parse(a.decidedAt)) / 3_600_000) }))
+    .sort((a, b) => b.hoursWaiting - a.hoursWaiting);
+
+  const upcoming: PairUpcoming[] = dataset.appointmentInstances
+    .filter((i) => ids.has(i.opportunityId) && i.outcome === "scheduled" && Date.parse(i.scheduledStart) >= nowMs)
+    .sort((a, b) => a.scheduledStart.localeCompare(b.scheduledStart))
+    .map((i) => ({ opportunityId: i.opportunityId, label: labelOf(i.opportunityId), startsAt: i.scheduledStart, confirmed: i.confirmedByCustomer, when: shortWhen(i.scheduledStart) }));
+
+  const assigned = stageCount(funnel.setterSide, "assigned")?.count ?? 0;
+  const contacted = stageCount(funnel.setterSide, "two_way_contact")?.count ?? 0;
+  const booked = stageCount(funnel.setterSide, "booked")?.count ?? 0;
+  const retained = stageCount(funnel.setterSide, "retained_booking")?.count ?? 0;
+  const attendedStage = stageCount(funnel.setterSide, "attended");
+  const attended = attendedStage?.count ?? 0;
+  const unresolved = attendedStage?.unknownCount ?? 0;
+  const qualified = stageCount(funnel.closerSide, "perceived_qualified")?.count ?? 0;
+
+  const shared: PairSharedResult[] = [
+    { label: "Handoff", value: `Accepted ${funnel.handoff.accepted} of ${funnel.handoff.total}` },
+    {
+      label: "Attended",
+      value: unresolved > 0
+        ? `At least ${attended} of ${formatUnits(retained, "retained booking")}, ${formatUnits(unresolved, "outcome")} unresolved`
+        : `${attended} of ${formatUnits(retained, "retained booking")}`,
+    },
+    { label: "Rated qualified", value: `${qualified} of ${formatUnits(attended, "attended show")}` },
+  ];
+
+  const attendedIds = attendedOpportunityIds(dataset, ids);
+  const unrated = perceivedQualifiedIds(dataset, attendedIds).unrated.size;
+  const oldest = waiting[0];
+  const closerAction = oldest
+    ? `Accept the handoff on ${formatUnits(waiting.length, "opportunity", "opportunities")}, oldest waiting ${hoursWord(oldest.hoursWaiting)}.`
+    : upcoming.length > 0
+      ? `Run the shared appointment with ${upcoming[0].label}, ${upcoming[0].when}.`
+      : unrated > 0
+        ? `Rate fit on ${formatUnits(unrated, "attended show")} with no assessment yet.`
+        : "Nothing is waiting on the closer side right now.";
+
+  const unconfirmed = upcoming.find((u) => !u.confirmed);
+  const notRetained = Math.max(0, booked - retained);
+  const notContacted = Math.max(0, assigned - contacted);
+  const setterAction = unconfirmed
+    ? `Confirm ${unconfirmed.label} before ${unconfirmed.when}.`
+    : notRetained > 0
+      ? `Record the agenda and confirmation on ${formatUnits(notRetained, "booking")} that ${notRetained === 1 ? "has" : "have"} not retained.`
+      : notContacted > 0
+        ? `Reach ${formatUnits(notContacted, "assigned opportunity", "assigned opportunities")} with no two-way conversation yet.`
+        : "Nothing is waiting on the setter side right now.";
+
+  // A waiting handoff is called out once it has waited longer than this pair's own
+  // acceptance record. No invented service level: the comparator is their own time.
+  const ownAverage = funnel.handoff.avgHoursToAccept;
+  const callOut = oldest !== undefined && (ownAverage === null ? oldest.hoursWaiting >= 1 : oldest.hoursWaiting > ownAverage);
+  const points = Math.round(Math.abs(diagnostic.gap) * 100);
+  const headline = callOut
+    ? `Handoff waiting ${hoursWord(oldest.hoursWaiting)} on ${oldest.label}`
+    : diagnostic.weakestSide !== "none" && points > 0
+      ? `${PAIR_SIDE_LABEL[diagnostic.weakestSide]}, ${PAIR_STAGE_SHORT[diagnostic.stageId] ?? diagnostic.stageId}: ${points} points under the pooled pair rate`
+      : null;
+
+  return {
+    waiting,
+    upcoming,
+    shared,
+    next: {
+      setter: { userId: pair.setterUserId, displayName: names.get(pair.setterUserId) ?? pair.setterUserId, side: "setter", action: setterAction },
+      closer: { userId: pair.closerUserId, displayName: names.get(pair.closerUserId) ?? pair.closerUserId, side: "closer", action: closerAction },
+    },
+    headline,
+  };
+}
+
 export interface PairView {
   pair: Pair;
   setterDisplayName: string;
@@ -383,6 +613,8 @@ export interface PairView {
   funnel: PairFunnel;
   diagnostic: PairDiagnostic;
   contribution: PairContribution;
+  /** What the two owe each other, and what each does next. Answered before any comparison. */
+  responsibilities: PairResponsibilities;
 }
 
 export interface PairViewOptions {
@@ -393,14 +625,17 @@ export interface PairViewOptions {
 export function buildPairView(dataset: Dataset, pairs: Pair[], pair: Pair, season: SeasonWindow, now: ISODateTime, options: PairViewOptions, rows?: PairLeaderboardRow[]): PairView {
   const names = new Map(dataset.users.map((u) => [u.userId, u.displayName]));
   const board = rows ?? pairLeaderboard(dataset, pairs, season, { minMaturedSample: options.minMaturedSample }, now);
+  const funnel = pairFunnel(dataset, pairs, pair.pairId, {}, now);
+  const diagnostic = pairDiagnostic(dataset, pairs, pair.pairId, now);
   return {
     pair,
     setterDisplayName: names.get(pair.setterUserId) ?? pair.setterUserId,
     closerDisplayName: names.get(pair.closerUserId) ?? pair.closerUserId,
     row: board.find((r) => r.pairId === pair.pairId),
-    funnel: pairFunnel(dataset, pairs, pair.pairId, {}, now),
-    diagnostic: pairDiagnostic(dataset, pairs, pair.pairId, now),
+    funnel,
+    diagnostic,
     contribution: pairContribution(dataset, pairs, pair.pairId, season, options.policies),
+    responsibilities: pairResponsibilities(dataset, pair, funnel, diagnostic, now),
   };
 }
 

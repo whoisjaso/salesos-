@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ArrowDownRight, ArrowUpRight, CaretRight, CheckCircle, HourglassMedium, Minus } from "@phosphor-icons/react";
+import { ArrowDownRight, ArrowUpRight, CaretRight, CheckCircle, HourglassMedium, Minus, Question } from "@phosphor-icons/react";
 import type { FunnelStage, LeaderboardRow as Row } from "@/domain/types";
 import { Button } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
 import { cn } from "@/lib/cn";
-import { formatBasis, formatCount, formatMoney, formatMoneyMinor } from "@/lib/format";
-import { movementOf, rowRole } from "@/lib/team-data";
+import { MONEY_NOT_AVAILABLE, formatBasis, formatCount, formatMoney, formatMoneyMinor } from "@/lib/format";
+import { attendedRead, movementOf, rowMoneyRead, rowRole, type MoneyRead } from "@/lib/team-data";
 import { Avatar } from "@/components/ui/Avatar";
 import { TierBadge } from "@/components/cash/TierBadge";
 import { seasonTierFor } from "@/components/cash/tier-lookup";
@@ -23,11 +23,6 @@ export interface LeaderboardRowProps {
   onRequestCorrection: () => void;
 }
 
-function perLead(value: number | null | undefined, currency: string): string {
-  if (value === null || value === undefined) return "N/A";
-  return formatMoneyMinor(Math.round(value), currency, { cents: true });
-}
-
 const MOVE_ICON = { up: ArrowUpRight, down: ArrowDownRight, flat: Minus } as const;
 const MOVE_LABEL = {
   up: "Up on own prior period",
@@ -36,17 +31,58 @@ const MOVE_LABEL = {
 } as const;
 
 /**
- * Avatar (tier mark as its badge), name, one number. Tap the row for the sheet:
- * funnel, prior period and movement, tier, provisional state, a correction request.
+ * The money on a row, in three shapes that never look alike: a figure, a
+ * verified zero, and a figure that does not exist. Each carries its own icon
+ * and weight, so the difference survives without color.
+ */
+export function RowMoney({ read, size = "row" }: { read: MoneyRead; size?: "row" | "sheet" }) {
+  const figure = size === "row" ? "text-[17px]" : "text-[28px]";
+  if (read.kind === "unavailable") {
+    return (
+      <span className={cn("flex shrink-0 items-start gap-1.5 text-fg-muted", size === "row" ? "max-w-[116px]" : "")}>
+        <Question size={14} weight="bold" aria-hidden className="mt-[1px] shrink-0" />
+        <span className="text-[12px] font-medium leading-tight">{read.text}</span>
+      </span>
+    );
+  }
+  if (read.kind === "verified_zero") {
+    return (
+      <span className="flex shrink-0 items-center gap-1.5 text-fg">
+        <CheckCircle size={14} weight="bold" aria-hidden className="shrink-0 text-fg-muted" />
+        <span className="tabular inline-flex items-baseline gap-1">
+          <span className={cn(figure, "font-semibold leading-none tracking-tight")}>$0</span>
+          <span className="text-[12px] text-fg-muted">collected</span>
+        </span>
+      </span>
+    );
+  }
+  return (
+    <span className="flex shrink-0 flex-col items-end gap-0.5">
+      <span className={cn("tabular font-semibold leading-none tracking-tight text-fg", figure)}>{read.text}</span>
+      {read.provisional ? (
+        <span className="inline-flex items-center gap-1 text-[11px] leading-none text-fg-muted">
+          <HourglassMedium size={11} weight="bold" aria-hidden />
+          Provisional
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * Avatar (tier mark as its badge), name, one number. A rank number appears only
+ * when the standings are ranked. Tap the row for the sheet: funnel, prior period
+ * and movement, tier, what is held, a correction request.
  */
 export function LeaderboardRow({ row, descriptive = false, isMe = false, funnel, correctionSent, onRequestCorrection }: LeaderboardRowProps) {
   const [open, setOpen] = useState(false);
   const { openCard } = useRepCard();
-  const currency = row.revenuePerLead.currency ?? row.totalRevenue.currency;
   const move = movementOf(row);
   const MoveIcon = move === "none" ? null : MOVE_ICON[move];
   const tier = seasonTierFor(row.userId, rowRole(row));
-  const value = perLead(row.revenuePerLead.value, currency);
+  const money = rowMoneyRead(row);
+  const total: MoneyRead =
+    money.kind === "amount" ? { kind: "amount", text: formatMoney(row.totalRevenue), provisional: money.provisional } : money;
 
   return (
     <li className="relative border-b border-line last:border-b-0">
@@ -58,14 +94,14 @@ export function LeaderboardRow({ row, descriptive = false, isMe = false, funnel,
         {row.rank !== null ? <span className="tabular w-5 shrink-0 text-right text-[13px] font-medium text-fg-subtle">{row.rank}</span> : null}
         <span aria-hidden className="h-10 w-10 shrink-0" />
         <span className="min-w-0 flex-1 truncate text-[15px] font-medium leading-tight text-fg">{row.displayName}</span>
-        <span className="tabular shrink-0 text-[17px] font-semibold leading-none tracking-tight text-fg">{value}</span>
+        <RowMoney read={money} />
         <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
       </button>
 
       <Sheet open={open} onClose={() => setOpen(false)} title={row.displayName} description={`${formatBasis(row.basis)} per assigned opportunity`}>
         <div className="flex flex-col gap-5">
           <div className="flex items-center gap-3">
-            <span className="tabular text-[28px] font-semibold leading-none tracking-tight text-fg">{value}</span>
+            <RowMoney read={money} size="sheet" />
             {MoveIcon ? (
               <span className="inline-flex items-center gap-1 text-[12px] text-fg-muted">
                 <MoveIcon size={14} weight="bold" aria-hidden className={cn(move === "up" && "text-perf-strong")} />
@@ -85,7 +121,7 @@ export function LeaderboardRow({ row, descriptive = false, isMe = false, funnel,
                 <span className="flex items-start gap-1.5">
                   <HourglassMedium size={13} weight="bold" aria-hidden className="mt-1.5 shrink-0 text-fg-subtle" />
                   <span>
-                    Provisional
+                    Not ranked
                     {row.provisionalReason ? <span className="text-fg-muted">, {row.provisionalReason}</span> : null}
                   </span>
                 </span>
@@ -105,14 +141,26 @@ export function LeaderboardRow({ row, descriptive = false, isMe = false, funnel,
               )}
             </SheetRow>
             {row.leadTier !== undefined ? <SheetRow label="Lead tier">T{row.leadTier}, compared within this tier only</SheetRow> : null}
-            <SheetRow label="Total">{formatMoney(row.totalRevenue)}</SheetRow>
+            <SheetRow label="Total">
+              <RowMoney read={total} size="row" />
+            </SheetRow>
             <SheetRow label="Matured">
               {formatCount(row.maturedSample)} of {formatCount(row.assignedOpportunities)}
             </SheetRow>
-            <SheetRow label="Attended">{formatCount(row.attendedAppointments)}</SheetRow>
+            <SheetRow label="Attended">{attendedRead(row)}</SheetRow>
             <SheetRow label="Wins">{formatCount(row.wins)}</SheetRow>
             <SheetRow label="Refunds">{formatCount(row.refundCount)}</SheetRow>
-            <SheetRow label="Prior">{row.priorPeriodRevenuePerLead === undefined ? "Not set" : perLead(row.priorPeriodRevenuePerLead, currency)}</SheetRow>
+            <SheetRow label="Prior">
+              {row.priorPeriodRevenuePerLead === undefined ? "Not set" : <RowMoney read={priorRead(row)} size="row" />}
+            </SheetRow>
+            {row.heldStatement ? (
+              <SheetRow label="Held">
+                <span className="flex items-start gap-1.5">
+                  <HourglassMedium size={13} weight="bold" aria-hidden className="mt-1.5 shrink-0 text-fg-subtle" />
+                  <span className="text-fg-muted">{row.heldStatement}</span>
+                </span>
+              </SheetRow>
+            ) : null}
           </dl>
 
           <section aria-label="Funnel" className="flex flex-col gap-2">
@@ -134,6 +182,13 @@ export function LeaderboardRow({ row, descriptive = false, isMe = false, funnel,
       </Sheet>
     </li>
   );
+}
+
+/** The prior period figure, read in the same shapes as the current one. */
+function priorRead(row: Row): MoneyRead {
+  const prior = row.priorPeriodRevenuePerLead;
+  if (prior === null || prior === undefined) return { kind: "unavailable", text: MONEY_NOT_AVAILABLE, provisional: false };
+  return { kind: "amount", text: formatMoneyMinor(Math.round(prior), row.revenuePerLead.currency ?? row.totalRevenue.currency, { cents: true }), provisional: false };
 }
 
 function SheetRow({ label, children }: { label: string; children: ReactNode }) {

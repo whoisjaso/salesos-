@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { CaretRight } from "@phosphor-icons/react";
-import type { LeaderboardRow } from "@/domain/types";
+import type { OwnStanding } from "@/domain/leaderboard";
 import type { LevelState } from "@/domain/game";
 import { Avatar } from "@/components/ui/Avatar";
 import { ProgressRing } from "@/components/ui/ProgressRing";
@@ -15,8 +15,11 @@ export interface SeasonHeroProps {
   daysLeft: number;
   /** My commercial track, or the pooled team track for the owner. */
   level: LevelState;
-  /** The current user's comparable row. Omitted for the owner. */
-  myRow?: LeaderboardRow;
+  /**
+   * The rep's own standing, read from the same rows the board shows, so the
+   * personal number and the board can never disagree. Omitted for the owner.
+   */
+  own?: OwnStanding | null;
   /** Owner: the ring is the whole team's. */
   team?: boolean;
   /** Opens the season sheet: XP, streak, rank, rules. */
@@ -32,12 +35,14 @@ export function monthOf(title: string): string {
 
 /**
  * Season hero: the level ring (or the team ring), the month, and one number.
- * The number is the rep's own rank when ranks are showing, else the days left.
- * Tap for XP, streak, provisional state, XP pauses, and the rules.
+ * The number is the rep's own rank, and only when the board itself is ranked;
+ * on a roster there is no rank anywhere, so the hero shows the days left.
+ * Tap for XP, streak, the standing in words, XP pauses, and the rules.
  */
-export function SeasonHero({ title, daysLeft, level, myRow, team = false, onOpen, action }: SeasonHeroProps) {
-  const tier = !team && myRow ? seasonTierFor(myRow.userId, rowRole(myRow)) : undefined;
-  const rank = !team && myRow && myRow.rank !== null ? myRow.rank : null;
+export function SeasonHero({ title, daysLeft, level, own, team = false, onOpen, action }: SeasonHeroProps) {
+  const myRow = !team ? own?.row : undefined;
+  const tier = myRow ? seasonTierFor(myRow.userId, rowRole(myRow)) : undefined;
+  const rank = !team && own && own.rank !== null ? own.rank : null;
   const number = rank !== null ? `#${rank}` : `${daysLeft} days left`;
   const ringLabel = `${team ? "Team level" : "Level"} ${level.level}, ${Math.round(level.progress * 100)}% to next`;
 

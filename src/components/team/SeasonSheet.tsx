@@ -3,10 +3,9 @@
 import type { ReactNode } from "react";
 import { Flame, HourglassMedium, PauseCircle } from "@phosphor-icons/react";
 import { Sheet } from "@/components/ui/Sheet";
-import type { LeaderboardRow } from "@/domain/types";
 import type { LevelState, PlayerState } from "@/domain/game";
 import { XP_TABLE } from "@/domain/game";
-import type { LeaderboardPolicy } from "@/domain/leaderboard";
+import type { LeaderboardPolicy, OwnStanding } from "@/domain/leaderboard";
 import type { GuardrailCounts } from "@/lib/team-data";
 import { formatBasis, formatCount } from "@/lib/format";
 
@@ -20,8 +19,8 @@ export interface SeasonSheetProps {
   streakDays: number;
   /** Quality gate reasons when XP is paused. Empty means running. */
   pausedReasons?: string[];
-  /** The current user's comparable row. Omitted for the owner. */
-  myRow?: LeaderboardRow;
+  /** The rep's own standing, from the same rows the board shows. Omitted for the owner. */
+  own?: OwnStanding | null;
   /** Owner: the ring is the whole team's. */
   team?: boolean;
   descriptive: boolean;
@@ -51,14 +50,14 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
  * rank or provisional state, XP pauses, the three tracks, recent events, and the
  * rules and guardrails that used to sit behind the info icon (SOS-14, SOS-15).
  */
-export function SeasonSheet({ open, onClose, title, daysLeft, level, streakDays, pausedReasons = [], myRow, team = false, descriptive, player, policy, guardrails }: SeasonSheetProps) {
+export function SeasonSheet({ open, onClose, title, daysLeft, level, streakDays, pausedReasons = [], own, team = false, descriptive, player, policy, guardrails }: SeasonSheetProps) {
   const toNext = level.xpForNextLevel === null ? null : level.xpForNextLevel - level.xp;
   const paused = pausedReasons.length > 0;
   const rules: { title: string; body: string }[] = [
     { title: "Metric", body: `${formatBasis(policy.basis)} per assigned opportunity` },
     { title: "Eligible", body: `Active, reconciled data, ${policy.minMaturedSample}+ matured` },
     { title: "Ties", body: "Same value, order by name" },
-    { title: "Paused when", body: "Unresolved attendance or unlinked payments" },
+    { title: "Held when", body: "A measurement this basis rests on is unreliable. The list then reads as a roster in a stated order, with no rank anywhere" },
     { title: "Appeals", body: "Inspect counted opportunities, request a correction" },
     { title: "XP", body: "Verified stage events only, never pay" },
   ];
@@ -86,19 +85,20 @@ export function SeasonSheet({ open, onClose, title, daysLeft, level, streakDays,
           </span>
         </Row>
         {!team ? (
-          <Row label="Rank">
-            {myRow ? (
-              myRow.rank !== null ? (
+          <Row label="Standing">
+            {own ? (
+              own.rank !== null ? (
                 <span>
-                  #{myRow.rank}
+                  #{own.rank}
                   {descriptive ? <span className="text-fg-muted">, descriptive</span> : null}
+                  <span className="text-fg-muted">, {own.statement}</span>
                 </span>
               ) : (
                 <span className="flex items-start gap-1.5">
                   <HourglassMedium size={13} weight="bold" aria-hidden className="mt-1.5 shrink-0 text-fg-subtle" />
                   <span>
-                    Provisional
-                    {myRow.provisionalReason ? <span className="text-fg-muted">, {myRow.provisionalReason}</span> : null}
+                    Not ranked
+                    <span className="text-fg-muted">, {own.statement}</span>
                   </span>
                 </span>
               )

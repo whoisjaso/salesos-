@@ -229,9 +229,7 @@ function RepMe({
           <>
             {model ? (
               <section aria-label="Net collected cash per assigned opportunity" className="flex flex-col gap-1.5">
-                <p className="text-[12px] text-fg-subtle">
-                  Net collected cash per assigned opportunity, {seasonName}. Company cash on the opportunities assigned to you, not your pay.
-                </p>
+                <p className="text-[12px] text-fg-subtle">Net collected cash per assigned opportunity, {seasonName}.</p>
                 <OneNumber model={model} seasonLabel={data.season.label} />
               </section>
             ) : null}
@@ -283,13 +281,13 @@ function RepMe({
       {model ? (
         <Sheet open={sheet === "level"} onClose={close} title="Level" description={`${seasonName}, your verified progress`}>
           <div className="flex flex-col gap-3">
-            {/* The level, the ring and the streak are the rep's own verified progress, so the
-                generic pause chip stays off. A hold is named by track, with its reason, below. */}
-            <Hero model={{ ...model, xpPaused: false }} />
+            {/* The level, the ring and the streak are the rep's own verified progress. A hold is
+                named by its track, with what it waits on, below; it never reads as a global pause. */}
+            <Hero model={model} />
             {gate.holds.length > 0 ? (
               <Surface padding="md" state="attention" className="flex flex-col gap-2">
                 <p className="text-[13px] text-fg">
-                  Your level {formatCount(model.track.level)} and your streak are verified progress, in {seasonName}. Nothing below changes them, and nothing below changes your pay.
+                  Your level {formatCount(model.track.level)} and your streak are your own verified progress in {seasonName}. Nothing below changes them, and nothing below changes your pay.
                 </p>
                 {gate.holds.map((hold) => (
                   <div key={hold.track} className="flex flex-col gap-1.5">

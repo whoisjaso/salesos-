@@ -243,10 +243,18 @@ function firstName(displayName: string): string {
   return displayName.trim().split(/\s+/)[0];
 }
 
-/** Who a question about this brief reaches, and what the button says. Never an unaddressed "Ask". */
+/**
+ * Who a question about this brief reaches, and what the button says. Never an unaddressed "Ask".
+ * The setter of record first; otherwise the setter who last spoke to this customer, because the
+ * words on this brief came from that call. With neither, the button names its effect instead.
+ */
 export function askTarget(item: UpcomingAppointment): { label: string; done: string } {
-  const setterId = item.opportunity.currentOwner.setter;
-  const setter = setterId ? obaviaDataset.users.find((u) => u.userId === setterId) : undefined;
+  const opportunityId = item.opportunity.opportunityId;
+  const lastCaller = obaviaDataset.calls
+    .filter((c) => c.opportunityId === opportunityId && c.transportState === "ended")
+    .sort((a, b) => Date.parse(b.startedAt ?? "0") - Date.parse(a.startedAt ?? "0"))[0]?.userId;
+  const id = item.opportunity.currentOwner.setter ?? lastCaller;
+  const setter = id ? obaviaDataset.users.find((u) => u.userId === id && u.roles.includes("setter")) : undefined;
   if (setter) return { label: `Ask the setter, ${firstName(setter.displayName)}`, done: `Asked ${firstName(setter.displayName)}` };
   return { label: "Add missing context", done: "Context added" };
 }

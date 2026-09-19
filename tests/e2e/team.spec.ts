@@ -188,6 +188,8 @@ test.describe("Team and Me: Renata", () => {
     await expect(hero.getByText("Payable commission, not yet paid")).toBeVisible();
     await expect(hero.getByText(/^Cash tier\. Next: Stacks$/)).toBeVisible();
     await expect(hero.getByText("Tiers are display only and never change pay")).toBeVisible();
+    // Provisional says so where the figure is read, in words, with what it waits on.
+    await expect(hero.getByText(/^Provisional until .+\.$/)).toBeVisible();
     // The action names where it goes. "Collect more" named nothing.
     await expect(hero.getByRole("link", { name: "Open today's appointments" })).toBeVisible();
     await expect(page.getByText("Collect more")).toHaveCount(0);
@@ -198,10 +200,14 @@ test.describe("Team and Me: Renata", () => {
     await expect(page.getByText("Proposed", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 2 })).toHaveCount(0);
 
-    // Level row opens the level ring, XP to next and the streak.
+    // The Level row is the rep's own verified progress, never a global pause.
+    await expect(rows.getByRole("button", { name: /Level/ })).not.toContainText("Paused");
+
+    // Level row opens the level ring, XP to next, the streak, and any hold named by its track.
     await rows.getByRole("button", { name: /Level/ }).click();
     const level = page.getByRole("dialog");
     await expect(level.getByRole("heading", { level: 2, name: "Renata Solís" })).toBeVisible();
+    await expect(level.getByText(/^(Commercial|Practice|Team) XP partly on hold$/)).toBeVisible();
     await expect(level.getByText(/Level \d+/).first()).toBeVisible();
     await expect(level.getByRole("progressbar", { name: /^Level \d+, \d+% to next$/ })).toBeVisible();
     await expect(level.getByText(/XP to next|Max level/)).toBeVisible();

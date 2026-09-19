@@ -150,7 +150,9 @@ export function CashHero({
   const StatusIcon = STATUS_ICON[status.id];
   const money = (n: number) => formatMoneyMinor(Math.round(n), currency);
   const tierLine = next ? `${tier.label} tier. Next: ${next.tier.label}` : `${tier.label} tier. Top tier`;
-  const progressLabel = next ? `${money(next.remainingMinor)} of ${tier.label} to ${next.tier.label}, a display badge` : `${tier.label}, the top display badge`;
+  const progressLabel = next
+    ? `${money(next.remainingMinor)} more commission reaches the ${next.tier.label} tier, a display badge that never changes pay`
+    : `${tier.label} is the top tier, a display badge that never changes pay`;
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const [drops, setDrops] = useState<Drop[]>([]);
@@ -233,7 +235,9 @@ export function CashHero({
             <button
               type="button"
               onClick={() => setOpen(true)}
-              aria-label={`${period} commission, ${money(total)}. ${status.label}.${provisional ? " Provisional." : ""} ${tierLine}. ${TIER_DISPLAY_NOTE}. Open details`}
+              aria-label={`${period} commission, ${money(total)}. ${status.label}.${
+                provisional ? ` Provisional until ${provisional.waitingOn ?? "the open data incident is resolved"}.` : ""
+              } ${tierLine}. ${TIER_DISPLAY_NOTE}. Open details`}
               className="-m-2 flex flex-col gap-3.5 rounded-md p-2 text-left transition-colors hover:bg-hover active:bg-hover motion-reduce:transition-none"
             >
               <span className="flex items-center gap-4">

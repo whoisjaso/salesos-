@@ -154,7 +154,7 @@ test.describe("Owner: Delphine", () => {
     await page.goto("/");
     const card = page.getByRole("region", { name: "Fix this first" }).getByRole("article");
     // The decisive sentence, in three lines that each fit rather than one line that is cut.
-    await expect(card).toContainText(/\$[\d,]+\.\d{2} collected, not linked to an opportunity\./);
+    await expect(card).toContainText(/\$[\d,]+(\.\d{2})? collected, not linked to an opportunity\./);
     await expect(card).toContainText(/^(Rep|Marketing|Sales ops|Product|Finance|Delivery) \w/m);
     await expect(card).toContainText(/^Until then, .+\.$/m);
     // Nothing inside the card is cut off at this width: no element scrolls sideways inside itself.

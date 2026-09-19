@@ -293,7 +293,7 @@ export function commissionStatus(summary: Pick<CommissionSummary, "accruedMinor"
       id: "none",
       word: "None",
       label: "No commission yet",
-      meaning: "No cash has been collected on your opportunities in this period, so no commission has been calculated.",
+      meaning: "No cash has been collected on your opportunities yet, so no commission has been calculated.",
     };
   }
   if (parts.length === 1) {
@@ -318,7 +318,7 @@ export function commissionStatus(summary: Pick<CommissionSummary, "accruedMinor"
       id: "paid",
       word: "Paid",
       label: "Paid commission",
-      meaning: "Already paid out for this period.",
+      meaning: "Already paid out.",
     };
   }
   return {

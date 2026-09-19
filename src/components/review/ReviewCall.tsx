@@ -359,7 +359,7 @@ export function ReviewCall({ review, viewer, span }: { review: Review; viewer: V
       ) : null}
 
       {/* ----- Details: the numbers and what they measure, the moments, their words, every field ----- */}
-      <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} title="Details" description="Every reading cites a span. Flag any one; the transcript still decides the rest.">
+      <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} title="Details" description="The numbers and what they mean">
         <div className="flex flex-col gap-6">
           {/* ----- The numbers return here, each with the sentence that says what it is a probability of. ----- */}
           <section className="flex flex-col gap-2" aria-label="The numbers behind the assessment" data-testid="numbers">
@@ -384,15 +384,18 @@ export function ReviewCall({ review, viewer, span }: { review: Review; viewer: V
                       <span className="text-fg-subtle">{stageBandLine(s)}</span>
                     </div>
                     {s.spanIndexes.length > 0 ? (
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {s.spanIndexes.slice(0, 4).map((i) => (
-                          <button key={i} type="button" onClick={() => jumpFromSheet(i)} className="tag tabular text-fg-muted hover:bg-hover hover:text-fg" aria-label={`Go to the words behind ${s.label.toLowerCase()} at ${clock(transcript[i]?.startMs ?? 0)}`}>
-                            {clock(transcript[i]?.startMs ?? 0)}
-                          </button>
-                        ))}
-                        <Button variant="ghost" size="sm" onClick={() => spansFromSheet(s.spanIndexes)} className="ml-auto">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {s.spanIndexes.slice(0, 4).map((i) => (
+                            <button key={i} type="button" onClick={() => jumpFromSheet(i)} className="tag tabular text-fg-muted hover:bg-hover hover:text-fg" aria-label={`Go to the words behind ${s.label.toLowerCase()} at ${clock(transcript[i]?.startMs ?? 0)}`}>
+                              {clock(transcript[i]?.startMs ?? 0)}
+                            </button>
+                          ))}
+                        </div>
+                        <button type="button" onClick={() => spansFromSheet(s.spanIndexes)} className="inline-flex items-center gap-1.5 self-start text-[13px] font-medium text-accent underline-offset-2 hover:underline">
+                          <ChatCircleText size={14} weight="bold" aria-hidden />
                           {SUPPORT_WORD}
-                        </Button>
+                        </button>
                       </div>
                     ) : (
                       <span className="text-[12px] text-fg-subtle">Nothing cited</span>

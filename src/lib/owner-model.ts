@@ -249,11 +249,8 @@ export function provisionalFor(dataset: Dataset, metric: MetricPayload, filter: 
   if (metric.unknownCount > 0 || metric.dataState !== "complete") {
     const unlinked = dataset.ledger.filter((e) => e.opportunityId === undefined);
     if (unlinked.length > 0) {
-      const amount = formatMoneyMinor(
-        unlinked.reduce((s, e) => s + e.amount.amountMinor, 0),
-        currency,
-        { cents: true },
-      );
+      // Same precision as the fix-first card: cents only when the amount is not whole.
+      const amount = formatMoneyMinor(unlinked.reduce((s, e) => s + e.amount.amountMinor, 0), currency);
       const noun = unlinked.length === 1 ? "a payment" : `${formatCount(unlinked.length)} payments`;
       return {
         label: "Provisional",
