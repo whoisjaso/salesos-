@@ -10,6 +10,7 @@ import {
   Check,
   ChatCircleText,
   Handshake,
+  Lightbulb,
   ListChecks,
   Question,
   ShieldCheck,
@@ -22,22 +23,22 @@ import { Sheet } from "@/components/ui/Sheet";
 import { Surface } from "@/components/ui/Surface";
 import { cn } from "@/lib/cn";
 import {
-  CONFIDENCE_WORD,
   coachingMoment,
   describePolicy,
   formatClock as clock,
   formatDuration,
   isGoodExample,
   NEVER_LINE,
-  OUTCOME_WORD,
   policyWithDisputes,
   type Moment,
   type MomentKind,
   type Review,
+  type StageView,
   type Viewer,
 } from "@/lib/review";
 import { formatDateTimeIn, TENANT_TZ } from "@/lib/workspace-setter";
 import { OutcomeChip } from "./OutcomeChip";
+import { BAND_BORDER, BAND_ICON, BAND_TEXT, ProbabilityRing, StageStrip } from "./StageStrip";
 import { Transcript } from "./Transcript";
 
 const MOMENT_ICON: Record<MomentKind, ComponentType<IconProps>> = {
@@ -48,23 +49,28 @@ const MOMENT_ICON: Record<MomentKind, ComponentType<IconProps>> = {
   outcome: ChatCircleText,
 };
 
-/** One call: header, hero outcome, moments, transcript, what changes, coaching. Extracted lives in a side sheet. */
+/**
+ * One call: header, hero stage with a probability ring and the stage strip, moments,
+ * transcript, what changed, feedback angles, coaching. The transcript decides; the rep
+ * can only dispute (Wrong?). Extracted fields live in a side sheet. Owner sees the same.
+ */
 export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer }) {
   const reduce = useReducedMotion();
-  const [confirmed, setConfirmed] = useState(false);
   const [disputed, setDisputed] = useState<Set<string>>(() => new Set());
   const [active, setActive] = useState<number | undefined>(undefined);
+  const [activeStage, setActiveStage] = useState<string | undefined>(undefined);
   const [inspected, setInspected] = useState<number | undefined>(undefined);
   const [extractedOpen, setExtractedOpen] = useState(false);
   const [shared, setShared] = useState(false);
   const spanRefs = useRef<Map<number, HTMLLIElement>>(new Map());
 
-  const { call, contact, extraction, transcript } = review;
+  const { call, contact, extraction, transcript, hero, stages } = review;
   const policy = useMemo(() => policyWithDisputes(review, disputed), [review, disputed]);
   const changes = useMemo(() => describePolicy(policy), [policy]);
   const stripMoments = review.moments.filter((m) => m.kind !== "outcome");
   const coachMoment = review.coaching ? coachingMoment(review) : undefined;
-  const outcomeDisputed = disputed.has("outcome");
+  const anyDisputed = disputed.size > 0;
+  const HeroIcon = BAND_ICON[hero.band];
 
   const jumpTo = useCallback(
     (i: number) => {
@@ -76,6 +82,11 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
     [reduce],
   );
 
+  const jumpToStage = (s: StageView) => {
+    setActiveStage(s.key);
+    if (s.spanIndexes.length > 0) jumpTo(s.spanIndexes[0]);
+  };
+
   const toggleDispute = (id: string) =>
     setDisputed((s) => {
       const next = new Set(s);
@@ -84,17 +95,6 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
       return next;
     });
 
-  const disputeOutcome = () => {
-    setConfirmed(false);
-    if (!outcomeDisputed) toggleDispute("outcome");
-  };
-
-  const confirmOutcome = () => {
-    setConfirmed(true);
-    if (outcomeDisputed) toggleDispute("outcome");
-  };
-
-  const status = outcomeDisputed ? "Disputed" : confirmed ? "Confirmed by you" : "AI proposed";
   const assertedCount = review.fields.filter((f) => f.spanIndexes.length > 0).length;
 
   return (
@@ -119,34 +119,35 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
             </>
           ) : null}
           <OutcomeChip outcome={extraction.outcome.value} className="ml-auto" />
-          <span className={cn("tag", outcomeDisputed ? "border-[color:var(--perf-attention-line)] text-perf-attention" : confirmed ? "text-perf-strong border-[color:var(--perf-strong-line)]" : "border-dashed text-accent")} data-testid="outcome-status">
-            {outcomeDisputed ? <WarningCircle size={10} weight="bold" aria-hidden /> : confirmed ? <Check size={10} weight="bold" aria-hidden /> : <Sparkle size={10} weight="bold" aria-hidden />}
-            {status}
+          <span className={cn("tag", anyDisputed ? "border-[color:var(--perf-attention-line)] text-perf-attention" : "text-perf-strong border-[color:var(--perf-strong-line)]")} data-testid="outcome-status">
+            {anyDisputed ? <WarningCircle size={10} weight="bold" aria-hidden /> : <Sparkle size={10} weight="bold" aria-hidden />}
+            {anyDisputed ? "Disputed" : "Transcript decided"}
           </span>
         </div>
       </div>
 
-      {/* ----- Hero: the proposed outcome ----- */}
+      {/* ----- Hero: the furthest stage the transcript cleared ----- */}
       <Surface padding="md" className="flex flex-col gap-3">
-        <div className="section-label">Proposed outcome</div>
-        <div className="text-[44px] font-semibold leading-none tracking-tight text-fg" data-testid="hero-outcome">
-          {OUTCOME_WORD[extraction.outcome.value]}
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className={cn("chip", extraction.uncertainty === "low" ? "text-fg" : "border-dashed text-fg-muted")}>
-            {extraction.uncertainty === "low" ? <ShieldCheck size={12} weight="bold" aria-hidden /> : <Question size={12} weight="bold" aria-hidden />}
-            {CONFIDENCE_WORD[extraction.uncertainty]}
-          </span>
-          {extraction.unknowns.length > 0 ? <span className="chip border-dashed text-fg-subtle">{extraction.unknowns.length} unknown</span> : null}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Button size="lg" onClick={confirmOutcome} disabled={confirmed} leading={<Check size={16} weight="bold" />}>
-            {confirmed ? "Confirmed" : "Confirm"}
+        <div className="flex items-center gap-4">
+          <ProbabilityRing percent={hero.percent} band={hero.band} />
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <div className="section-label">Outcome</div>
+            <div className="text-[36px] font-semibold leading-none tracking-tight text-fg" data-testid="hero-outcome">
+              {hero.word}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className={cn("chip", BAND_BORDER[hero.band], BAND_TEXT[hero.band])} data-testid="hero-band">
+                <HeroIcon size={12} weight="bold" aria-hidden />
+                {hero.bandLabel}
+              </span>
+              {extraction.unknowns.length > 0 ? <span className="chip border-dashed text-fg-subtle">{extraction.unknowns.length} unknown</span> : null}
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setExtractedOpen(true)} leading={<Question size={14} weight="bold" />} className="self-start" data-testid="wrong">
+            Wrong?
           </Button>
-          <Button size="lg" variant="secondary" onClick={disputeOutcome} disabled={outcomeDisputed} leading={<WarningCircle size={16} weight="bold" />}>
-            {outcomeDisputed ? "Disputed" : "Dispute"}
-          </Button>
         </div>
+        <StageStrip stages={stages} active={activeStage} onSelect={jumpToStage} />
       </Surface>
 
       {/* ----- Moments ----- */}
@@ -191,16 +192,17 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
       <Surface padding="md" className="flex flex-col gap-2" aria-label="What this changes">
         <div className="flex items-center justify-between">
           <span className="section-label">What this changes</span>
-          <span className={cn("tag", policy.requiresRepConfirmation ? "border-[color:var(--perf-attention-line)] text-perf-attention" : "text-perf-strong border-[color:var(--perf-strong-line)]")} data-testid="policy-tag">
-            {policy.requiresRepConfirmation ? <WarningCircle size={10} weight="bold" aria-hidden /> : <Check size={10} weight="bold" aria-hidden />}
-            {policy.requiresRepConfirmation ? "Needs confirm" : "Applied by policy"}
+          <span className={cn("tag", anyDisputed ? "border-[color:var(--perf-attention-line)] text-perf-attention" : "text-perf-strong border-[color:var(--perf-strong-line)]")} data-testid="policy-tag">
+            {anyDisputed ? <WarningCircle size={10} weight="bold" aria-hidden /> : <Check size={10} weight="bold" aria-hidden />}
+            {anyDisputed ? "Disputed" : "Applied"}
           </span>
         </div>
         <ul className="flex flex-col gap-1">
-          {changes.map((w) => (
-            <li key={w} className="flex items-center gap-2 text-[14px] text-fg">
-              <Check size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
-              {w}
+          {changes.map((c) => (
+            <li key={c.text} className="flex items-center gap-2 text-[14px] text-fg" data-testid="change" data-applied={c.applied}>
+              {c.applied ? <Check size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" /> : <Sparkle size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />}
+              <span>{c.text}</span>
+              {c.applied ? null : <span className="tag ml-auto border-dashed text-fg-muted">Leaning, not applied</span>}
             </li>
           ))}
         </ul>
@@ -208,7 +210,7 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
           <ShieldCheck size={13} weight="bold" aria-hidden className="shrink-0" />
           {NEVER_LINE}
         </div>
-        {disputed.size > 0 ? (
+        {anyDisputed ? (
           <div className="flex flex-wrap items-center gap-1.5">
             {review.fields
               .filter((f) => disputed.has(f.id))
@@ -220,6 +222,30 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
           </div>
         ) : null}
       </Surface>
+
+      {/* ----- Feedback: angles through the lens ----- */}
+      {review.feedback.length > 0 ? (
+        <Surface padding="md" className="flex flex-col gap-2" aria-label="Feedback">
+          <div className="section-label">Feedback</div>
+          <ul className="flex flex-col gap-2">
+            {review.feedback.map((f, i) => (
+              <li key={`${f.angle}:${i}`} className="flex flex-col gap-1 rounded-md border border-line p-3" data-testid="feedback-card">
+                <div className="flex items-start gap-2">
+                  <Lightbulb size={16} weight="bold" aria-hidden className="mt-0.5 shrink-0 text-accent" />
+                  <span className="text-[14px] font-semibold leading-snug text-fg">{f.angle}</span>
+                </div>
+                <p className="pl-6 text-[13px] leading-snug text-fg-muted">{f.hint}</p>
+                {f.spanIndex !== undefined ? (
+                  <button type="button" onClick={() => jumpTo(f.spanIndex!)} className="ml-6 inline-flex items-center gap-1.5 self-start text-[13px] font-medium text-accent underline-offset-2 hover:underline">
+                    <ChatCircleText size={14} weight="bold" aria-hidden />
+                    See moment, {clock(transcript[f.spanIndex]?.startMs ?? 0)}
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </Surface>
+      ) : null}
 
       {/* ----- Coaching ----- */}
       {review.coaching ? (
@@ -261,8 +287,8 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
         </Surface>
       ) : null}
 
-      {/* ----- Extracted sheet ----- */}
-      <Sheet open={extractedOpen} onClose={() => setExtractedOpen(false)} title="Extracted" description="Every field cites a span. Dispute any one.">
+      {/* ----- Extracted sheet: every field, dispute any one ----- */}
+      <Sheet open={extractedOpen} onClose={() => setExtractedOpen(false)} title="Extracted" description="Every field cites a span. Dispute any one; the transcript still decides the rest.">
         <ul className="flex flex-col divide-y divide-line">
           {review.fields.map((f) => {
             const asserted = f.spanIndexes.length > 0;
@@ -279,7 +305,7 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
                   ) : asserted ? (
                     <span className="tag border-dashed text-accent">
                       <Sparkle size={10} weight="bold" aria-hidden />
-                      AI proposed
+                      From transcript
                     </span>
                   ) : (
                     <span className="tag border-dashed text-fg-subtle">Not asserted</span>
@@ -288,7 +314,7 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
                 <p className={cn("text-[14px] leading-snug", asserted ? "text-fg" : "text-fg-muted")}>{f.value}</p>
                 {asserted ? (
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {f.spanIndexes.map((i) => (
+                    {f.spanIndexes.slice(0, 4).map((i) => (
                       <button
                         key={i}
                         type="button"

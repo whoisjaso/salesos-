@@ -656,9 +656,17 @@ export function modelOutputFrom(x: CallExtraction): Record<string, unknown> {
 
 export interface ExtractionPolicy {
   policyVersion: string;
-  /** Contact state may move to two_way_contact without a rep tap when outcome is meaningful and uncertainty low. */
+  /**
+   * "auto" (default): the transcript decides. Stages move when the score clears the band;
+   * below it the stage is recorded as leaning. Reps never confirm.
+   * "confirm": the legacy rule for tenants that opt in. The rep confirms before anything moves.
+   */
+  mode?: "auto" | "confirm";
+  /** Owner-configurable band thresholds. */
+  bands?: BandPolicy;
+  /** Confirm mode only. Contact state may move to two_way_contact without a rep tap when outcome is meaningful and uncertainty low. */
   autoApplyTwoWayContact: boolean;
-  /** Contact state may move to voicemail without a rep tap when the outcome is voicemail and uncertainty low. */
+  /** Confirm mode only. Contact state may move to voicemail without a rep tap when the outcome is voicemail and uncertainty low. */
   autoApplyVoicemail: boolean;
   now: ISODateTime;
   /** Identity of the AI actor for the event envelope (separate from humans and services, SOS-23). */
@@ -666,15 +674,27 @@ export interface ExtractionPolicy {
 }
 
 export const DEFAULT_EXTRACTION_POLICY: Omit<ExtractionPolicy, "now"> = {
-  policyVersion: "call-intel-policy-1.0",
+  policyVersion: "call-intel-policy-2.0",
+  mode: "auto",
+  bands: DEFAULT_BAND_POLICY,
   autoApplyTwoWayContact: true,
   autoApplyVoicemail: true,
   actorId: "ai:call_intelligence",
 };
 
+export type StageApplication = "applied" | "leaning" | "none";
+
 export interface ExtractionPolicyResult {
   proposedEvents: DomainEvent[];
+  /** Always false in auto mode. Confirm mode keeps the legacy meaning. */
   requiresRepConfirmation: boolean;
+  /** Every field can be disputed by the rep; a dispute is the only escape hatch. */
+  disputable: true;
+  /** Band per stage under the policy's thresholds. */
+  stageBands: Record<StageKey, Band>;
+  /** What the policy did per stage. */
+  stageApplication: Record<StageKey, StageApplication>;
+  mode: "auto" | "confirm";
   reasons: string[];
 }
 
@@ -692,10 +712,18 @@ function spanRefs(callId: Id, spans: TranscriptSpan[]): Id[] {
   return spans.map((s) => `${callId}:span:${s.startMs}-${s.endMs}`);
 }
 
+function stageBands(scores: StageScores, bands: BandPolicy): Record<StageKey, Band> {
+  return { contacted: bandFor(scores.contacted, bands), qualified: bandFor(scores.qualified, bands), buying: bandFor(scores.buying, bands), bought: bandFor(scores.bought, bands) };
+}
+
+const NO_APPLICATION: Record<StageKey, StageApplication> = { contacted: "none", qualified: "none", buying: "none", bought: "none" };
+
 /**
- * The policy decides. The extraction is a proposal; this function turns it into
- * domain events with actorType "ai" and says whether a rep must confirm before
- * they take effect. Money, consent, and attendance are never touched here.
+ * The transcript decides. The extraction becomes domain events with actorType "ai".
+ * In auto mode a stage moves when its score clears the band and is recorded as leaning
+ * below it; the rep never confirms and can dispute any field. In confirm mode (opt-in)
+ * the legacy rule holds: the rep confirms before anything consequential moves.
+ * Money, consent, and attendance are never touched here.
  */
 export function applyExtractionPolicy(
   extraction: CallExtraction,
@@ -703,21 +731,26 @@ export function applyExtractionPolicy(
   opportunity: Opportunity,
   policy: ExtractionPolicy,
 ): ExtractionPolicyResult {
-  const reasons: string[] = [];
-  const proposedEvents: DomainEvent[] = [];
-  const actorId = policy.actorId ?? "ai:call_intelligence";
+  const mode = policy.mode ?? "auto";
+  const bands = policy.bands ?? DEFAULT_BAND_POLICY;
+  const rejected = (reasons: string[]): ExtractionPolicyResult => ({
+    proposedEvents: [],
+    requiresRepConfirmation: mode === "confirm",
+    disputable: true,
+    stageBands: stageBands(EMPTY_STAGE_SCORES, bands),
+    stageApplication: { ...NO_APPLICATION },
+    mode,
+    reasons,
+  });
 
   const validation = validateExtraction(extraction);
-  if (!validation.ok) {
-    return { proposedEvents: [], requiresRepConfirmation: true, reasons: ["extraction rejected by schema validation", ...validation.errors] };
-  }
+  if (!validation.ok) return rejected(["extraction rejected by schema validation", ...validation.errors]);
   if (extraction.callId !== call.callId || extraction.opportunityId !== opportunity.opportunityId || call.opportunityId !== opportunity.opportunityId) {
-    return { proposedEvents: [], requiresRepConfirmation: true, reasons: ["extraction does not belong to this call and opportunity"] };
+    return rejected(["extraction does not belong to this call and opportunity"]);
   }
-  if (call.tenantId !== opportunity.tenantId) {
-    return { proposedEvents: [], requiresRepConfirmation: true, reasons: ["cross-tenant call and opportunity"] };
-  }
+  if (call.tenantId !== opportunity.tenantId) return rejected(["cross-tenant call and opportunity"]);
 
+  const actorId = policy.actorId ?? "ai:call_intelligence";
   const mk = <T extends Record<string, unknown>>(suffix: string, eventType: string, aggregateType: string, aggregateId: Id, payload: T, spans: TranscriptSpan[]) =>
     createEvent<T>({
       eventId: `${extraction.callId}:${suffix}`,
@@ -737,6 +770,172 @@ export function applyExtractionPolicy(
       payload,
     });
 
+  const result = mode === "auto" ? applyAuto(extraction, call, opportunity, policy, bands, mk) : applyConfirm(extraction, call, opportunity, policy, bands, mk);
+
+  // Hard guard: nothing from the AI path may claim money, consent, or attendance.
+  const forbidden = result.proposedEvents.filter((e) => FORBIDDEN_AI_EVENT_TYPE.test(e.eventType));
+  if (forbidden.length > 0) {
+    throw new Error(`applyExtractionPolicy produced forbidden event types: ${forbidden.map((e) => e.eventType).join(", ")}`);
+  }
+  return result;
+}
+
+type Mk = <T extends Record<string, unknown>>(suffix: string, eventType: string, aggregateType: string, aggregateId: Id, payload: T, spans: TranscriptSpan[]) => DomainEvent;
+
+function objectiveOf(extraction: CallExtraction, callId: Id): Record<string, { value: FitValue; evidenceRefs: Id[] }> {
+  const objective: Record<string, { value: FitValue; evidenceRefs: Id[] }> = {};
+  for (const [key, f] of Object.entries(extraction.fitFacts)) objective[key] = { value: f.value, evidenceRefs: spanRefs(callId, f.spans) };
+  return objective;
+}
+
+/** Auto mode: banded probabilities move stages; nothing waits on a rep. */
+function applyAuto(extraction: CallExtraction, call: Call, opportunity: Opportunity, policy: ExtractionPolicy, bands: BandPolicy, mk: Mk): ExtractionPolicyResult {
+  const reasons: string[] = [];
+  const proposedEvents: DomainEvent[] = [];
+  const b = stageBands(extraction.stageScores, bands);
+  const application: Record<StageKey, StageApplication> = { ...NO_APPLICATION };
+  const clears = (key: StageKey, band: Band) => (band === "yes" ? b[key] === "yes" : b[key] === "yes" || b[key] === "likely");
+  const pct = (key: StageKey) => `${Math.round(extraction.stageScores[key] * 100)}%`;
+  const evidenceFor = (key: StageKey) => (extraction.stageEvidence[key].length > 0 ? extraction.stageEvidence[key] : extraction.outcome.spans);
+
+  proposedEvents.push(
+    mk("extraction", "call.extraction_recorded", "call", call.callId, {
+      extraction,
+      policyVersion: policy.policyVersion,
+      bandsVersion: bands.version,
+      stageBands: b,
+      disputable: true,
+    }, extraction.outcome.spans),
+  );
+
+  const live = call.transportState !== "ended";
+  if (live) reasons.push(`call transport is ${call.transportState}, not ended: recorded only, nothing moves yet`);
+
+  const outcome = extraction.outcome.value;
+  if (outcome !== "unknown") {
+    proposedEvents.push(
+      mk("outcome", "call.outcome_interpreted", "call", call.callId, {
+        interpretedOutcome: outcome,
+        uncertainty: extraction.uncertainty,
+        outcomeConfirmedBy: "policy",
+        policyVersion: policy.policyVersion,
+      }, extraction.outcome.spans),
+    );
+  } else {
+    reasons.push("outcome unknown: recorded, no contact state change");
+  }
+
+  if (!live) {
+    // Contacted: two-way contact when the score clears the band; voicemail from the outcome when it does not.
+    if (clears("contacted", "likely")) {
+      application.contacted = "applied";
+      if (opportunity.contactState !== "two_way_contact") {
+        proposedEvents.push(
+          mk("contact_state", "opportunity.contact_state_changed", "opportunity", opportunity.opportunityId, {
+            from: opportunity.contactState,
+            to: "two_way_contact",
+            stageScore: extraction.stageScores.contacted,
+            band: b.contacted,
+            policyVersion: policy.policyVersion,
+          }, evidenceFor("contacted")),
+        );
+        reasons.push(`contacted ${pct("contacted")} (${b.contacted}): contact state moves to two_way_contact`);
+      } else {
+        reasons.push(`contacted ${pct("contacted")} (${b.contacted}): already in two_way_contact`);
+      }
+    } else {
+      if (extraction.stageScores.contacted > 0) application.contacted = "leaning";
+      if (outcome === "voicemail" && (opportunity.contactState === "none" || opportunity.contactState === "attempted")) {
+        proposedEvents.push(
+          mk("contact_state", "opportunity.contact_state_changed", "opportunity", opportunity.opportunityId, {
+            from: opportunity.contactState,
+            to: "voicemail",
+            stageScore: extraction.stageScores.contacted,
+            band: b.contacted,
+            policyVersion: policy.policyVersion,
+          }, extraction.outcome.spans),
+        );
+        reasons.push("voicemail: contact state moves to voicemail; not a conversation");
+      } else if (extraction.stageScores.contacted > 0) {
+        reasons.push(`contacted ${pct("contacted")} (${b.contacted}): leaning, not applied`);
+      }
+    }
+
+    // Qualified: an assessment is confirmed at the band and recorded as leaning below it.
+    const assertedFacts = Object.entries(extraction.fitFacts).filter(([, f]) => f.value !== "unknown");
+    const touchesQualification = assertedFacts.length > 0 || extraction.nextStep.value === "dq_review" || extraction.stageScores.qualified > 0;
+    if (touchesQualification) {
+      const applied = clears("qualified", "likely");
+      application.qualified = applied ? "applied" : "leaning";
+      proposedEvents.push(
+        mk("assessment", "qualification.assessment_proposed", "opportunity", opportunity.opportunityId, {
+          objective: objectiveOf(extraction, call.callId),
+          aiRecommendation: extraction.nextStep.value === "dq_review" ? "decline" : applied ? "proceed" : "clarify",
+          reviewState: applied ? "confirmed" : "proposed",
+          band: applied ? b.qualified : "leaning",
+          stageScore: extraction.stageScores.qualified,
+          unknowns: extraction.unknowns,
+          policyVersion: policy.policyVersion,
+        }, uniqueSpans([...evidenceFor("qualified"), ...assertedFacts.flatMap(([, f]) => f.spans), ...extraction.nextStep.spans])),
+      );
+      reasons.push(applied ? `qualified ${pct("qualified")} (${b.qualified}): assessment confirmed by policy` : `qualified ${pct("qualified")} (${b.qualified}): leaning, assessment recorded as proposed`);
+    }
+
+    // Buying: the next step becomes a task at the band; below it the task is proposed, never created.
+    if (extraction.nextStep.value !== "none") {
+      const applied = clears("buying", "likely") || extraction.nextStep.value === "dq_review" || extraction.nextStep.value === "callback";
+      application.buying = clears("buying", "likely") ? "applied" : extraction.stageScores.buying > 0 ? "leaning" : "none";
+      const dueAt = extraction.commitments.find((c) => c.dueAt)?.dueAt;
+      proposedEvents.push(
+        mk("next_step", applied ? "task.created" : "task.proposed", "task", `task:${opportunity.opportunityId}:${NEXT_STEP_TASK[extraction.nextStep.value]}:${call.callId}`, {
+          action: NEXT_STEP_TASK[extraction.nextStep.value],
+          nextStep: extraction.nextStep.value,
+          dueAt,
+          stageScore: extraction.stageScores.buying,
+          band: b.buying,
+          commitments: extraction.commitments.map((c) => ({ text: c.text, owner: c.owner, dueAt: c.dueAt })),
+          stakeholders: extraction.stakeholders.map((s) => ({ name: s.name, role: s.role })),
+          policyVersion: policy.policyVersion,
+        }, extraction.nextStep.spans),
+      );
+      reasons.push(applied ? `buying ${pct("buying")} (${b.buying}): ${extraction.nextStep.value} task created` : `buying ${pct("buying")} (${b.buying}): ${extraction.nextStep.value} task proposed, not created`);
+    } else if (extraction.stageScores.buying > 0) {
+      application.buying = clears("buying", "likely") ? "applied" : "leaning";
+    }
+
+    // Bought: a verbal yes at the band. A follow-up task, never a ledger or contract event.
+    if (clears("bought", "yes")) {
+      application.bought = "applied";
+      proposedEvents.push(
+        mk("decision", "opportunity.decision_recorded", "opportunity", opportunity.opportunityId, {
+          decision: "verbal_yes",
+          stageScore: extraction.stageScores.bought,
+          band: b.bought,
+          policyVersion: policy.policyVersion,
+        }, evidenceFor("bought")),
+      );
+      proposedEvents.push(
+        mk("decision_followup", "task.created", "task", `task:${opportunity.opportunityId}:follow_up:${call.callId}`, {
+          action: "follow_up" satisfies Task["action"],
+          reason: "verbal_yes",
+          policyVersion: policy.policyVersion,
+        }, evidenceFor("bought")),
+      );
+      reasons.push(`bought ${pct("bought")} (${b.bought}): verbal yes recorded, follow-up task created; money waits for the ledger`);
+    } else if (extraction.stageScores.bought > 0) {
+      application.bought = "leaning";
+      reasons.push(`bought ${pct("bought")} (${b.bought}): leaning, nothing recorded`);
+    }
+  }
+
+  if (reasons.length === 0) reasons.push("recorded by policy");
+  return { proposedEvents, requiresRepConfirmation: false, disputable: true, stageBands: b, stageApplication: application, mode: "auto", reasons };
+}
+
+/** Confirm mode (opt-in): the legacy rule. The rep confirms before anything consequential moves. */
+function applyConfirm(extraction: CallExtraction, call: Call, opportunity: Opportunity, policy: ExtractionPolicy, bands: BandPolicy, mk: Mk): ExtractionPolicyResult {
+  const reasons: string[] = [];
+  const proposedEvents: DomainEvent[] = [];
   let requiresRepConfirmation = false;
 
   // The extraction itself is always recorded as a labeled proposal (SOS-23: summarize with source references).
@@ -819,11 +1018,9 @@ export function applyExtractionPolicy(
   if (touchesQualification) {
     requiresRepConfirmation = true;
     reasons.push("touches qualification: proposed assessment needs rep confirmation");
-    const objective: Record<string, { value: FitValue; evidenceRefs: Id[] }> = {};
-    for (const [key, f] of Object.entries(extraction.fitFacts)) objective[key] = { value: f.value, evidenceRefs: spanRefs(call.callId, f.spans) };
     proposedEvents.push(
       mk("assessment", "qualification.assessment_proposed", "opportunity", opportunity.opportunityId, {
-        objective,
+        objective: objectiveOf(extraction, call.callId),
         aiRecommendation: extraction.nextStep.value === "dq_review" ? "decline" : extraction.unknowns.length > 0 ? "clarify" : "proceed",
         reviewState: "needs_confirmation",
         unknowns: extraction.unknowns,
@@ -848,12 +1045,6 @@ export function applyExtractionPolicy(
     if (extraction.nextStep.value === "book" && !requiresRepConfirmation) reasons.push("next step book proposed as a confirm_appointment task");
   }
 
-  // Hard guard: nothing from the AI path may claim money, consent, or attendance.
-  const forbidden = proposedEvents.filter((e) => FORBIDDEN_AI_EVENT_TYPE.test(e.eventType));
-  if (forbidden.length > 0) {
-    throw new Error(`applyExtractionPolicy produced forbidden event types: ${forbidden.map((e) => e.eventType).join(", ")}`);
-  }
-
   if (!requiresRepConfirmation && reasons.length === 0) reasons.push("applied by policy");
-  return { proposedEvents, requiresRepConfirmation, reasons };
+  return { proposedEvents, requiresRepConfirmation, disputable: true, stageBands: stageBands(extraction.stageScores, bands), stageApplication: { ...NO_APPLICATION }, mode: "confirm", reasons };
 }

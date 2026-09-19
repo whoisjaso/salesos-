@@ -1,15 +1,21 @@
 /**
  * Native call review over the simulated extraction (D: "Call intelligence, not a
- * third-party notetaker"). Pure over fixtures: no React, no fetch, `now` is the
- * fixture NOW. The model proposes; the policy decides; the rep can dispute any field.
+ * third-party notetaker"; D: "The transcript decides. No rep approval."). Pure over
+ * fixtures: no React, no fetch, `now` is the fixture NOW. The transcript is scored per
+ * stage; the policy applies at the band; the rep can dispute any field.
  */
 import {
   applyExtractionPolicy,
+  BAND_LABEL,
   DEFAULT_EXTRACTION_POLICY,
   RuleBasedCallIntelligence,
+  STAGE_KEYS,
   validateExtraction,
+  type Band,
   type CallExtraction,
   type ExtractionPolicyResult,
+  type StageApplication,
+  type StageKey,
   type TranscriptSpan,
   type ValidationResult,
 } from "@/domain/callIntelligence";
@@ -36,10 +42,42 @@ export interface Moment {
   fieldId: string;
 }
 
+/** One funnel stage as the review shows it. */
+export interface StageView {
+  key: StageKey;
+  label: string;
+  /** 0..1 */
+  score: number;
+  /** 0..100, rounded. */
+  percent: number;
+  band: Band;
+  bandLabel: string;
+  application: StageApplication;
+  /** Indexes into `transcript` of the cited spans. Empty at score 0. */
+  spanIndexes: number[];
+}
+
+/** The one large word on the review hero: the furthest stage at or above Likely, or No contact. */
+export interface Hero {
+  word: string;
+  key?: StageKey;
+  score: number;
+  percent: number;
+  band: Band;
+  bandLabel: string;
+}
+
+/** One angle card. */
+export interface FeedbackCard {
+  angle: string;
+  hint: string;
+  spanIndex?: number;
+}
+
 /** One disputable field in the Extracted sheet. */
 export interface ExtractedField {
   id: string;
-  kind: MomentKind | "fit";
+  kind: MomentKind | "fit" | "stage";
   label: string;
   value: string;
   /** Indexes into `transcript`. Empty for non-assertions (unknown, none). */
@@ -60,6 +98,9 @@ export interface Review {
   fields: ExtractedField[];
   /** spanIndex -> labels of the fields that cite it. */
   citations: Map<number, string[]>;
+  stages: StageView[];
+  hero: Hero;
+  feedback: FeedbackCard[];
 }
 
 export interface ReviewRow {
@@ -68,10 +109,26 @@ export interface ReviewRow {
   contact: Contact;
   rep: User;
   outcome: CallInterpretedOutcome;
-  needsConfirm: boolean;
+  hero: Hero;
 }
 
 // ---------- Words ----------
+
+export const STAGE_WORD: Record<StageKey, string> = {
+  contacted: "Contacted",
+  qualified: "Qualified",
+  buying: "Buying",
+  bought: "Bought",
+};
+
+export const NO_CONTACT_WORD = "No contact";
+
+/** "Applied" when a stage moved, "Leaning" when it was recorded below the band. */
+export const APPLICATION_WORD: Record<StageApplication, string> = {
+  applied: "Applied",
+  leaning: "Leaning",
+  none: "Not scored",
+};
 
 /** The one large word on the review hero. */
 export const OUTCOME_WORD: Record<CallInterpretedOutcome, string> = {
@@ -150,39 +207,57 @@ export function formatDuration(seconds: number | undefined): string {
 
 // ---------- Plain words for the policy ----------
 
+/** One line under "What this changes". `applied` false means leaning: recorded, not applied. */
+export interface Change {
+  text: string;
+  applied: boolean;
+}
+
+function taskWord(action: unknown): string {
+  switch (action) {
+    case "confirm_appointment":
+      return "Creates a booking task";
+    case "call":
+      return "Creates a callback task";
+    case "send_proposal":
+      return "Creates a proposal task";
+    case "review_dq":
+      return "Proposes a DQ review";
+    case "follow_up":
+      return "Creates a follow-up task";
+    default:
+      return `Creates a ${String(action).replace(/_/g, " ")} task`;
+  }
+}
+
 /** A proposed event in plain words. Returns undefined for the bookkeeping event. */
-export function describeEvent(e: DomainEvent): string | undefined {
+export function describeEvent(e: DomainEvent): Change | undefined {
   const p = e.payload as Record<string, unknown>;
   switch (e.eventType) {
     case "call.extraction_recorded":
       return undefined;
     case "call.outcome_interpreted":
-      return `Records the outcome as ${OUTCOME_WORD[p.interpretedOutcome as CallInterpretedOutcome].toLowerCase()}`;
+      return { text: `Records the outcome as ${OUTCOME_WORD[p.interpretedOutcome as CallInterpretedOutcome].toLowerCase()}`, applied: true };
     case "opportunity.contact_state_changed":
-      return p.to === "two_way_contact" ? "Marks two-way contact" : p.to === "voicemail" ? "Marks voicemail" : `Marks ${String(p.to).replace(/_/g, " ")}`;
+      return { text: p.to === "two_way_contact" ? "Marks two-way contact" : p.to === "voicemail" ? "Marks voicemail" : `Marks ${String(p.to).replace(/_/g, " ")}`, applied: true };
     case "qualification.assessment_proposed":
-      return "Proposes a fit assessment for review";
+      if (p.reviewState === "confirmed") return { text: p.aiRecommendation === "decline" ? "Records not a fit" : "Confirms the fit assessment", applied: true };
+      if (p.reviewState === "needs_confirmation") return { text: "Proposes a fit assessment for review", applied: false };
+      return { text: "Records a leaning fit assessment", applied: false };
+    case "opportunity.decision_recorded":
+      return { text: "Records a verbal yes", applied: true };
+    case "task.created":
+      return { text: taskWord(p.action), applied: true };
     case "task.proposed":
-      switch (p.action) {
-        case "confirm_appointment":
-          return "Creates a booking task";
-        case "call":
-          return "Creates a callback task";
-        case "send_proposal":
-          return "Creates a proposal task";
-        case "review_dq":
-          return "Proposes a DQ review";
-        default:
-          return `Creates a ${String(p.action).replace(/_/g, " ")} task`;
-      }
+      return { text: taskWord(p.action), applied: false };
     default:
-      return e.eventType.replace(/[._]/g, " ");
+      return { text: e.eventType.replace(/[._]/g, " "), applied: true };
   }
 }
 
-export function describePolicy(policy: ExtractionPolicyResult): string[] {
-  const words = policy.proposedEvents.map(describeEvent).filter((w): w is string => Boolean(w));
-  return words.length > 0 ? words : ["Nothing changes"];
+export function describePolicy(policy: ExtractionPolicyResult): Change[] {
+  const words = policy.proposedEvents.map(describeEvent).filter((w): w is Change => Boolean(w));
+  return words.length > 0 ? words : [{ text: "Nothing changes", applied: true }];
 }
 
 // ---------- Access ----------
@@ -209,7 +284,7 @@ export function reviewableCalls(viewer: Viewer): ReviewRow[] {
     if (!call || call.transportState !== "ended" || !canReview(viewer, call)) continue;
     const review = buildReview(callId);
     if (!review) continue;
-    rows.push({ callId, call, contact: review.contact, rep: review.rep, outcome: review.extraction.outcome.value, needsConfirm: review.policy.requiresRepConfirmation });
+    rows.push({ callId, call, contact: review.contact, rep: review.rep, outcome: review.extraction.outcome.value, hero: review.hero });
   }
   return rows.sort((a, b) => Date.parse(b.call.startedAt ?? "0") - Date.parse(a.call.startedAt ?? "0"));
 }
@@ -248,7 +323,50 @@ function buildFields(x: CallExtraction, transcript: TranscriptSpan[]): Extracted
   for (const [key, f] of Object.entries(x.fitFacts)) {
     fields.push({ id: `fit:${key}`, kind: "fit", label: humanizeFitKey(key), value: f.value === "unknown" ? "Unknown" : f.value.charAt(0).toUpperCase() + f.value.slice(1), spanIndexes: indexes(transcript, f.spans) });
   }
+  for (const key of STAGE_KEYS) {
+    const score = x.stageScores[key];
+    fields.push({ id: `stage:${key}`, kind: "stage", label: `Stage, ${STAGE_WORD[key].toLowerCase()}`, value: `${Math.round(score * 100)}%, ${BAND_LABEL[stageBand(x, key)]}`, spanIndexes: indexes(transcript, x.stageEvidence[key]) });
+  }
   return fields;
+}
+
+function stageBand(x: CallExtraction, key: StageKey): Band {
+  return bandOf(x.stageScores[key]);
+}
+
+function bandOf(score: number): Band {
+  const b = DEFAULT_EXTRACTION_POLICY.bands!;
+  return score >= b.yes ? "yes" : score >= b.likely ? "likely" : score >= b.unlikely ? "unlikely" : "no";
+}
+
+/** The four stages, in funnel order, with the policy's bands and application. */
+function buildStages(x: CallExtraction, policy: ExtractionPolicyResult, transcript: TranscriptSpan[]): StageView[] {
+  return STAGE_KEYS.map((key) => {
+    const score = x.stageScores[key];
+    const band = policy.stageBands[key];
+    return {
+      key,
+      label: STAGE_WORD[key],
+      score,
+      percent: Math.round(score * 100),
+      band,
+      bandLabel: BAND_LABEL[band],
+      application: policy.stageApplication[key],
+      spanIndexes: indexes(transcript, x.stageEvidence[key]),
+    };
+  });
+}
+
+/** The furthest stage at or above Likely wins the hero. Nothing at Likely reads "No contact". */
+export function heroFor(stages: StageView[]): Hero {
+  const cleared = [...stages].reverse().find((s) => s.band === "yes" || s.band === "likely");
+  if (cleared) return { word: cleared.label, key: cleared.key, score: cleared.score, percent: cleared.percent, band: cleared.band, bandLabel: cleared.bandLabel };
+  const contacted = stages.find((s) => s.key === "contacted") ?? stages[0];
+  return { word: NO_CONTACT_WORD, score: contacted?.score ?? 0, percent: contacted?.percent ?? 0, band: contacted?.band ?? "no", bandLabel: BAND_LABEL[contacted?.band ?? "no"] };
+}
+
+function buildFeedback(x: CallExtraction, transcript: TranscriptSpan[]): FeedbackCard[] {
+  return x.feedback.map((f) => ({ angle: f.angle, hint: f.hint, spanIndex: indexes(transcript, f.spans)[0] }));
 }
 
 /** One moment per cited span, in transcript order. Outcome spans come last so the strip leads with the substantive ones. */
@@ -297,6 +415,7 @@ export function buildReview(callId: Id): Review | undefined {
   const recs = RulesCoachingEngine.recommend(dataset, rep.userId, NOW);
   const coaching = recs.find((r) => !r.suppressed) ?? recs[0];
   const fields = buildFields(extraction, transcript);
+  const stages = buildStages(extraction, policy, transcript);
 
   return {
     call,
@@ -311,19 +430,22 @@ export function buildReview(callId: Id): Review | undefined {
     moments: buildMoments(extraction, transcript),
     fields,
     citations: buildCitations(fields),
+    stages,
+    hero: heroFor(stages),
+    feedback: buildFeedback(extraction, transcript),
   };
 }
 
 // ---------- Disputes (client state, recomputed purely) ----------
 
-/** A disputed field never moves a stage until resolved: the policy result flips to rep confirmation. */
+/** A disputed field holds what it touched until resolved: the only way a rep stops the transcript. */
 export function policyWithDisputes(review: Review, disputed: ReadonlySet<string>): ExtractionPolicyResult {
   if (disputed.size === 0) return review.policy;
   const labels = review.fields.filter((f) => disputed.has(f.id)).map((f) => f.label.toLowerCase());
   return {
-    proposedEvents: review.policy.proposedEvents,
+    ...review.policy,
     requiresRepConfirmation: true,
-    reasons: [...review.policy.reasons, `disputed by rep: ${labels.join(", ")}; nothing moves until resolved`],
+    reasons: [...review.policy.reasons, `disputed by rep: ${labels.join(", ")}; held until resolved`],
   };
 }
 
