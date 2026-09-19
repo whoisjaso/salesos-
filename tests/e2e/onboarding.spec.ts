@@ -155,25 +155,26 @@ test.describe("Onboarding from zero", () => {
     // The shell carries the new business, not the demo tenant.
     await expect(page.locator("header").getByText(BUSINESS)).toBeVisible();
 
-    // Checklist: six steps, Business profile done, Connect a source next.
+    // Checklist: six rows, Business profile done, Connect a source next.
     const checklist = page.getByRole("region", { name: "Getting started" });
     await expect(checklist).toBeVisible();
     await expect(checklist.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "17");
     const steps = checklist.getByRole("list", { name: "Steps" }).getByRole("listitem");
     await expect(steps).toHaveCount(6);
     await expect(steps).toHaveText([/Business profile/, /Connect a source/, /Invite your team/, /First lead/, /First appointment/, /First cash/]);
+    await expect(steps.nth(0)).toContainText("Done");
     await expect(steps.nth(1)).toHaveAttribute("aria-current", "step");
     await expect(steps.nth(1)).toContainText("Next");
     await expect(checklist.getByRole("link", { name: /Connect a source/ })).toHaveAttribute("href", "/connect");
 
-    // Honest hero: no leads, zero sources, no funnel bar, no fake money.
+    // Honest hero: no leads, zero sources, one action, the other two ways as rows. No funnel bar, no fake money.
     const hero = page.getByRole("region", { name: "No leads yet" });
     await expect(hero.getByRole("heading", { level: 2, name: "No leads yet" })).toBeVisible();
     await expect(hero.getByText("0 sources connected")).toBeVisible();
     await expect(hero.getByRole("link", { name: "Connect a source" })).toHaveAttribute("href", "/connect");
     await expect(hero.getByRole("link", { name: "Import history" })).toHaveAttribute("href", "/import");
     await expect(hero.getByRole("link", { name: "Invite team" })).toHaveAttribute("href", "/team");
-    await expect(page.getByText("Net collected per assigned opportunity")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Net collected per assigned opportunity/ })).toHaveCount(0);
     await expect(page.getByRole("list", { name: /^Funnel stages/ })).toHaveCount(0);
 
     // Team: no reps, roster with the owner, Invite in the header.
@@ -392,7 +393,7 @@ test.describe("Onboarding from zero", () => {
     for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "Next" }).click();
     await page.getByRole("button", { name: "Done" }).click();
     expect(await tabLabels(page)).toEqual(["Business", "Team", "Me"]);
-    await expect(page.getByText("Net collected per assigned opportunity")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Net collected per assigned opportunity/ })).toBeVisible();
     // The demo owner has the same Invite control on Team.
     await page.goto("/team");
     await page.getByRole("button", { name: "Invite" }).first().click();

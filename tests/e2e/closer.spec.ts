@@ -16,28 +16,46 @@ test.describe("Closer: Marcus", () => {
     await expect(page.getByRole("button", { name: "Brief" })).toBeVisible();
   });
 
-  test("brief explains why this closer and shows verified fit", async ({ page }) => {
+  test("the screen is a hero, a control and a list", async ({ page }) => {
+    await page.goto("/");
+    const main = page.locator("main");
+    // No quote, no people strip, no stats bar, no game strip.
+    await expect(main.getByText(/^“/)).toHaveCount(0);
+    await expect(main.getByText(/Paused until data is fixed/)).toHaveCount(0);
+    await expect(main.getByText(/Level \d+/)).toHaveCount(0);
+    await expect(main.getByRole("region", { name: "Today" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Now" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  test("brief explains why this closer and shows verified fit, behind Details", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "Brief" }).click();
     const brief = sheet(page, "Brief");
     await expect(brief).toBeVisible();
-    await expect(brief.getByText("Why you")).toBeVisible();
+    // The first view carries no provenance tag and none of the labeled rows.
+    await expect(brief.getByText(/^(Customer-stated|Verified|AI-proposed)$/)).toHaveCount(0);
+    await expect(brief.getByText("Why you")).toHaveCount(0);
+
+    await brief.getByTestId("brief-details-row").click();
+    const details = sheet(page, "Details");
+    await expect(details).toBeVisible();
+    await expect(details.getByText("Why you")).toBeVisible();
     // The assignment explanation is a sentence, tagged Verified, and never uses personality.
-    const why = brief.locator("div.py-2\\.5").filter({ hasText: "Why you" }).first();
+    const why = details.locator("div.py-2\\.5").filter({ hasText: "Why you" }).first();
     await expect(why.getByText("Verified", { exact: true })).toBeVisible();
     await expect(why.locator("p")).toHaveText(/^Assigned to .+; .+/);
     await expect(why.locator("p")).toContainText("Personality information was not used");
 
     // Every row carries provenance.
-    await expect(brief.getByText("Customer-stated").first()).toBeVisible();
-    await expect(brief.getByText("Verified", { exact: true }).first()).toBeVisible();
+    await expect(details.getByText("Customer-stated").first()).toBeVisible();
+    await expect(details.getByText("Verified", { exact: true }).first()).toBeVisible();
     for (const row of ["Request", "Desired outcome", "Previous promises", "Offer version"]) {
-      await expect(brief.getByText(row, { exact: true })).toBeVisible();
+      await expect(details.getByText(row, { exact: true })).toBeVisible();
     }
 
     // Fit: chips when assessed, an explicit "Not assessed" plus an Unknown otherwise. Never invented.
-    await expect(brief.getByText("Verified fit")).toBeVisible();
-    const fitBlock = brief.locator("div.py-2\\.5").filter({ hasText: "Verified fit" }).first();
+    await expect(details.getByText("Verified fit")).toBeVisible();
+    const fitBlock = details.locator("div.py-2\\.5").filter({ hasText: "Verified fit" }).first();
     const chips = fitBlock.getByRole("listitem");
     if (await chips.count()) {
       for (const chip of await chips.all()) {
@@ -46,48 +64,65 @@ test.describe("Closer: Marcus", () => {
       }
     } else {
       await expect(fitBlock.getByText("Not assessed")).toBeVisible();
-      await expect(brief.getByRole("listitem").filter({ hasText: "Offer fit not assessed" })).toHaveCount(1);
+      await expect(details.getByRole("listitem").filter({ hasText: "Offer fit not assessed" })).toHaveCount(1);
     }
+    await details.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(details).toHaveCount(0);
+
     await brief.getByRole("button", { name: "Ask for clarification" }).click();
     await expect(brief.getByRole("button", { name: "Clarification requested" })).toBeDisabled();
     await closeSheet(page);
   });
 
-  test("brief shows Buyer mode from the customer's words: the read as one value word, the top dimensions, the approach", async ({ page }) => {
+  test("brief opens on the read and the approach; the dimensions and their cited words are behind Details", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "Brief" }).click();
     const brief = sheet(page, "Brief");
     await expect(brief).toBeVisible();
     const section = brief.getByTestId("buyer-mode");
     await expect(section).toBeVisible();
-    await expect(section.getByText("Buyer mode", { exact: true })).toBeVisible();
     // The read: "They value" over one value word, never a lens name as the hero, never the word "type".
     const read = section.getByTestId("read-block");
     await expect(read.getByText("They value")).toBeVisible();
     await expect(read.getByTestId("read-value")).toBeVisible();
     await expect(section).not.toContainText(/\btype\b/i);
     await expect(section).not.toContainText(/archetype/i);
+    // The read block is the first thing in the sheet.
+    await expect(brief.locator("[data-testid]").first()).toHaveAttribute("data-testid", "buyer-mode");
 
-    const rows = section.getByTestId("buyer-mode-row");
-    if (await rows.count()) {
+    const hasRows = (await section.getByTestId("approach").count()) > 0;
+    if (hasRows) {
       // Marcus's next appointment has a transcript (call_089c): numbers first, a fast decision, a partner in the room.
-      expect(await rows.count()).toBeLessThanOrEqual(3);
-      await expect(rows.first()).toContainText(/^[A-Z][a-z ]+: [A-Z][a-z]+/);
-      await expect(rows.first().getByTestId("confidence-dot")).toHaveAttribute("aria-label", /Confident|Low confidence/);
-      await expect(section.getByText("Evidence preference: Quantitative")).toBeVisible();
-      await expect(section.getByTestId("approach")).toContainText("Lead with the numbers");
-      // Tap a row: the cited words appear with the brief's Customer-stated tag.
-      await rows.first().getByRole("button").click();
-      const cited = rows.first().getByTestId("cited-words");
-      await expect(cited).toBeVisible();
-      await expect(cited.getByText("Customer-stated").first()).toBeVisible();
-      await expect(cited).toContainText(/numbers/i);
+      const approach = section.getByTestId("approach");
+      await expect(approach).toContainText("Lead with the numbers");
+      expect(await approach.getByRole("listitem").count()).toBeLessThanOrEqual(3);
       // The read: the value word is a plain word, the lens label sits beneath with a percentage; details list all twelve.
       await expect(read.getByTestId("read-top")).toHaveText(/^[A-Z][a-z]+ · \d{1,2}%$/);
       await read.getByRole("button").click();
       await expect(read.getByTestId("read-row")).toHaveCount(12);
       await expect(read.getByText("what we believe, and how strongly")).toBeVisible();
       await expect(read.getByText("No signal", { exact: true }).first()).toBeVisible();
+      await read.getByRole("button").first().click();
+
+      // The dimensions live behind Details.
+      await brief.getByTestId("brief-details-row").click();
+      const details = sheet(page, "Details");
+      const dims = details.getByTestId("buyer-mode-dimensions");
+      await expect(dims.getByText("Buyer mode", { exact: true })).toBeVisible();
+      const rows = dims.getByTestId("buyer-mode-row");
+      expect(await rows.count()).toBeGreaterThan(0);
+      expect(await rows.count()).toBeLessThanOrEqual(3);
+      await expect(rows.first()).toContainText(/^[A-Z][a-z ]+: [A-Z][a-z]+/);
+      await expect(rows.first().getByTestId("confidence-dot")).toHaveAttribute("aria-label", /Confident|Low confidence/);
+      await expect(dims.getByText("Evidence preference: Quantitative")).toBeVisible();
+      // Tap a row: the cited words appear with the brief's Customer-stated tag.
+      await rows.first().getByRole("button").click();
+      const cited = rows.first().getByTestId("cited-words");
+      await expect(cited).toBeVisible();
+      await expect(cited.getByText("Customer-stated").first()).toBeVisible();
+      await expect(cited).toContainText(/numbers/i);
+      await details.getByRole("button", { name: "Close", exact: true }).click();
+      await expect(details).toHaveCount(0);
     } else {
       await expect(section.getByTestId("buyer-mode-empty")).toHaveText("No signal yet");
       await expect(read.getByTestId("read-value")).toHaveText("No signal yet");

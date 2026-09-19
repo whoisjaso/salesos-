@@ -1,9 +1,8 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Info, PauseCircle } from "@phosphor-icons/react";
+import { PauseCircle } from "@phosphor-icons/react";
 import { obaviaCommissionPolicies, obaviaDataset, obaviaDatasetWithPairs, obaviaPairs, NOW } from "@/fixtures/obavia";
 import { commissionPolicyFor } from "@/domain/cashTiers";
 import { buildLeaderboard } from "@/domain/leaderboard";
@@ -30,12 +29,15 @@ import {
 } from "@/lib/team-data";
 import { PairCard } from "@/components/pairs/PairCard";
 import { PairSheet } from "@/components/pairs/PairSheet";
-import { Segmented, Switch } from "./Segmented";
+import { DetailsRow } from "@/components/ui/DetailsRow";
+import { Sheet } from "@/components/ui/Sheet";
+import { Segmented } from "./Segmented";
 import { SeasonHero } from "./SeasonHero";
+import { SeasonSheet } from "./SeasonSheet";
+import { RanksSheet, pauseSummary } from "./RanksSheet";
 import { LeaderboardRow } from "./LeaderboardRow";
 import { StageChampions } from "./StageChampions";
-import { MeTab } from "./MeTab";
-import { InfoSheet } from "./InfoSheet";
+import { MissionsList } from "./MissionsList";
 import { SourceSheetList } from "./SourceSheetList";
 import { useTenantData } from "@/lib/onboarding";
 import { InviteButton, TeamRoster } from "@/components/onboarding/TeamRoster";
@@ -64,7 +66,10 @@ const PAIR_RATES = {
 const reps = dataset.users.filter((u) => u.active && (u.roles.includes("setter") || u.roles.includes("closer")));
 const repIds = new Set(reps.map((r) => r.userId));
 
-/** Team board. The session user is "me"; the owner sees the team ring instead. */
+/**
+ * Team: hero, one control, one list, tab bar. The session user is "me"; the
+ * owner sees the team ring and the same shape. Everything else is behind a tap.
+ */
 export function TeamView() {
   const reduce = useReducedMotion();
   const { session, ready } = useSession();
@@ -78,8 +83,9 @@ export function TeamView() {
   const [segment, setSegment] = useState<Segment>("board");
   const [role, setRole] = useState<RoleFilter>(session?.role === "setter" ? "setter" : "closer");
   const [descriptive, setDescriptive] = useState(false);
-  const [showSource, setShowSource] = useState(false);
-  const [infoOpen, setInfoOpen] = useState(false);
+  const [seasonOpen, setSeasonOpen] = useState(false);
+  const [ranksOpen, setRanksOpen] = useState(false);
+  const [sourceOpen, setSourceOpen] = useState(false);
   const [corrections, setCorrections] = useState<Record<string, boolean>>({});
   const [openPair, setOpenPair] = useState<PairView | null>(null);
 
@@ -88,7 +94,6 @@ export function TeamView() {
   const policy = useMemo(() => (descriptive ? descriptivePolicy(NOW) : basePolicy), [descriptive, basePolicy]);
   const rows = useMemo(() => buildLeaderboard(dataset, "comparable_performance", policy, NOW), [policy]);
   const visible = useMemo(() => rows.filter((r) => r.role === role), [rows, role]);
-  const allProvisional = visible.length > 0 && visible.every((r) => r.provisional);
   const pause = useMemo(() => pauseConditions(dataset, NOW), []);
   const guardrails = useMemo(() => guardrailCounts(dataset), []);
   const champions = useMemo(() => stageChampions(dataset, visible, policy, NOW), [visible, policy]);
@@ -115,15 +120,16 @@ export function TeamView() {
     return out;
   }, [rows, policy]);
 
-  const pauseText = [
-    pause.unlinkedPayments ? `${pause.unlinkedPayments} unlinked ${pause.unlinkedPayments === 1 ? "payment" : "payments"}` : null,
-    pause.unresolvedAttendance ? `${pause.unresolvedAttendance} unresolved ${pause.unresolvedAttendance === 1 ? "attendance" : "attendances"}` : null,
-  ]
-    .filter(Boolean)
-    .join(", ");
+  // Ranks pause on unresolved data (SOS-14). The line stays while the data is unfixed so the override stays reachable.
+  const ranksPaused = basePolicy.pauseOnUnresolvedData && pauseSummary(pause).length > 0;
 
   const fade = reduce ? {} : { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -4 }, transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] as const } };
   const segments = isOwner ? OWNER_SEGMENTS : REP_SEGMENTS;
+  const title = seasonTitle(NOW);
+  const daysLeft = seasonDaysLeft(NOW);
+  const level = player ? player.commercial : teamTrack.level;
+  const streak = player ? player.streakDays : teamTrack.streakDays;
+  const pausedReasons = player?.gate.paused ? player.gate.reasons : [];
 
   // A business created through onboarding: roster only, no ranks, until its own sample matures.
   if (session && !tenantData.demo) return <TeamRoster data={tenantData} viewer={{ userId: session.userId, role: session.role }} />;
@@ -131,87 +137,91 @@ export function TeamView() {
   return (
     <>
       <div className="flex flex-col gap-4">
-        {player ? (
-          <SeasonHero title={seasonTitle(NOW)} daysLeft={seasonDaysLeft(NOW)} level={player.commercial} streakDays={player.streakDays} pausedReasons={player.gate.paused ? player.gate.reasons : []} myRow={myRow} descriptive={descriptive} />
-        ) : (
-          <SeasonHero title={seasonTitle(NOW)} daysLeft={seasonDaysLeft(NOW)} level={teamTrack.level} streakDays={teamTrack.streakDays} team descriptive={descriptive} />
-        )}
+        <SeasonHero title={title} daysLeft={daysLeft} level={level} myRow={player ? myRow : undefined} team={!player} onOpen={() => setSeasonOpen(true)} action={isOwner && session ? <InviteButton data={tenantData} by={session.userId} /> : null} />
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Segmented options={segments} value={segment} onChange={setSegment} label="View" />
-          <div className="flex items-center gap-1">
-            {isOwner && session ? <InviteButton data={tenantData} by={session.userId} /> : null}
-            {segment === "board" || segment === "stages" ? <Segmented options={ROLES} value={role} onChange={setRole} label="Role" /> : null}
-            <button type="button" onClick={() => setInfoOpen(true)} aria-label="Rules" className="inline-grid h-8 w-8 shrink-0 place-items-center rounded-sm text-fg-muted hover:bg-hover hover:text-fg">
-              <Info size={18} weight="regular" aria-hidden />
-            </button>
+        {ranksPaused && segment === "board" ? (
+          <div className="surface">
+            <DetailsRow leading={<PauseCircle size={16} weight="bold" aria-hidden className="text-perf-attention" />} label="Ranks paused" value={descriptive ? "Shown anyway" : undefined} onClick={() => setRanksOpen(true)} data-testid="ranks-paused" />
           </div>
-        </div>
+        ) : null}
+
+        <Segmented options={segments} value={segment} onChange={setSegment} label="View" size="md" className="w-full [&>button]:flex-1" />
 
         <AnimatePresence mode="wait" initial={false}>
           <motion.div key={segment} {...fade}>
             {segment === "board" ? (
-              <div className="flex flex-col gap-3">
-                {allProvisional && pauseText ? (
-                  <div className="surface flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
-                    <div className="flex min-w-0 flex-1 items-start gap-2 text-[13px] text-fg">
-                      <PauseCircle size={16} weight="bold" aria-hidden className="mt-0.5 shrink-0 text-fg-muted" />
-                      <span className="tabular min-w-0 leading-snug">
-                        Ranking paused: {pauseText}
-                        {isOwner ? (
-                          <Link href="/" className="ml-2 font-medium text-accent underline-offset-2 hover:underline">
-                            Fix in Business
-                          </Link>
-                        ) : null}
-                      </span>
-                    </div>
-                    <Switch checked={descriptive} onChange={setDescriptive} label="Show ranks anyway" className="sm:shrink-0" />
-                  </div>
-                ) : null}
-                {showSource ? (
-                  <SourceSheetList />
-                ) : (
-                  <ol className="surface px-4" aria-label="Board">
-                    {visible.map((r) => {
-                      const key = `${r.userId}:${r.role}`;
-                      return (
-                        <LeaderboardRow
-                          key={key}
-                          row={r}
-                          descriptive={descriptive}
-                          isMe={r.userId === meId}
-                          funnel={funnels[key] ?? []}
-                          correctionSent={Boolean(corrections[key])}
-                          onRequestCorrection={() => setCorrections((c) => ({ ...c, [key]: true }))}
-                        />
-                      );
-                    })}
-                  </ol>
-                )}
-                <div className="flex justify-end px-1">
-                  <Switch checked={showSource} onChange={setShowSource} label="Source sheet" className="text-[12px]" />
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-2 px-1">
+                  <span className="text-[12px] text-fg-subtle">Net collected cash, per lead</span>
+                  <Segmented options={ROLES} value={role} onChange={setRole} label="Role" />
                 </div>
+                <ol className="surface px-4" aria-label="Board">
+                  {visible.map((r) => {
+                    const key = `${r.userId}:${r.role}`;
+                    return (
+                      <LeaderboardRow
+                        key={key}
+                        row={r}
+                        descriptive={descriptive}
+                        isMe={r.userId === meId}
+                        funnel={funnels[key] ?? []}
+                        correctionSent={Boolean(corrections[key])}
+                        onRequestCorrection={() => setCorrections((c) => ({ ...c, [key]: true }))}
+                      />
+                    );
+                  })}
+                  <li className="-mx-4 border-t border-line">
+                    <DetailsRow label="Compare to source sheet" onClick={() => setSourceOpen(true)} />
+                  </li>
+                </ol>
               </div>
             ) : segment === "pairs" ? (
               pairViews.length > 0 ? (
-                <ol className="flex flex-col gap-3" aria-label="Pairs">
-                  {pairViews.map((v) => (
-                    <PairCard key={v.pair.pairId} view={v} meId={meId} onOpen={setOpenPair} />
-                  ))}
-                </ol>
+                <div className="flex flex-col gap-2">
+                  <div className="px-1 text-[12px] text-fg-subtle">Net collected cash, per assigned</div>
+                  <ol className="surface px-4" aria-label="Pairs">
+                    {pairViews.map((v) => (
+                      <PairCard key={v.pair.pairId} view={v} meId={meId} onOpen={setOpenPair} />
+                    ))}
+                  </ol>
+                </div>
               ) : (
                 <div className="surface px-4 py-6 text-center text-[13px] text-fg-muted">No active pairs</div>
               )
             ) : segment === "stages" ? (
-              <StageChampions champions={champions} />
-            ) : player && milestone ? (
-              <MeTab player={player} missions={missions} paths={paths} milestone={milestone} />
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-2 px-1">
+                  <span className="text-[12px] text-fg-subtle">Leader per stage</span>
+                  <Segmented options={ROLES} value={role} onChange={setRole} label="Role" />
+                </div>
+                <StageChampions champions={champions} />
+              </div>
+            ) : milestone ? (
+              <MissionsList missions={missions} paths={paths} milestone={milestone} />
             ) : null}
           </motion.div>
         </AnimatePresence>
       </div>
 
-      <InfoSheet open={infoOpen} onClose={() => setInfoOpen(false)} policy={basePolicy} guardrails={guardrails} />
+      <SeasonSheet
+        open={seasonOpen}
+        onClose={() => setSeasonOpen(false)}
+        title={title}
+        daysLeft={daysLeft}
+        level={level}
+        streakDays={streak}
+        pausedReasons={pausedReasons}
+        myRow={player ? myRow : undefined}
+        team={!player}
+        descriptive={descriptive}
+        player={player}
+        policy={basePolicy}
+        guardrails={guardrails}
+      />
+      <RanksSheet open={ranksOpen} onClose={() => setRanksOpen(false)} pause={pause} descriptive={descriptive} onDescriptive={setDescriptive} isOwner={isOwner} />
+      <Sheet open={sourceOpen} onClose={() => setSourceOpen(false)} title="Source sheet" description="August 2026, 12 columns as read">
+        <SourceSheetList />
+      </Sheet>
       {session ? <PairSheet open={openPair !== null} onClose={() => setOpenPair(null)} view={openPair} viewer={{ role: session.role, userId: session.userId }} rates={PAIR_RATES} /> : null}
     </>
   );

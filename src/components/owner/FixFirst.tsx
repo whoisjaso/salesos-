@@ -1,13 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowRight, CheckCircle } from "@phosphor-icons/react";
+import { CheckCircle } from "@phosphor-icons/react";
 import type { BottleneckCard, CoachingOwner } from "@/domain/types";
 import { NOW, obaviaDatasetWithPairs, obaviaPairs } from "@/fixtures/obavia";
 import { PAIR_SIDE_LABEL, pairGapForStage, pairTitle } from "@/lib/team-data";
+import type { TrustItem } from "@/lib/owner-model";
+import { formatCount } from "@/lib/format";
+import { DetailsRow } from "@/components/ui/DetailsRow";
 import { Sheet } from "@/components/ui/Sheet";
 import { Surface } from "@/components/ui/Surface";
 import { BottleneckCardView } from "./BottleneckCardView";
+import { ActivityRow } from "./TrustLine";
 
 export interface FixFirstProps {
   cards: BottleneckCard[];
@@ -15,10 +19,15 @@ export interface FixFirstProps {
   /** Lifted so the assignment survives switching Now / Money / Source. */
   owners: Record<string, CoachingOwner>;
   onAssign: (cardId: string, owner: CoachingOwner) => void;
+  /** Data trust items, shown as one Activity row under the card. */
+  trust: TrustItem[];
 }
 
-/** Exactly one card above the fold; the rest behind "See all". Assignment is client state only. */
-export function FixFirst({ cards, cohortLabel, owners, onAssign }: FixFirstProps) {
+/**
+ * Exactly one card above the fold: title, one line, Assign. Under it, one list: every other
+ * investigation behind "All investigations", and the data feeds behind "Activity".
+ */
+export function FixFirst({ cards, cohortLabel, owners, onAssign, trust }: FixFirstProps) {
   const [allOpen, setAllOpen] = useState(false);
   const ownerOf = (card: BottleneckCard) => owners[card.cardId] ?? card.responsibleFunction;
   const assign = (card: BottleneckCard) => (owner: CoachingOwner) => onAssign(card.cardId, owner);
@@ -36,21 +45,9 @@ export function FixFirst({ cards, cohortLabel, owners, onAssign }: FixFirstProps
 
   return (
     <section aria-labelledby="fix-first-heading" className="flex flex-col gap-2">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 id="fix-first-heading" className="text-[12px] font-medium text-fg-subtle">
-          Fix this first
-        </h2>
-        {rest.length > 0 ? (
-          <button
-            type="button"
-            onClick={() => setAllOpen(true)}
-            className="inline-flex items-center gap-1 text-[12px] font-medium text-accent hover:underline"
-          >
-            See all {cards.length}
-            <ArrowRight size={13} weight="bold" aria-hidden />
-          </button>
-        ) : null}
-      </div>
+      <h2 id="fix-first-heading" className="px-1 text-[12px] font-medium text-fg-subtle">
+        Fix this first
+      </h2>
 
       {first ? (
         <BottleneckCardView card={first} owner={ownerOf(first)} onAssign={assign(first)} pairTag={pairTag} />
@@ -60,6 +57,13 @@ export function FixFirst({ cards, cohortLabel, owners, onAssign }: FixFirstProps
           Nothing flagged
         </Surface>
       )}
+
+      <Surface padding="none" className="mt-2">
+        <div className="divide-y divide-line">
+          {rest.length > 0 ? <DetailsRow label="All investigations" value={formatCount(cards.length)} data-testid="see-all" onClick={() => setAllOpen(true)} /> : null}
+          <ActivityRow items={trust} />
+        </div>
+      </Surface>
 
       <Sheet open={allOpen} onClose={() => setAllOpen(false)} title="All investigations" description={cohortLabel} width={520}>
         <div className="flex flex-col gap-3">

@@ -143,11 +143,11 @@ export function BookingSheet({ open, onClose, dataset, now, contact, closers, in
           </label>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-sm border border-line px-3 py-2">
+            <div className="px-3 py-2">
               <div className="section-label">Duration</div>
               <div className="tabular text-[14px] font-medium text-fg">45 min</div>
             </div>
-            <label className="rounded-sm border border-line px-3 py-2">
+            <label className="rounded-sm border border-line-strong bg-raised px-3 py-2">
               <div className="section-label">Rep</div>
               <select value={effectiveRep ?? ""} onChange={(e) => setRepId(e.target.value)} className="w-full bg-transparent text-[14px] font-medium text-fg outline-none">
                 {closers.map((c) => (
@@ -161,7 +161,7 @@ export function BookingSheet({ open, onClose, dataset, now, contact, closers, in
         </div>
       ) : current ? (
         <div className="flex flex-col gap-4">
-          <div className="rounded-md border border-line bg-sunken p-4">
+          <div className="rounded-md bg-sunken p-4">
             <div className="tabular text-[12px] text-fg-subtle">{current.appointmentId}</div>
             <div className="mt-1 text-[18px] font-semibold text-fg">
               {formatDayIn(current.slot.startIso, BOOKING_TZ)}, {formatTimeIn(current.slot.startIso, BOOKING_TZ)} {zoneAbbrev(current.slot.startIso, BOOKING_TZ)}
@@ -171,7 +171,7 @@ export function BookingSheet({ open, onClose, dataset, now, contact, closers, in
             </div>
             <p className="mt-3 text-[13px] italic leading-snug text-fg-muted">&ldquo;{current.purpose}&rdquo;</p>
           </div>
-          <ul className="flex flex-col divide-y divide-line rounded-md border border-line">
+          <ul className="flex flex-col divide-y divide-line">
             <li className="flex items-center gap-2.5 px-3 py-2.5 text-[13px]">
               <PaperPlaneTilt size={15} weight="bold" aria-hidden className="text-perf-strong" />
               <span className="text-fg">Invitation sent</span>

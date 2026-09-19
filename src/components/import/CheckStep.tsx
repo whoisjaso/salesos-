@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from "react";
 import type { DryRunReport, RowIssue } from "@/domain/migration";
-import { cn } from "@/lib/cn";
 import { formatCount, formatMoneyMinor } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
+import { DetailsRow } from "@/components/ui/DetailsRow";
+import { Sheet } from "@/components/ui/Sheet";
 import { Surface } from "@/components/ui/Surface";
+import { HeroCard } from "@/components/owner/HeroCard";
 import { errorRows, lineOf, SEVERITY_LABEL, SEVERITY_ORDER, type Severity } from "./import-model";
 
 export interface CheckStepProps {
@@ -13,105 +15,73 @@ export interface CheckStepProps {
   onImport: () => void;
 }
 
-const VISIBLE = 20;
+type Open = "rows" | Severity | null;
 
+/** One number (ready), one list (what is in, what is skipped, what to check), one button. */
 export function CheckStep({ report, onImport }: CheckStepProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState<Open>(null);
   const grouped = useMemo(() => SEVERITY_ORDER.map((s) => ({ severity: s, items: report.issues.filter((i) => i.severity === s) })).filter((g) => g.items.length > 0), [report.issues]);
   const errors = useMemo(() => errorRows(report.issues), [report.issues]);
   const total = report.rows;
   const ready = Math.round(Math.max(0, Math.min(100, report.readyPercent)));
   const keep = Math.max(0, total - errors);
-
-  const hiddenCount = Math.max(0, report.issues.length - VISIBLE);
-  const visible = useMemo(() => capGroups(grouped, expanded ? Infinity : VISIBLE), [grouped, expanded]);
+  const openGroup = grouped.find((g) => g.severity === open);
 
   return (
-    <div className="flex flex-col gap-6">
-      <Surface padding="md" className="text-center">
-        <div className="tabular text-[44px] font-semibold leading-none tracking-tight text-fg">{ready}%</div>
-        <div className="mt-2 text-[12px] font-medium text-fg-subtle">Ready</div>
-      </Surface>
+    <div className="flex flex-col gap-4">
+      <HeroCard label="Ready" value={`${ready}%`} caption={`${formatCount(keep)} of ${formatCount(total)} rows`} />
 
-      <div className="grid grid-cols-2 gap-3">
-        <Tile label="People" value={formatCount(report.contacts.create + report.contacts.merge)} sub={`${formatCount(report.contacts.create)} new, ${formatCount(report.contacts.merge)} merge`} />
-        <Tile label="Deals" value={formatCount(report.opportunities)} />
-        <Tile label="Appointments" value={formatCount(report.appointments)} />
-        <Tile label="Payments" value={formatCount(report.payments.count)} sub={report.payments.count ? formatMoneyMinor(report.payments.totalMinor, report.payments.currency) : undefined} />
-      </div>
-
-      {report.consentPreserved > 0 ? (
-        <p className="tabular px-1 text-[12px] text-fg-subtle">
-          {formatCount(report.consentPreserved)} {report.consentPreserved === 1 ? "opt-out" : "opt-outs"} kept
-        </p>
-      ) : null}
-
-      {grouped.length ? (
-        <section aria-label="Issues" className="flex flex-col gap-4">
-          {visible.map((g) => (
-            <div key={g.severity} className="flex flex-col gap-2">
-              <div className="flex items-baseline justify-between px-1">
-                <h2 className={cn("text-[12px] font-medium", TONE[g.severity])}>{SEVERITY_LABEL[g.severity]}</h2>
-                <span className="tabular text-[12px] text-fg-subtle">{formatCount(grouped.find((x) => x.severity === g.severity)?.items.length ?? g.items.length)}</span>
-              </div>
-              <Surface padding="none">
-                <ul className="divide-y divide-line">
-                  {g.items.map((i, idx) => (
-                    <IssueLine key={`${i.row}-${i.header}-${idx}`} i={i} />
-                  ))}
-                </ul>
-              </Surface>
-            </div>
+      <Surface padding="none">
+        <div className="divide-y divide-line">
+          <DetailsRow label="Rows" value={formatCount(keep)} data-testid="rows-open" onClick={() => setOpen("rows")} />
+          {grouped.map((g) => (
+            <DetailsRow key={g.severity} label={SEVERITY_LABEL[g.severity]} value={formatCount(g.items.length)} data-testid={`${g.severity}-open`} onClick={() => setOpen(g.severity)} />
           ))}
-          {hiddenCount > 0 && !expanded ? (
-            <Button variant="ghost" size="sm" onClick={() => setExpanded(true)} className="self-start">
-              {formatCount(hiddenCount)} more
-            </Button>
-          ) : null}
-        </section>
-      ) : null}
+        </div>
+      </Surface>
 
       <Button onClick={onImport} className="w-full">
         {errors > 0 ? `Import ${formatCount(keep)}, skip ${formatCount(errors)}` : `Import ${formatCount(total)} rows`}
       </Button>
+
+      <Sheet open={open === "rows"} onClose={() => setOpen(null)} title="Rows" description={`${formatCount(keep)} of ${formatCount(total)}`}>
+        <dl className="divide-y divide-line border-t border-line">
+          <Line k="People" v={formatCount(report.contacts.create + report.contacts.merge)} sub={`${formatCount(report.contacts.create)} new, ${formatCount(report.contacts.merge)} merge`} />
+          <Line k="Deals" v={formatCount(report.opportunities)} />
+          <Line k="Appointments" v={formatCount(report.appointments)} />
+          <Line k="Payments" v={formatCount(report.payments.count)} sub={report.payments.count ? formatMoneyMinor(report.payments.totalMinor, report.payments.currency) : undefined} />
+          {report.consentPreserved > 0 ? <Line k={report.consentPreserved === 1 ? "Opt-out kept" : "Opt-outs kept"} v={formatCount(report.consentPreserved)} /> : null}
+        </dl>
+      </Sheet>
+
+      <Sheet open={!!openGroup} onClose={() => setOpen(null)} title={openGroup ? SEVERITY_LABEL[openGroup.severity] : ""} description={openGroup ? `${formatCount(openGroup.items.length)} rows` : undefined}>
+        {openGroup ? (
+          <ul className="divide-y divide-line">
+            {openGroup.items.map((i, idx) => (
+              <IssueLine key={`${i.row}-${i.header}-${idx}`} i={i} />
+            ))}
+          </ul>
+        ) : null}
+      </Sheet>
     </div>
   );
 }
 
-interface IssueGroup {
-  severity: Severity;
-  items: RowIssue[];
-}
-
-/** First `cap` issues across the groups, errors first. */
-function capGroups(groups: IssueGroup[], cap: number): IssueGroup[] {
-  const out: IssueGroup[] = [];
-  let room = cap;
-  for (const g of groups) {
-    const items = g.items.slice(0, Math.max(0, room));
-    room -= items.length;
-    if (items.length) out.push({ severity: g.severity, items });
-  }
-  return out;
-}
-
-const TONE: Record<Severity, string> ={ error: "text-perf-issue", warning: "text-perf-attention" };
-
-function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function Line({ k, v, sub }: { k: string; v: string; sub?: string }) {
   return (
-    <Surface padding="none" className="flex h-[92px] flex-col justify-between p-4">
-      <span className="text-[12px] font-medium text-fg-subtle">{label}</span>
-      <span>
-        <span className="tabular block text-[24px] font-semibold leading-none tracking-tight text-fg">{value}</span>
-        <span className="tabular mt-1 block h-4 truncate text-[12px] leading-4 text-fg-subtle">{sub ?? ""}</span>
-      </span>
-    </Surface>
+    <div className="flex items-center justify-between gap-3 py-2.5 text-[13px]">
+      <dt className="text-fg-subtle">{k}</dt>
+      <dd className="tabular text-right text-fg">
+        {v}
+        {sub ? <span className="block text-[12px] text-fg-subtle">{sub}</span> : null}
+      </dd>
+    </div>
   );
 }
 
 function IssueLine({ i }: { i: RowIssue }) {
   return (
-    <li className="flex min-h-14 items-center gap-3 px-4 py-2">
+    <li className="flex min-h-14 items-center gap-3 py-2">
       <span className="tabular w-12 shrink-0 text-[12px] leading-tight text-fg-subtle">Row {lineOf(i.row)}</span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[14px] font-medium leading-tight text-fg">{i.header || "Row"}</span>

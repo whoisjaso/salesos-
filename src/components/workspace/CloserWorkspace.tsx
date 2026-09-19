@@ -1,18 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import type { IconProps } from "@phosphor-icons/react";
 import {
-  CalendarBlank,
   Check,
   ClipboardText,
-  CreditCard,
-  FileText,
   Handshake,
   Hourglass,
   Lifebuoy,
-  Package,
   Phone,
   PhoneDisconnect,
   Plus,
@@ -36,7 +31,6 @@ import {
   NO_SALE_REASONS,
   upcomingAppointments,
   type CloserQueueItem,
-  type CloserQueueType,
   type UpcomingAppointment,
 } from "@/lib/workspace-closer";
 import { computeGame } from "@/lib/workspace-game";
@@ -45,8 +39,8 @@ import { CloserEmptyToday } from "@/components/onboarding/CloserEmptyToday";
 import { BriefSheet } from "./BriefSheet";
 import { CloserQueue } from "./CloserQueue";
 import { FinancialLadder } from "./FinancialLadder";
-import { GameStrip } from "./GameStrip";
-import { NextUp, initials } from "./NextUp";
+import { GateLine } from "./GateLine";
+import { initials } from "./NextUp";
 import { Segmented } from "./Segmented";
 
 type Phase = "idle" | "live" | "outcome" | "result";
@@ -55,15 +49,6 @@ type Segment = "now" | "queue";
 type Recover = "none" | "dropped" | "reconnecting" | "unknown_participant";
 
 const STAGES = ["Restate problem", "Confirm participants", "Present approved scope", "Explain limitations", "Price and options", "Ask for the next voluntary decision"];
-
-const QUEUE_ICON: Record<CloserQueueType, ComponentType<IconProps>> = {
-  commitments: CalendarBlank,
-  questions: Question,
-  proposals: FileText,
-  contract: ClipboardText,
-  payment: CreditCard,
-  delivery: Package,
-};
 
 const dataset = obaviaDataset;
 const offer = dataset.offers?.[0];
@@ -182,10 +167,6 @@ export function CloserWorkspace({ userId }: { userId: string }) {
   const copilot = brief && copilotOn ? copilotItems(brief).filter((c) => !dismissed.has(c.id))[0] : undefined;
   const ledger = active ? collectedFor(dataset, active.opportunity.opportunityId) : undefined;
 
-  const nextUpItems = [
-    ...upcoming.filter((u) => u.instance.instanceId !== active?.instance.instanceId).map((u) => ({ id: u.instance.instanceId, name: u.contact.displayName, icon: u.appointment.modality === "video" ? VideoCamera : Phone, hint: u.unresolved ? "unresolved" : formatTimeIn(u.instance.scheduledStart, TENANT_TZ) })),
-    ...queue.filter((q) => q.type !== "commitments" || !q.id.startsWith("apt_")).map((q) => ({ id: `q:${q.id}`, name: q.contact.displayName, icon: QUEUE_ICON[q.type], hint: q.when ? formatDayIn(q.when, TENANT_TZ) : q.type })),
-  ].slice(0, 3);
 
   // A business created through onboarding has its own rows (zero on day one), not the fixture's.
   if (!tenantData.demo) return <CloserEmptyToday data={tenantData} />;
@@ -194,7 +175,7 @@ export function CloserWorkspace({ userId }: { userId: string }) {
     <>
       <div className="mx-auto flex max-w-[640px] flex-col gap-4">
         <Surface padding="md" className="flex flex-col">
-          <div className="min-h-[148px]">
+          <div className="min-h-[96px]">
             <AnimatePresence mode="wait" initial={false}>
               {active && brief ? (
                 <motion.div
@@ -396,7 +377,7 @@ export function CloserWorkspace({ userId }: { userId: string }) {
                   )}
                 </motion.div>
               ) : (
-                <motion.div key="empty" initial={false} className="flex h-[148px] flex-col items-center justify-center gap-2 text-center">
+                <motion.div key="empty" initial={false} className="flex h-[96px] flex-col items-center justify-center gap-2 text-center">
                   <Handshake size={28} aria-hidden className="text-fg-subtle" />
                   <span className="text-[15px] font-medium text-fg">No upcoming appointment</span>
                 </motion.div>
@@ -410,15 +391,7 @@ export function CloserWorkspace({ userId }: { userId: string }) {
           </div>
         </Surface>
 
-        <NextUp
-          items={nextUpItems}
-          onSelect={(id) => {
-            if (id.startsWith("q:")) setSegment("queue");
-            else selectItem(id);
-          }}
-        />
-
-        <GameStrip game={game} />
+        <GateLine game={game} />
 
         <Segmented<Segment>
           items={[
@@ -431,26 +404,19 @@ export function CloserWorkspace({ userId }: { userId: string }) {
 
         {segment === "now" ? (
           <Surface padding="none" as="section" aria-label="Today">
-            <div className="section-label px-4 pt-3">Today</div>
             <ul className="divide-y divide-line">
-              {todays.map((u) => {
-                const Icon = u.appointment.modality === "video" ? VideoCamera : Phone;
-                return (
-                  <li key={u.instance.instanceId}>
-                    <button type="button" onClick={() => selectItem(u.instance.instanceId)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-hover motion-reduce:transition-none">
-                      <span className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sunken text-[12px] font-semibold text-fg">{initials(u.contact.displayName)}</span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-1.5 text-[14px] font-medium text-fg">
-                          <Icon size={13} weight="bold" aria-hidden className="text-fg-subtle" />
-                          <span className="truncate">{u.contact.displayName}</span>
-                        </span>
-                        <span className="block text-[12px] text-fg-muted">{u.unresolved ? "Attendance unresolved" : u.instance.confirmedByCustomer ? "Customer confirmed" : "Not confirmed"}</span>
-                      </span>
-                      <span className="tabular shrink-0 text-[12px] text-fg-subtle">{formatTimeIn(u.instance.scheduledStart, TENANT_TZ)}</span>
-                    </button>
-                  </li>
-                );
-              })}
+              {todays.map((u) => (
+                <li key={u.instance.instanceId}>
+                  <button type="button" onClick={() => selectItem(u.instance.instanceId)} aria-current={u.instance.instanceId === active?.instance.instanceId ? "true" : undefined} className={cn("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-hover motion-reduce:transition-none", u.instance.instanceId === active?.instance.instanceId && "bg-accent-soft")}>
+                    <span className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sunken text-[12px] font-semibold text-fg">{initials(u.contact.displayName)}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-medium text-fg">{u.contact.displayName}</span>
+                      <span className="block truncate text-[12px] text-fg-muted">{u.unresolved ? "Attendance unresolved" : u.instance.confirmedByCustomer ? "Customer confirmed" : "Not confirmed"}</span>
+                    </span>
+                    <span className="tabular shrink-0 text-[13px] text-fg-subtle">{formatTimeIn(u.instance.scheduledStart, TENANT_TZ)}</span>
+                  </button>
+                </li>
+              ))}
               {todays.length === 0 ? <li className="px-4 py-6 text-center text-[13px] text-fg-subtle">Nothing today</li> : null}
             </ul>
           </Surface>
@@ -466,30 +432,22 @@ export function CloserWorkspace({ userId }: { userId: string }) {
 
 function HeroIdle({ item, onBrief }: { item: UpcomingAppointment; onBrief: () => void }) {
   const { instance, appointment, contact } = item;
-  const Icon = appointment.modality === "video" ? VideoCamera : Phone;
   const tz = zoneAbbrev(instance.scheduledStart, TENANT_TZ);
+  const today = sameDayIn(instance.scheduledStart, NOW, TENANT_TZ);
+  const line = item.unresolved ? "Attendance unresolved" : contact.organizationName ?? (appointment.modality === "video" ? "Video call" : "Phone call");
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[12px] text-fg-subtle">
-            <Icon size={12} weight="bold" aria-hidden />
-            {formatDayIn(instance.scheduledStart, TENANT_TZ)}
-            {item.unresolved ? <span className="tag border-dashed">unresolved</span> : null}
-          </div>
-          <div className="mt-1 text-[30px] font-semibold leading-none tracking-tight text-fg">
-            {formatTimeIn(instance.scheduledStart, TENANT_TZ)} <span className="text-[13px] font-medium text-fg-subtle">{tz}</span>
-          </div>
-        </div>
-        <Button variant="ghost" size="sm" onClick={onBrief} leading={<ClipboardText size={14} weight="bold" />} className="-mr-2 -mt-1">
-          Brief
-        </Button>
-      </div>
+    <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="truncate text-[17px] font-semibold leading-tight tracking-tight text-fg">{contact.displayName}</h2>
-        {contact.organizationName ? <div className="truncate text-[12px] text-fg-subtle">{contact.organizationName}</div> : null}
+        {!today ? <div className="text-[12px] text-fg-subtle">{formatDayIn(instance.scheduledStart, TENANT_TZ)}</div> : null}
+        <div className="text-[34px] font-semibold leading-none tracking-tight text-fg">
+          {formatTimeIn(instance.scheduledStart, TENANT_TZ)} <span className="text-[13px] font-medium text-fg-subtle">{tz}</span>
+        </div>
+        <h2 className="mt-2 truncate text-[17px] font-semibold leading-tight tracking-tight text-fg">{contact.displayName}</h2>
+        <div className="truncate text-[14px] text-fg-muted">{line}</div>
       </div>
-      <p className="line-clamp-2 text-[14px] italic leading-snug text-fg-muted">&ldquo;{appointment.purpose}&rdquo;</p>
+      <Button variant="ghost" size="sm" onClick={onBrief} leading={<ClipboardText size={14} weight="bold" />} className="-mr-2 -mt-1 shrink-0">
+        Brief
+      </Button>
     </div>
   );
 }

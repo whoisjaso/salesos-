@@ -39,8 +39,11 @@ test.describe("Review: setter", () => {
     await expect(page.getByText(/^\d+ unknown$/)).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Confirm", exact: true })).toHaveCount(0);
     await expect(page.getByTestId("wrong")).toHaveText("Wrong?");
-    // The main screen carries no moment chips; they live in Details.
+    // The main screen carries no moment chips and no provenance tags; they live in Details.
     await expect(page.getByTestId("moment")).toHaveCount(0);
+    await expect(page.locator("main").getByText("From transcript")).toHaveCount(0);
+    await expect(page.locator("main").getByText("Not asserted")).toHaveCount(0);
+    await expect(page.locator("main").locator(".chip")).toHaveCount(1); // the one Angle
   });
 
   test("the stage bar has four segments, percent on tap, and a tap goes to the cited span", async ({ page }) => {
@@ -87,10 +90,15 @@ test.describe("Review: setter", () => {
 
   test("disputing a field marks the applied changes Disputed", async ({ page }) => {
     await page.goto("/review?call=call_005");
+    // One word on the Changes row; the list of changes sits behind it.
     await expect(page.getByTestId("policy-tag")).toHaveText("Applied");
-    await expect(page.getByText("Creates a booking task")).toBeVisible();
-    await expect(page.getByText("Confirms the fit assessment")).toBeVisible();
-    await expect(page.getByText("Never writes money, consent, or attendance")).toBeVisible();
+    await expect(page.getByText("Creates a booking task")).toHaveCount(0);
+    await page.getByTestId("changes-open").click();
+    const changes = sheet(page, "What this changes");
+    await expect(changes.getByText("Creates a booking task")).toBeVisible();
+    await expect(changes.getByText("Confirms the fit assessment")).toBeVisible();
+    await expect(changes.getByText("Never writes money, consent, or attendance")).toBeVisible();
+    await closeSheet(page);
 
     await page.getByTestId("details-open").click();
     const details = sheet(page, "Details");
@@ -132,9 +140,12 @@ test.describe("Review: setter", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(highlighted(page)).toHaveCount(1);
     await expect(highlighted(page)).toContainText(/worried/);
-    // Below the band reads as leaning, not applied.
-    await expect(page.getByText("Records a leaning fit assessment")).toBeVisible();
-    await expect(page.getByText("Leaning, not applied").first()).toBeVisible();
+    // Below the band reads as leaning, not applied, inside Changes.
+    await page.getByTestId("changes-open").click();
+    const changes = sheet(page, "What this changes");
+    await expect(changes.getByText("Records a leaning fit assessment")).toBeVisible();
+    await expect(changes.getByText("Leaning, not applied").first()).toBeVisible();
+    await closeSheet(page);
   });
 
   test("their words: the hockey card, its span, and the one Angle that rejecting it removes", async ({ page }) => {
@@ -197,19 +208,28 @@ test.describe("Review: owner", () => {
     await expect(page.getByTestId("hero-outcome")).toHaveText("Buying");
     await expect(page.getByTestId("stage-strip").getByTestId("stage-segment")).toHaveCount(4);
     await expect(page.getByTestId("angle-chip")).toHaveCount(1);
-    await page.getByRole("button", { name: "Share to playbook" }).click();
+    // Sharing lives behind the Good example row.
+    await expect(page.getByRole("button", { name: "Share to playbook" })).toHaveCount(0);
+    const row = page.getByTestId("playbook-open");
+    await expect(row).toContainText("Share");
+    await row.click();
+    await sheet(page, "Good example").getByRole("button", { name: "Share to playbook" }).click();
     await expect(page.getByText("Marked for review")).toBeVisible();
+    await closeSheet(page);
+    await expect(row).toContainText("Marked");
   });
 
   test("the price objection call never proposes a discount, and ambushed reads confirmed in their words", async ({ page }) => {
     await page.goto("/review?call=call_010");
     await expect(page.getByTestId("hero-outcome")).toHaveText("Qualified");
     // Buying 60% sits under the band: the proposal task is a lean, not created.
-    const proposal = page.getByTestId("change").filter({ hasText: "Creates a proposal task" });
+    await expect(page.getByTestId("policy-tag")).toHaveText("Applied");
+    await page.getByTestId("changes-open").click();
+    const proposal = sheet(page, "What this changes").getByTestId("change").filter({ hasText: "Creates a proposal task" });
     await expect(proposal).toBeVisible();
     await expect(proposal).toHaveAttribute("data-applied", "false");
     await expect(proposal).toContainText("Leaning, not applied");
-    await expect(page.getByTestId("policy-tag")).toHaveText("Applied");
+    await closeSheet(page);
     await expect(page.getByTestId("angle-chip")).not.toContainText(/price|discount|guarantee|contract/i);
     await page.getByTestId("details-open").click();
     const details = sheet(page, "Details");

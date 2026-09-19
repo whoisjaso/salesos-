@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowsLeftRight } from "@phosphor-icons/react";
+import { ArrowsLeftRight, Hourglass } from "@phosphor-icons/react";
 import type { PairSide } from "@/domain/pairs";
 import { Funnel } from "@/components/metrics/Funnel";
 import type { FunnelCardMoney } from "@/components/metrics/FunnelCard";
@@ -53,7 +53,7 @@ function SideLabel({ side }: { side: "setter" | "closer" }) {
  */
 export function PairSheet({ open, onClose, view, viewer, rates }: PairSheetProps) {
   if (!view) return null;
-  const { pair, funnel, diagnostic, contribution, setterDisplayName, closerDisplayName } = view;
+  const { pair, row, funnel, diagnostic, contribution, setterDisplayName, closerDisplayName } = view;
   const title = pairTitle(setterDisplayName, closerDisplayName);
   const currency = contribution.currency;
   const money = (n: number) => formatMoneyMinor(n, currency);
@@ -92,6 +92,19 @@ export function PairSheet({ open, onClose, view, viewer, rates }: PairSheetProps
             </dl>
           </div>
           <PairBar funnel={funnel} diagnostic={diagnostic} />
+          <dl className="tabular flex items-center justify-between gap-3 text-[13px]">
+            <dt className="text-fg-muted">Standing</dt>
+            <dd className="text-fg">
+              {row?.rank !== null && row?.rank !== undefined ? (
+                `#${row.rank}, ${row.assignedOpportunities} assigned`
+              ) : (
+                <span className="flex items-start gap-1.5 text-right">
+                  <Hourglass size={12} weight="bold" aria-hidden className="mt-1 shrink-0 text-fg-subtle" />
+                  <span>Provisional, {row?.provisionalReason ?? "no opportunities in the season yet"}</span>
+                </span>
+              )}
+            </dd>
+          </dl>
         </div>
 
         <section aria-label="Setter side" className="flex flex-col gap-2">

@@ -6,7 +6,9 @@ import { ArrowRight, CheckCircle } from "@phosphor-icons/react";
 import { PRESETS, type DryRunReport, type MappingPlan } from "@/domain/migration";
 import { formatAsOf, formatCount } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
+import { DetailsRow } from "@/components/ui/DetailsRow";
 import { Sheet } from "@/components/ui/Sheet";
+import { Surface } from "@/components/ui/Surface";
 import { errorRows, IGNORE, targetLabel } from "./import-model";
 
 export interface DoneStepProps {
@@ -18,6 +20,7 @@ export interface DoneStepProps {
   onAgain: () => void;
 }
 
+/** One check, one number, one button. The counts and the mapping sit behind Receipt. */
 export function DoneStep({ fileName, plan, report, at, onAgain }: DoneStepProps) {
   const reduce = useReducedMotion();
   const [receipt, setReceipt] = useState(false);
@@ -35,22 +38,15 @@ export function DoneStep({ fileName, plan, report, at, onAgain }: DoneStepProps)
         <div className="mt-2 text-[12px] font-medium text-fg-subtle">Rows in</div>
       </div>
 
-      <dl className="tabular flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[13px] text-fg-muted">
-        <Count n={report.contacts.create + report.contacts.merge} word="people" />
-        <Count n={report.opportunities} word="deals" />
-        <Count n={report.appointments} word="appointments" />
-        <Count n={report.payments.count} word="payments" />
-      </dl>
-
-      <div className="flex w-full flex-col gap-2 pt-2">
+      <div className="flex w-full flex-col gap-3 pt-2">
         <Button href="/" className="w-full" trailing={<ArrowRight size={16} weight="bold" />}>
           See Business
         </Button>
-        <Button variant="secondary" onClick={onAgain} className="w-full">
+        <Surface padding="none" className="text-left">
+          <DetailsRow label="Receipt" value={formatAsOf(at)} onClick={() => setReceipt(true)} />
+        </Surface>
+        <Button variant="ghost" size="sm" onClick={onAgain} className="self-center">
           Import another
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => setReceipt(true)} className="self-center">
-          Receipt
         </Button>
       </div>
 
@@ -59,6 +55,10 @@ export function DoneStep({ fileName, plan, report, at, onAgain }: DoneStepProps)
           <Row k="File" v={fileName} />
           <Row k="Preset" v={PRESETS[plan.preset].label} />
           <Row k="Rows" v={`${formatCount(rowsIn)} in${skipped ? `, ${formatCount(skipped)} skipped` : ""}`} />
+          <Row k="People" v={formatCount(report.contacts.create + report.contacts.merge)} />
+          <Row k="Deals" v={formatCount(report.opportunities)} />
+          <Row k="Appointments" v={formatCount(report.appointments)} />
+          <Row k="Payments" v={formatCount(report.payments.count)} />
           <div>
             <dt className="text-[12px] font-medium text-fg-subtle">Mapping</dt>
             <dd className="mt-2 rounded-sm border border-line bg-sunken">
@@ -76,15 +76,6 @@ export function DoneStep({ fileName, plan, report, at, onAgain }: DoneStepProps)
         </dl>
       </Sheet>
     </div>
-  );
-}
-
-function Count({ n, word }: { n: number; word: string }) {
-  return (
-    <span className="inline-flex items-baseline gap-1">
-      <dd className="font-semibold text-fg">{formatCount(n)}</dd>
-      <dt>{word}</dt>
-    </span>
   );
 }
 

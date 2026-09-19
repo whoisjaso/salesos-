@@ -66,6 +66,8 @@ export interface SetterQueueItem {
   rank: number;
   /** Plain-language reason, e.g. "Customer asked for a callback at 3:00". */
   reason: string;
+  /** The reason in two or three words for a list row, where `when` sits beside it. */
+  short: string;
   /** Short due or age text for the row. */
   when: string;
   /** Sort key inside a rank. */
@@ -127,6 +129,24 @@ export function priorityReasonText(priority: TaskPriorityReason, action: QueueAc
   }
 }
 
+/** The row form of the reason: two or three words, because the row's value already carries the time or the attempt. */
+export function shortReasonText(priority: TaskPriorityReason, action: QueueAction, attempts = 0): string {
+  switch (priority.kind) {
+    case "fresh_inquiry":
+      return "New inquiry";
+    case "urgent_customer_reply":
+      return "Customer replied";
+    case "scheduled_commitment":
+      return action === "confirm_appointment" ? "Confirm appointment" : "Callback requested";
+    case "agreed_follow_up":
+      return "Follow-up agreed";
+    case "approved_reattempt":
+      return attempts ? `Reattempt after ${attempts} unanswered` : "Reattempt approved";
+    case "appointment_confirmation_review":
+      return "Confirmation review";
+  }
+}
+
 function whenText(priority: TaskPriorityReason, now: ISODateTime): { when: string; sortAt: number } {
   switch (priority.kind) {
     case "fresh_inquiry":
@@ -178,6 +198,7 @@ export function buildSetterQueue(dataset: Dataset, userId: Id, now: ISODateTime)
       priority: task.priority,
       rank: RANK[task.priority.kind],
       reason: priorityReasonText(task.priority, task.action, now, attempts),
+      short: shortReasonText(task.priority, task.action, attempts),
       when,
       sortAt,
       priorAttempts: attempts,
@@ -208,6 +229,7 @@ export function buildSetterQueue(dataset: Dataset, userId: Id, now: ISODateTime)
       priority,
       rank: RANK.approved_reattempt,
       reason: priorityReasonText(priority, "call", now, attempts),
+      short: shortReasonText(priority, "call", attempts),
       when,
       sortAt,
       priorAttempts: attempts,

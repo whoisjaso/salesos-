@@ -1,105 +1,61 @@
 "use client";
 
-import { Flame, HourglassMedium, PauseCircle } from "@phosphor-icons/react";
+import type { ReactNode } from "react";
+import { CaretRight } from "@phosphor-icons/react";
 import type { LeaderboardRow } from "@/domain/types";
 import type { LevelState } from "@/domain/game";
 import { Avatar } from "@/components/ui/Avatar";
 import { ProgressRing } from "@/components/ui/ProgressRing";
-import { Tooltip } from "@/components/ui/Tooltip";
 import { seasonTierFor } from "@/components/cash/tier-lookup";
-import { useRepCard } from "@/components/profile/RepCardSheet";
-import { formatCount } from "@/lib/format";
 import { rowRole } from "@/lib/team-data";
 
 export interface SeasonHeroProps {
+  /** "September 2026". The hero shows the month; the sheet shows the full title. */
   title: string;
   daysLeft: number;
   /** My commercial track, or the pooled team track for the owner. */
   level: LevelState;
-  streakDays: number;
-  /** Quality gate reasons when XP is paused. Empty means running. */
-  pausedReasons?: string[];
   /** The current user's comparable row. Omitted for the owner. */
   myRow?: LeaderboardRow;
   /** Owner: the ring is the whole team's. */
   team?: boolean;
-  descriptive: boolean;
+  /** Opens the season sheet: XP, streak, rank, rules. */
+  onOpen: () => void;
+  /** The owner's one primary action (Invite). Sits beside the tappable area, never inside it. */
+  action?: ReactNode;
 }
 
-const CHIP = "inline-flex h-6 items-center gap-1.5 rounded-sm px-2 text-[12px] font-medium";
+/** "September 2026" reads as "September" on the hero; the year stays in the sheet. */
+export function monthOf(title: string): string {
+  return title.split(" ")[0] ?? title;
+}
 
-/** Season card: the one hero on Team. Level ring, month, days left, XP line, rank or Provisional. */
-export function SeasonHero({ title, daysLeft, level, streakDays, pausedReasons = [], myRow, team = false, descriptive }: SeasonHeroProps) {
-  const toNext = level.xpForNextLevel === null ? null : level.xpForNextLevel - level.xp;
-  const paused = pausedReasons.length > 0;
+/**
+ * Season hero: the level ring (or the team ring), the month, and one number.
+ * The number is the rep's own rank when ranks are showing, else the days left.
+ * Tap for XP, streak, provisional state, XP pauses, and the rules.
+ */
+export function SeasonHero({ title, daysLeft, level, myRow, team = false, onOpen, action }: SeasonHeroProps) {
   const tier = !team && myRow ? seasonTierFor(myRow.userId, rowRole(myRow)) : undefined;
-  const { openCard } = useRepCard();
+  const rank = !team && myRow && myRow.rank !== null ? myRow.rank : null;
+  const number = rank !== null ? `#${rank}` : `${daysLeft} days left`;
+  const ringLabel = `${team ? "Team level" : "Level"} ${level.level}, ${Math.round(level.progress * 100)}% to next`;
 
   return (
-    <section aria-label="Season" className="surface flex items-center gap-4 p-4 sm:p-5">
-      {!team && myRow ? (
-        <Avatar
-          userId={myRow.userId}
-          size={64}
-          ring={level.progress}
-          ringLabel={`Level ${level.level}, ${Math.round(level.progress * 100)}% to next`}
-          badge={tier}
-          onOpenCard={openCard}
-        />
-      ) : (
-        <ProgressRing value={level.progress} size={72} strokeWidth={6} label={`${team ? "Team level" : "Level"} ${level.level}, ${Math.round(level.progress * 100)}% to next`} centerText={`L${level.level}`} className="shrink-0 [&>span]:text-[17px] [&>span]:font-semibold" />
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <h2 className="text-[17px] font-semibold tracking-tight text-fg">{title}</h2>
-          <span className="tabular text-[12px] text-fg-subtle">{daysLeft} days left</span>
-        </div>
-        <div className="tabular mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-fg-muted">
-          {!team && myRow ? <span className="font-semibold text-fg">L{level.level}</span> : null}
-          <span>
-            {team ? "Team, " : ""}
-            {formatCount(level.xp)} XP
-          </span>
-          {toNext !== null ? <span className="text-fg-subtle">{formatCount(toNext)} to next</span> : null}
-          {streakDays > 0 ? (
-            <span className="inline-flex items-center gap-0.5 text-fg-subtle">
-              <Flame size={12} weight="fill" aria-hidden />
-              {streakDays}
-            </span>
-          ) : null}
-        </div>
-        {team && !paused ? null : (
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {!team ? (
-              myRow ? (
-                myRow.rank !== null ? (
-                  <span className={`${CHIP} tabular bg-accent-soft text-accent`}>
-                    #{myRow.rank}
-                    {descriptive ? <span className="font-medium text-fg-subtle">descriptive</span> : null}
-                  </span>
-                ) : (
-                  <Tooltip content={myRow.provisionalReason ?? "Provisional"}>
-                    <span tabIndex={0} className={`${CHIP} border border-dashed border-line-strong text-fg-muted`}>
-                      <HourglassMedium size={13} weight="bold" aria-hidden />
-                      Provisional
-                    </span>
-                  </Tooltip>
-                )
-              ) : (
-                <span className="text-[12px] text-fg-subtle">No row this season</span>
-              )
-            ) : null}
-            {paused ? (
-              <Tooltip content={pausedReasons.join("; ")}>
-                <span tabIndex={0} className={`${CHIP} border border-[color:var(--perf-attention-line)] text-perf-attention`}>
-                  <PauseCircle size={13} weight="bold" aria-hidden />
-                  Paused
-                </span>
-              </Tooltip>
-            ) : null}
-          </div>
+    <section aria-label="Season" className="surface flex items-center">
+      <button type="button" onClick={onOpen} aria-label={`${title}, ${number}, ${ringLabel}, open details`} className="flex min-w-0 flex-1 items-center gap-4 p-4 text-left hover:bg-hover active:bg-hover">
+        {!team && myRow ? (
+          <Avatar userId={myRow.userId} size={64} ring={level.progress} ringLabel={ringLabel} badge={tier} />
+        ) : (
+          <ProgressRing value={level.progress} size={64} strokeWidth={5} label={ringLabel} centerText={`L${level.level}`} className="shrink-0 [&>span]:text-[16px] [&>span]:font-semibold" />
         )}
-      </div>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[20px] font-semibold tracking-tight text-fg">{monthOf(title)}</span>
+          <span className="tabular mt-0.5 block text-[15px] text-fg-muted">{number}</span>
+        </span>
+        <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
+      </button>
+      {action ? <span className="shrink-0 pr-4">{action}</span> : null}
     </section>
   );
 }

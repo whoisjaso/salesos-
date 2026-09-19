@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import type { TranscriptSpan } from "@/domain/callIntelligence";
 import { ConfidenceDot, ReadBlock } from "@/components/workspace/BriefSheet";
+import { DetailsRow } from "@/components/ui/DetailsRow";
 import { Sheet } from "@/components/ui/Sheet";
 import { Surface } from "@/components/ui/Surface";
 import { cn } from "@/lib/cn";
@@ -77,6 +78,9 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
   const [activeStage, setActiveStage] = useState<string | undefined>(undefined);
   const [inspected, setInspected] = useState<number | undefined>(undefined);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [changesOpen, setChangesOpen] = useState(false);
+  const [coachingOpen, setCoachingOpen] = useState(false);
+  const [playbookOpen, setPlaybookOpen] = useState(false);
   const [shared, setShared] = useState(false);
   const spanRefs = useRef<Map<number, HTMLLIElement>>(new Map());
 
@@ -98,9 +102,10 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
     [reduce],
   );
 
-  /** From inside the sheet: close it, then go. */
+  /** From inside any sheet: close it, then go. */
   const jumpFromSheet = (i: number) => {
     setDetailsOpen(false);
+    setCoachingOpen(false);
     window.setTimeout(() => jumpTo(i), reduce ? 0 : 120);
   };
 
@@ -130,17 +135,7 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
           <span className="truncate text-[15px] font-semibold text-fg">{contact.displayName}</span>
           {contact.organizationName ? <span className="truncate text-[13px] text-fg-muted">{contact.organizationName}</span> : null}
         </div>
-        <div className="tabular flex items-center gap-2 text-[12px] text-fg-subtle">
-          <span>{call.startedAt ? formatDateTimeIn(call.startedAt, TENANT_TZ) : "Unknown time"}</span>
-          <span aria-hidden>·</span>
-          <span>{formatDuration(call.durationSeconds)}</span>
-          {viewer.role === "owner" ? (
-            <>
-              <span aria-hidden>·</span>
-              <span>{review.rep.displayName}</span>
-            </>
-          ) : null}
-        </div>
+        <div className="tabular text-[12px] text-fg-subtle">{call.startedAt ? formatDateTimeIn(call.startedAt, TENANT_TZ) : "Unknown time"}</div>
       </div>
 
       {/* ----- Hero: one word, one ring, one caption ----- */}
@@ -187,64 +182,94 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
         }}
       />
 
-      {/* ----- What this changes ----- */}
-      <Surface padding="md" className="flex flex-col gap-2" aria-label="What this changes">
-        <div className="flex items-center justify-between">
-          <span className="section-label">What this changes</span>
-          <span className={cn("inline-flex items-center gap-1 text-[12px] font-medium", anyDisputed ? "text-perf-attention" : "text-perf-strong")} data-testid="policy-tag">
-            {anyDisputed ? <WarningCircle size={12} weight="bold" aria-hidden /> : <Check size={12} weight="bold" aria-hidden />}
-            {anyDisputed ? "Disputed" : "Applied"}
-          </span>
-        </div>
-        <ul className="flex flex-col gap-1">
-          {changes.map((c) => (
-            <li key={c.text} className="flex items-center gap-2 text-[14px] text-fg" data-testid="change" data-applied={c.applied}>
-              {c.applied ? <Check size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" /> : <Sparkle size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />}
-              <span>{c.text}</span>
-              {c.applied ? null : <span className="ml-auto text-[11px] text-fg-subtle">Leaning, not applied</span>}
-            </li>
-          ))}
-        </ul>
-        <div className="flex items-center gap-2 text-[12px] text-fg-subtle">
-          <ShieldCheck size={13} weight="bold" aria-hidden className="shrink-0" />
-          {NEVER_LINE}
+      {/* ----- One list: what changed, coaching, the playbook. Each opens its own sheet. ----- */}
+      <Surface padding="none">
+        <div className="divide-y divide-line">
+          <DetailsRow
+            label="Changes"
+            value={
+              <span className={cn("inline-flex items-center gap-1 font-medium", anyDisputed ? "text-perf-attention" : "text-perf-strong")} data-testid="policy-tag">
+                {anyDisputed ? <WarningCircle size={12} weight="bold" aria-hidden /> : <Check size={12} weight="bold" aria-hidden />}
+                {anyDisputed ? "Disputed" : "Applied"}
+              </span>
+            }
+            data-testid="changes-open"
+            onClick={() => setChangesOpen(true)}
+          />
+          {review.coaching ? <DetailsRow label="Coaching" data-testid="coaching-open" onClick={() => setCoachingOpen(true)} /> : null}
+          {viewer.role === "owner" && isGoodExample(review) ? (
+            <DetailsRow
+              label="Good example"
+              value={shared ? "Marked" : "Share"}
+              leading={<BookmarkSimple size={16} weight={shared ? "fill" : "regular"} aria-hidden className={shared ? "text-accent" : "text-fg-subtle"} />}
+              data-testid="playbook-open"
+              onClick={() => setPlaybookOpen(true)}
+            />
+          ) : null}
         </div>
       </Surface>
 
-      {/* ----- Coaching ----- */}
+      {/* ----- Sheet: what this changes ----- */}
+      <Sheet open={changesOpen} onClose={() => setChangesOpen(false)} title="What this changes" description={anyDisputed ? "Disputed" : "Applied"}>
+        <div className="flex flex-col gap-3" aria-label="What this changes">
+          <ul className="flex flex-col gap-1.5">
+            {changes.map((c) => (
+              <li key={c.text} className="flex items-center gap-2 text-[14px] text-fg" data-testid="change" data-applied={c.applied}>
+                {c.applied ? <Check size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" /> : <Sparkle size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />}
+                <span>{c.text}</span>
+                {c.applied ? null : <span className="ml-auto text-[11px] text-fg-subtle">Leaning, not applied</span>}
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-center gap-2 text-[12px] text-fg-subtle">
+            <ShieldCheck size={13} weight="bold" aria-hidden className="shrink-0" />
+            {NEVER_LINE}
+          </div>
+          <dl className="tabular mt-2 flex flex-col gap-1 border-t border-line pt-3 text-[12px] text-fg-subtle">
+            <div className="flex justify-between gap-3">
+              <dt>Length</dt>
+              <dd className="text-fg">{formatDuration(call.durationSeconds)}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt>Rep</dt>
+              <dd className="text-fg">{review.rep.displayName}</dd>
+            </div>
+          </dl>
+        </div>
+      </Sheet>
+
+      {/* ----- Sheet: coaching ----- */}
       {review.coaching ? (
-        <Surface padding="md" className="flex flex-col gap-1.5" aria-label="Coaching">
-          <div className="section-label">Coaching</div>
-          <div className="text-[15px] font-semibold text-fg">{review.coaching.title}</div>
-          <div className="text-[13px] text-fg-muted">{review.coaching.action}</div>
-          {coachMoment ? (
-            <button type="button" onClick={() => jumpTo(coachMoment.spanIndex)} className="inline-flex items-center gap-1.5 self-start text-[13px] font-medium text-accent underline-offset-2 hover:underline">
-              <ChatCircleText size={14} weight="bold" aria-hidden />
-              See {coachMoment.label.toLowerCase()}
-            </button>
-          ) : null}
-        </Surface>
+        <Sheet open={coachingOpen} onClose={() => setCoachingOpen(false)} title="Coaching">
+          <div className="flex flex-col gap-1.5" aria-label="Coaching">
+            <div className="text-[15px] font-semibold text-fg">{review.coaching.title}</div>
+            <div className="text-[13px] text-fg-muted">{review.coaching.action}</div>
+            {coachMoment ? (
+              <button type="button" onClick={() => jumpFromSheet(coachMoment.spanIndex)} className="inline-flex items-center gap-1.5 self-start text-[13px] font-medium text-accent underline-offset-2 hover:underline">
+                <ChatCircleText size={14} weight="bold" aria-hidden />
+                See {coachMoment.label.toLowerCase()}
+              </button>
+            ) : null}
+          </div>
+        </Sheet>
       ) : null}
 
-      {/* ----- Owner: share to playbook ----- */}
+      {/* ----- Sheet: owner shares to the playbook ----- */}
       {viewer.role === "owner" && isGoodExample(review) ? (
-        <Surface padding="md" className="flex items-center gap-3">
-          <BookmarkSimple size={18} weight={shared ? "fill" : "regular"} aria-hidden className={shared ? "text-accent" : "text-fg-subtle"} />
-          <div className="min-w-0 flex-1">
-            <div className="text-[14px] font-medium text-fg">Good example</div>
-            <div className="text-[12px] text-fg-muted">Booked, objection resolved</div>
+        <Sheet open={playbookOpen} onClose={() => setPlaybookOpen(false)} title="Good example" description="Booked, objection resolved">
+          <div className="flex flex-col gap-3">
+            {shared ? (
+              <span className="inline-flex items-center gap-1 text-[13px] font-medium text-fg">
+                <Check size={12} weight="bold" aria-hidden />
+                Marked for review
+              </span>
+            ) : (
+              <Button onClick={() => setShared(true)} className="w-full" leading={<BookmarkSimple size={16} weight="bold" />}>
+                Share to playbook
+              </Button>
+            )}
           </div>
-          {shared ? (
-            <span className="inline-flex items-center gap-1 text-[12px] font-medium text-fg">
-              <Check size={12} weight="bold" aria-hidden />
-              Marked for review
-            </span>
-          ) : (
-            <Button variant="secondary" size="sm" onClick={() => setShared(true)}>
-              Share to playbook
-            </Button>
-          )}
-        </Surface>
+        </Sheet>
       ) : null}
 
       {/* ----- Details: moments, their words, feedback, every field ----- */}

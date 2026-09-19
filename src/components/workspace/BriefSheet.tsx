@@ -9,6 +9,7 @@ import { VALUE_WORD, confidenceWordFor } from "@/domain/buyerMode";
 import type { LensName } from "@/domain/types";
 import { lensByName, lenses } from "@/content/lenses";
 import { Button } from "@/components/ui/Button";
+import { DetailsRow } from "@/components/ui/DetailsRow";
 import { Sheet } from "@/components/ui/Sheet";
 import { cn } from "@/lib/cn";
 import { BriefRowView, EvidenceTag } from "./EvidenceTag";
@@ -152,29 +153,70 @@ export function ReadBlock({ read, className }: { read: ReadLine[]; className?: s
 }
 
 /**
- * Pre-call brief: why you, the short labeled rows, verified fit, unknowns, then Buyer mode (the
- * top three known dimensions, the approach, the read, and the stated preferences as evidence).
- * The coaching lens sits under More. Every assertion carries its provenance (SOS-10).
+ * Pre-call brief. Opens on the read (They value, the value word, the archetype with its
+ * percentage) and the approach, then the primary action. Everything else (why you, the labeled
+ * rows, verified fit, unknowns, the buyer mode dimensions with their cited words, evidence, the
+ * coaching lens) sits behind one Details row that opens a second sheet. Every assertion in
+ * Details carries its provenance (SOS-10); no provenance tag shows on the first view.
  */
 export function BriefSheet({ open, onClose, item, brief }: BriefSheetProps) {
   const [asked, setAsked] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const bm = brief.buyerMode;
+  const approach = bm.approach.slice(0, 3);
+  const description = item.contact.organizationName ? `${item.contact.displayName}, ${item.contact.organizationName}` : item.contact.displayName;
+  return (
+    <>
+      <Sheet
+        open={open}
+        onClose={onClose}
+        title="Brief"
+        description={description}
+        footer={
+          <Button variant="secondary" size="lg" className="w-full" disabled={asked} onClick={() => setAsked(true)} leading={<Question size={16} weight="bold" />}>
+            {asked ? "Clarification requested" : "Ask for clarification"}
+          </Button>
+        }
+      >
+        <section className="flex flex-col gap-3" aria-label="Buyer mode" data-testid="buyer-mode">
+          <ReadBlock read={bm.read} />
+          {bm.rows.length === 0 ? (
+            <p className="text-[13px] text-fg-subtle" data-testid="buyer-mode-empty">
+              {NO_SIGNAL_WORD}
+            </p>
+          ) : null}
+          {approach.length > 0 ? (
+            <div>
+              <div className="section-label mb-1">Approach</div>
+              <ul className="flex flex-col gap-1" data-testid="approach">
+                {approach.map((line) => (
+                  <li key={line} className="flex items-start gap-2 text-[14px] leading-snug text-fg">
+                    <ArrowRight size={13} weight="bold" aria-hidden className="mt-[3px] shrink-0 text-fg-subtle" />
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </section>
+        <div className="-mx-4 mt-3 border-t border-line sm:-mx-5">
+          <DetailsRow label="Details" onClick={() => setDetailsOpen(true)} data-testid="brief-details-row" />
+        </div>
+      </Sheet>
+      <BriefDetailsSheet open={detailsOpen} onClose={() => setDetailsOpen(false)} item={item} brief={brief} description={description} />
+    </>
+  );
+}
+
+/** The second sheet: every fact behind the read, each with its provenance. */
+function BriefDetailsSheet({ open, onClose, item, brief, description }: BriefSheetProps & { description: string }) {
   const [openRow, setOpenRow] = useState<string | undefined>(undefined);
   const lens = brief.lensHypothesis ? lensByName[brief.lensHypothesis] : undefined;
   const bm = brief.buyerMode;
   const toggle = (id: string) => setOpenRow((cur) => (cur === id ? undefined : id));
   return (
-    <Sheet
-      open={open}
-      onClose={onClose}
-      title="Brief"
-      description={item.contact.organizationName ? `${item.contact.displayName}, ${item.contact.organizationName}` : item.contact.displayName}
-      footer={
-        <Button variant="secondary" size="lg" className="w-full" disabled={asked} onClick={() => setAsked(true)} leading={<Question size={16} weight="bold" />}>
-          {asked ? "Clarification requested" : "Ask for clarification"}
-        </Button>
-      }
-    >
-      <div className="divide-y divide-line">
+    <Sheet open={open} onClose={onClose} title="Details" description={description}>
+      <div className="divide-y divide-line" data-testid="brief-details">
         {item.assignment ? (
           <div className="py-2.5">
             <div className="mb-1 flex items-center justify-between">
@@ -224,40 +266,20 @@ export function BriefSheet({ open, onClose, item, brief }: BriefSheetProps) {
           )}
         </div>
 
-        {/* ----- Buyer mode: how they decide, from their words. Preferences fold in as evidence. ----- */}
-        <section className="py-2.5" aria-label="Buyer mode" data-testid="buyer-mode">
-          <ReadBlock read={bm.read} className="mb-2" />
+        {/* ----- Buyer mode dimensions: how they decide, from their words. Preferences fold in as evidence. ----- */}
+        <section className="py-2.5" aria-label="Buyer mode dimensions" data-testid="buyer-mode-dimensions">
           <div className="mb-1 flex items-center justify-between">
             <span className="section-label">Buyer mode</span>
             {bm.rows.length === 0 ? null : <EvidenceTag label="Customer-stated" />}
           </div>
           {bm.rows.length === 0 ? (
-            <p className="text-[13px] text-fg-subtle" data-testid="buyer-mode-empty">
-              {NO_SIGNAL_WORD}
-            </p>
+            <p className="text-[13px] text-fg-subtle">{NO_SIGNAL_WORD}</p>
           ) : (
-            <>
-              {bm.rows.length > 0 ? (
-                <ul className="flex flex-col">
-                  {bm.rows.map((r) => (
-                    <DimensionRow key={r.dimension} row={r} open={openRow === r.dimension} onToggle={() => toggle(r.dimension)} />
-                  ))}
-                </ul>
-              ) : null}
-              {bm.approach.length > 0 ? (
-                <div className="mt-2">
-                  <div className="section-label mb-1">Approach</div>
-                  <ul className="flex flex-col gap-1" data-testid="approach">
-                    {bm.approach.map((line) => (
-                      <li key={line} className="flex items-start gap-2 text-[13.5px] leading-snug text-fg">
-                        <ArrowRight size={13} weight="bold" aria-hidden className="mt-[3px] shrink-0 text-fg-subtle" />
-                        {line}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </>
+            <ul className="flex flex-col">
+              {bm.rows.map((r) => (
+                <DimensionRow key={r.dimension} row={r} open={openRow === r.dimension} onToggle={() => toggle(r.dimension)} />
+              ))}
+            </ul>
           )}
           {bm.evidence.length > 0 ? (
             <div className="mt-2">
@@ -275,22 +297,16 @@ export function BriefSheet({ open, onClose, item, brief }: BriefSheetProps) {
         </section>
 
         {lens ? (
-          <details className="group">
-            <summary className="flex h-11 cursor-pointer list-none items-center gap-1.5 text-[13px] font-medium text-fg-muted">
-              <CaretRight size={12} weight="bold" aria-hidden className="transition-transform group-open:rotate-90 motion-reduce:transition-none" />
-              More
-            </summary>
-            <div className="border-t border-line py-2.5">
-              <div className="section-label mb-1.5">Coaching lens (hypothesis)</div>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[13px] font-medium text-fg">{lens.label}</div>
-                  <div className="text-[12px] text-fg-muted">{lens.usefulAdaptation}</div>
-                </div>
-                <EvidenceTag label="AI-proposed" />
+          <div className="py-2.5">
+            <div className="section-label mb-1.5">Coaching lens (hypothesis)</div>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[13px] font-medium text-fg">{lens.label}</div>
+                <div className="text-[12px] text-fg-muted">{lens.usefulAdaptation}</div>
               </div>
+              <EvidenceTag label="AI-proposed" />
             </div>
-          </details>
+          </div>
         ) : null}
       </div>
     </Sheet>

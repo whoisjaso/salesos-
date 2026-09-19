@@ -1,6 +1,8 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
+import { DetailsRow } from "@/components/ui/DetailsRow";
+import { Sheet } from "@/components/ui/Sheet";
 import { Surface } from "@/components/ui/Surface";
 import { StateChip } from "@/components/ui/StateChip";
 import { cn } from "@/lib/cn";
@@ -13,6 +15,7 @@ import {
   sourceSheetTotals,
   type SourceSheetColumn,
 } from "@/fixtures/sourceSheet";
+import { HeroCard } from "./HeroCard";
 
 const COLUMNS: { key: string; label: string; align?: "right" }[] = [
   { key: "tier", label: "Tier" },
@@ -38,9 +41,10 @@ function money(minor: number | null, cents = false): string {
   return minor === null ? "N/A" : formatMoneyMinor(cents ? Math.round(minor) : Math.round(minor / 100) * 100, "USD", { cents });
 }
 
-function Row({ c, total = false }: { c: SourceSheetColumn; total?: boolean }) {
+/** Every cell for one column, in COLUMNS order. */
+function cellsOf(c: SourceSheetColumn, total = false): string[] {
   const d = deriveSourceMetrics(c);
-  const cells: string[] = [
+  return [
     total ? "" : String(c.leadTier),
     formatCount(c.leads),
     formatCount(c.retainedBookings),
@@ -55,6 +59,10 @@ function Row({ c, total = false }: { c: SourceSheetColumn; total?: boolean }) {
     formatPercent(d.leadToWinRate),
     money(d.revenuePerLeadMinor, true),
   ];
+}
+
+function Row({ c, total = false }: { c: SourceSheetColumn; total?: boolean }) {
+  const cells = cellsOf(c, total);
   return (
     <tr className={cn("border-t border-line", total && "bg-hover font-medium")}>
       <th scope="row" className="sticky left-0 z-10 bg-raised px-3 py-2 text-left text-[13px] font-medium text-fg whitespace-nowrap">
@@ -72,63 +80,118 @@ function Row({ c, total = false }: { c: SourceSheetColumn; total?: boolean }) {
   );
 }
 
-/** August 2026 source sheet, 12 columns as rows grouped by lead tier, plus sum-over-sum totals. */
-export function SourceView() {
+/** The whole August 2026 sheet: 12 columns as rows grouped by lead tier, plus sum-over-sum totals. */
+function SheetTable({ totals }: { totals: SourceSheetColumn }) {
   const tiers = [1, 2, 3] as const;
+  return (
+    <Surface padding="none" className="overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1180px] border-collapse">
+          <thead>
+            <tr>
+              <th scope="col" className="sticky left-0 z-10 bg-raised px-3 py-2.5 text-left text-[12px] font-medium text-fg-subtle">
+                Rep
+              </th>
+              {COLUMNS.map((col) => (
+                <th key={col.key} scope="col" className={cn("px-3 py-2.5 text-[12px] font-medium text-fg-subtle whitespace-nowrap", col.align === "right" ? "text-right" : "text-left")}>
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {tiers.map((tier) => (
+              <Fragment key={tier}>
+                <tr className="border-t border-line-strong">
+                  <th scope="rowgroup" colSpan={COLUMNS.length + 1} className="sticky left-0 bg-sunken px-3 py-1.5 text-left text-[12px] font-medium text-fg-subtle">
+                    Tier {tier}
+                  </th>
+                </tr>
+                {sourceSheetColumns.filter((c) => c.leadTier === tier).map((c) => (
+                  <Row key={c.repLabel} c={c} />
+                ))}
+              </Fragment>
+            ))}
+            <Row c={totals} total />
+          </tbody>
+        </table>
+      </div>
+    </Surface>
+  );
+}
+
+/**
+ * One hero: the team's reported revenue per lead. One list: a row per rep with the same
+ * number. The provenance, the scenario and the full sheet sit behind the hero; every other
+ * column for a rep sits behind the rep's row.
+ */
+export function SourceView() {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [rep, setRep] = useState<SourceSheetColumn | null>(null);
   const totals = sourceSheetTotals();
   const ben = sourceColumn("ben");
   const highVolume = sourceColumn("rep_high_volume");
   const counterfactual = counterfactualRevenueAtLeads(ben, highVolume.leads);
+  const teamRpl = money(deriveSourceMetrics(totals).revenuePerLeadMinor, true);
+  const reps = [...sourceSheetColumns].sort((a, b) => a.leadTier - b.leadTier);
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2 text-[12px] text-fg-subtle">
-        <StateChip state="unknown" label="Not verified" />
-        <span>Visual reading, August 2026</span>
-        <span>Revenue basis unknown</span>
-      </div>
+    <div className="flex flex-col gap-4">
+      <HeroCard
+        label="Revenue per lead"
+        value={teamRpl}
+        caption="August 2026, unverified"
+        ariaLabel={`Team revenue per lead, ${teamRpl}, unverified. Tap for details.`}
+        onClick={() => setDetailsOpen(true)}
+        data-testid="source-hero"
+      />
 
-      <Surface padding="none" className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1180px] border-collapse">
-            <thead>
-              <tr>
-                <th scope="col" className="sticky left-0 z-10 bg-raised px-3 py-2.5 text-left text-[12px] font-medium text-fg-subtle">
-                  Rep
-                </th>
-                {COLUMNS.map((col) => (
-                  <th key={col.key} scope="col" className={cn("px-3 py-2.5 text-[12px] font-medium text-fg-subtle whitespace-nowrap", col.align === "right" ? "text-right" : "text-left")}>
-                    {col.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {tiers.map((tier) => (
-                <Fragment key={tier}>
-                  <tr className="border-t border-line-strong">
-                    <th scope="rowgroup" colSpan={COLUMNS.length + 1} className="sticky left-0 bg-sunken px-3 py-1.5 text-left text-[12px] font-medium text-fg-subtle">
-                      Tier {tier}
-                    </th>
-                  </tr>
-                  {sourceSheetColumns.filter((c) => c.leadTier === tier).map((c) => (
-                    <Row key={c.repLabel} c={c} />
-                  ))}
-                </Fragment>
-              ))}
-              <Row c={totals} total />
-            </tbody>
-          </table>
-        </div>
+      <Surface padding="none">
+        <ul className="divide-y divide-line" aria-label="Reps">
+          {reps.map((c) => (
+            <li key={c.repLabel}>
+              <DetailsRow label={shortName(c)} value={money(deriveSourceMetrics(c).revenuePerLeadMinor, true)} data-testid="source-row" onClick={() => setRep(c)} />
+            </li>
+          ))}
+        </ul>
       </Surface>
 
-      <Surface padding="md" className="flex flex-col gap-1.5 border-dashed">
-        <div className="text-[12px] font-medium text-fg-subtle">Arithmetic scenario, not a forecast</div>
-        <div className="tabular text-[24px] font-semibold leading-none text-fg">{formatMoneyMinor(Math.round(counterfactual.amountMinor), "USD", { cents: true })}</div>
-        <div className="tabular text-[12px] text-fg-subtle">
-          {formatCount(highVolume.leads)} × ({formatMoneyMinor(ben.reportedRevenue.amountMinor, "USD")} / {formatCount(ben.leads)}), tier 1 rate at tier 2 volume
+      <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} title="Source sheet" description="Visual reading, August 2026" width={1280}>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2 text-[12px] text-fg-subtle">
+            <StateChip state="unknown" label="Not verified" />
+            <span>Revenue basis unknown</span>
+          </div>
+
+          <Surface padding="md" className="flex flex-col gap-1.5 border-dashed">
+            <div className="text-[12px] font-medium text-fg-subtle">Arithmetic scenario, not a forecast</div>
+            <div className="tabular text-[24px] font-semibold leading-none text-fg">{formatMoneyMinor(Math.round(counterfactual.amountMinor), "USD", { cents: true })}</div>
+            <div className="tabular text-[12px] text-fg-subtle">
+              {formatCount(highVolume.leads)} × ({formatMoneyMinor(ben.reportedRevenue.amountMinor, "USD")} / {formatCount(ben.leads)}), tier 1 rate at tier 2 volume
+            </div>
+          </Surface>
+
+          <SheetTable totals={totals} />
         </div>
-      </Surface>
+      </Sheet>
+
+      <Sheet open={rep !== null} onClose={() => setRep(null)} title={rep ? shortName(rep) : ""} description={rep ? `Tier ${rep.leadTier}, August 2026, unverified` : undefined}>
+        {rep ? (
+          <div className="flex flex-col gap-4">
+            {rep.anomaly ? <StateChip state="partial" label="Retained > leads" /> : null}
+            <dl className="divide-y divide-line border-t border-line">
+              {cellsOf(rep).map((v, i) =>
+                COLUMNS[i].key === "tier" ? null : (
+                  <div key={COLUMNS[i].key} className="flex items-center justify-between gap-3 py-2.5 text-[13px]">
+                    <dt className="text-fg-subtle">{COLUMNS[i].label}</dt>
+                    <dd className="tabular text-fg">{v}</dd>
+                  </div>
+                ),
+              )}
+            </dl>
+          </div>
+        ) : null}
+      </Sheet>
     </div>
   );
 }

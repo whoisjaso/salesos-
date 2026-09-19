@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import { UploadSimple } from "@phosphor-icons/react";
+import { CaretRight, UploadSimple } from "@phosphor-icons/react";
 import type { SyncResult } from "@/domain/crmSync";
 import { parseCsv, type SourcePreset } from "@/domain/migration";
 import { cn } from "@/lib/cn";
@@ -26,7 +26,7 @@ export interface BringStepProps {
 
 const ACCEPT = ".csv,.txt,text/csv,text/plain";
 
-/** OAuth first: six CRM tiles, then a smaller file drop under them. */
+/** OAuth first: six CRM tiles, then one file row under them. */
 export function BringStep({ tenantId, onLoad }: BringStepProps) {
   const [source, setSource] = useState<CrmSource | null>(null);
   const [over, setOver] = useState(false);
@@ -67,56 +67,47 @@ export function BringStep({ tenantId, onLoad }: BringStepProps) {
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      <section aria-label="Connect your CRM" className="flex flex-col gap-2">
-        <h2 className="px-1 text-[12px] font-medium text-fg-subtle">Connect your CRM</h2>
-        <ul className="grid grid-cols-3 gap-2">
-          {CRM_SOURCES.map((s) => (
-            <li key={s.provider.providerId}>
-              <Surface as="button" padding="none" interactive className="w-full" onClick={() => setSource(s)}>
-                <span className="flex flex-col items-center gap-2 px-2 py-4">
-                  <LogoTile p={s.provider} size={56} />
-                  <span className="line-clamp-1 text-[12px] font-medium leading-tight text-fg">{s.provider.name}</span>
-                </span>
-              </Surface>
-            </li>
-          ))}
-        </ul>
-      </section>
+    <div className="flex flex-col gap-4">
+      <ul className="grid grid-cols-3 gap-2" aria-label="Connect your CRM">
+        {CRM_SOURCES.map((s) => (
+          <li key={s.provider.providerId}>
+            <Surface as="button" padding="none" interactive className="w-full" onClick={() => setSource(s)}>
+              <span className="flex flex-col items-center gap-2 px-2 py-4">
+                <LogoTile p={s.provider} size={56} />
+                <span className="line-clamp-1 text-[12px] font-medium leading-tight text-fg">{s.provider.name}</span>
+              </span>
+            </Surface>
+          </li>
+        ))}
+      </ul>
 
-      <section aria-label="Or upload a file" className="flex flex-col gap-2">
-        <h2 className="px-1 text-[12px] font-medium text-fg-subtle">Or upload a file</h2>
-        <Surface
-          as="button"
-          padding="none"
-          interactive
-          aria-label="Drop a CSV here or tap to choose"
-          onClick={() => inputRef.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setOver(true);
-          }}
-          onDragLeave={() => setOver(false)}
-          onDrop={onDrop}
-          className={cn("w-full border-dashed transition-colors", over ? "border-accent bg-accent-soft" : "border-line-strong")}
-        >
-          <span className="flex min-h-16 items-center gap-3 px-4 py-2 text-left">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-accent-soft text-accent">
-              <UploadSimple size={20} weight="bold" aria-hidden />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-[15px] font-medium leading-tight text-fg">Drop a CSV</span>
-              <span className="mt-0.5 block text-[12px] text-fg-subtle">{hint ?? "Excel export saved as CSV"}</span>
-            </span>
-            <span className="inline-flex h-8 shrink-0 items-center rounded-sm border border-line-strong px-3 text-[13px] font-medium text-fg">Choose</span>
+      <Surface
+        as="button"
+        padding="none"
+        interactive
+        aria-label="Drop a CSV here or tap to choose"
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={onDrop}
+        className={cn("w-full transition-colors", over && "border-accent bg-accent-soft")}
+      >
+        <span className="flex min-h-14 items-center gap-3 px-4 py-2 text-left">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-accent-soft text-accent">
+            <UploadSimple size={20} weight="bold" aria-hidden />
           </span>
-        </Surface>
-        {hint ? (
-          <p role="status" className="px-1 text-[12.5px] font-medium text-perf-attention">
-            {hint}
-          </p>
-        ) : null}
-      </section>
+          <span className="min-w-0 flex-1 truncate text-[15px] font-medium leading-tight text-fg">Upload a CSV</span>
+          <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
+        </span>
+      </Surface>
+      {hint ? (
+        <p role="status" className="px-1 text-[12.5px] font-medium text-perf-attention">
+          {hint}
+        </p>
+      ) : null}
       <input ref={inputRef} type="file" accept={ACCEPT} className="sr-only" tabIndex={-1} aria-hidden onChange={onChange} />
 
       <ConnectCrmSheet source={source} open={source !== null} tenantId={tenantId} onClose={() => setSource(null)} onPulled={onPulled} />

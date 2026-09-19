@@ -1,11 +1,10 @@
 "use client";
 
-import { Hourglass } from "@phosphor-icons/react";
-import { Surface } from "@/components/ui/Surface";
+import { CaretRight, Warning, WarningOctagon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
 import { formatMoneyMinor } from "@/lib/format";
-import { CHOSEN_BY_LABEL, initials, pairTitle, type PairView } from "@/lib/team-data";
-import { PAIR_HUE, PairBar } from "./PairBar";
+import { initials, pairTitle, type PairView } from "@/lib/team-data";
+import { PAIR_HUE } from "./PairBar";
 
 export interface PairAvatarsProps {
   setterDisplayName: string;
@@ -51,41 +50,40 @@ export interface PairCardProps {
   className?: string;
 }
 
-/** One pair on the board: avatars, names, chosen-by tag, one number with its basis, the pair bar. Tap opens the sheet. */
+/** Gap at or past this many ratio points is an issue; a smaller gap needs attention. */
+const ISSUE_GAP = 0.15;
+
+/**
+ * One pair on the board: the two avatars, the two first names, one number
+ * (net collected per assigned), and one status word when the diagnostic flags a
+ * side. The pair bar, chosen-by, and the full diagnostic live in the sheet.
+ */
 export function PairCard({ view, onOpen, meId, className }: PairCardProps) {
-  const { pair, row, setterDisplayName, closerDisplayName, funnel, diagnostic } = view;
+  const { pair, row, setterDisplayName, closerDisplayName, diagnostic } = view;
   const title = pairTitle(setterDisplayName, closerDisplayName);
   const currency = row?.currency ?? view.contribution.currency;
   const value = row?.netPerAssigned.value ?? null;
   const meSide = meId === pair.setterUserId ? "setter" : meId === pair.closerUserId ? "closer" : undefined;
+  const flagged = diagnostic.weakestSide !== "none";
+  const issue = flagged && diagnostic.gap <= -ISSUE_GAP;
+  const StatusIcon = issue ? WarningOctagon : Warning;
 
   return (
-    <Surface as="li" padding="none" className={cn("list-none", className)}>
-      <button type="button" onClick={() => onOpen(view)} aria-label={`${title}, open pair`} className="flex w-full flex-col gap-3 p-4 text-left transition-colors hover:bg-hover motion-reduce:transition-none sm:p-5">
-        <span className="flex items-center gap-3">
-          <PairAvatars setterDisplayName={setterDisplayName} closerDisplayName={closerDisplayName} meSide={meSide} />
-          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="min-w-0 text-[15px] font-semibold leading-tight text-fg">{title}</span>
-            <span className="tag text-fg-muted">{CHOSEN_BY_LABEL[pair.chosenBy]}</span>
-          </span>
-          {row?.rank !== null && row?.rank !== undefined ? (
-            <span className="tabular shrink-0 text-[13px] font-medium text-fg-subtle">#{row.rank}</span>
-          ) : (
-            <span aria-label="Provisional" title={row?.provisionalReason ?? "No opportunities in the season yet"} className="tag text-fg-muted">
-              <Hourglass size={10} weight="bold" aria-hidden />
-              Provisional
+    <li className={cn("border-b border-line last:border-b-0", className)}>
+      <button type="button" onClick={() => onOpen(view)} aria-label={`${title}, open pair`} className="flex min-h-16 w-full items-center gap-3 py-2.5 text-left hover:bg-hover active:bg-hover">
+        <PairAvatars setterDisplayName={setterDisplayName} closerDisplayName={closerDisplayName} meSide={meSide} />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="truncate text-[15px] font-medium leading-tight text-fg">{title}</span>
+          {flagged ? (
+            <span className={cn("inline-flex items-center gap-1 text-[12px] font-medium leading-tight", issue ? "text-perf-issue" : "text-perf-attention")}>
+              <StatusIcon size={12} weight="bold" aria-hidden />
+              Behind
             </span>
-          )}
+          ) : null}
         </span>
-
-        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="tabular text-[24px] font-semibold leading-none tracking-tight text-fg">{value === null ? "N/A" : formatMoneyMinor(Math.round(value), currency, { cents: true })}</span>
-          <span className="chip text-fg-muted">Net collected cash</span>
-          <span className="tabular text-[12px] text-fg-subtle">per assigned, {row?.assignedOpportunities ?? 0} assigned</span>
-        </span>
-
-        <PairBar funnel={funnel} diagnostic={diagnostic} />
+        <span className="tabular shrink-0 text-[17px] font-semibold leading-none tracking-tight text-fg">{value === null ? "N/A" : formatMoneyMinor(Math.round(value), currency, { cents: true })}</span>
+        <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
       </button>
-    </Surface>
+    </li>
   );
 }

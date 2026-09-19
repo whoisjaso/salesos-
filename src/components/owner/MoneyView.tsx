@@ -1,9 +1,14 @@
 "use client";
 
-import { MetricTile } from "@/components/metrics/MetricTile";
 import type { MetricDefinitionText } from "@/components/metrics/MetricDefinitionSheet";
-import type { PerformanceVerdict } from "@/domain/types";
+import { useMetricDefinition } from "@/components/metrics/MetricDefinitionProvider";
+import { CountUp } from "@/components/ui/CountUp";
+import { DetailsRow } from "@/components/ui/DetailsRow";
+import { Surface } from "@/components/ui/Surface";
+import { formatBasis, formatMoneyMinor } from "@/lib/format";
+import type { MetricPayload, PerformanceVerdict } from "@/domain/types";
 import type { EconomicsView } from "@/lib/owner-model";
+import { HeroCard } from "./HeroCard";
 
 const DESCRIPTIVE: PerformanceVerdict = { state: "neutral_no_benchmark", label: "Descriptive", explanation: "" };
 
@@ -30,19 +35,40 @@ const DEFINITIONS: Record<"net" | "contracted" | "outstanding" | "refunds", Metr
   },
 };
 
-/** Two up on a phone, four across on desktop. */
+/** Whole dollars, the way money totals read on a tile. */
+function whole(metric: MetricPayload): string {
+  return formatMoneyMinor(Math.round((metric.value ?? 0) / 100) * 100, metric.currency ?? "USD");
+}
+
+/** One hero, cash. One list: contracted, outstanding, refunds. Each opens its definition. */
 export function MoneyView({ economics }: { economics: EconomicsView }) {
+  const sheet = useMetricDefinition();
+  const net = economics.netCollected;
+  const currency = net.currency ?? "USD";
+  const open = (metric: MetricPayload, definition: MetricDefinitionText) => sheet.open(metric, { verdict: DESCRIPTIVE, definition });
+  const rows: { key: keyof typeof DEFINITIONS; metric: MetricPayload }[] = [
+    { key: "contracted", metric: economics.contracted },
+    { key: "outstanding", metric: economics.outstanding },
+    { key: "refunds", metric: economics.refunds },
+  ];
+
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <MetricTile metric={economics.netCollected} verdict={DESCRIPTIVE} definition={DEFINITIONS.net} delay={0.05} />
-      <MetricTile metric={economics.contracted} verdict={DESCRIPTIVE} definition={DEFINITIONS.contracted} delay={0.1} />
-      <MetricTile metric={economics.outstanding} verdict={DESCRIPTIVE} definition={DEFINITIONS.outstanding} delay={0.15} />
-      <MetricTile
-        metric={{ ...economics.refunds, label: `Refunds and disputes (${economics.refundCount})` }}
-        verdict={DESCRIPTIVE}
-        definition={DEFINITIONS.refunds}
-        delay={0.2}
+    <div className="flex flex-col gap-4">
+      <HeroCard
+        label="Collected"
+        value={net.value === null ? <span className="text-fg-muted">N/A</span> : <CountUp value={net.value} format={(v) => formatMoneyMinor(Math.round(v / 100) * 100, currency)} />}
+        caption={net.basis ? formatBasis(net.basis) : undefined}
+        ariaLabel={`${net.label}, ${whole(net)}. Open definition.`}
+        onClick={() => open(net, DEFINITIONS.net)}
+        data-testid="money-hero"
       />
+      <Surface padding="none">
+        <div className="divide-y divide-line">
+          {rows.map(({ key, metric }) => (
+            <DetailsRow key={key} label={metric.label} value={whole(metric)} data-testid="money-row" onClick={() => open(metric, DEFINITIONS[key])} />
+          ))}
+        </div>
+      </Surface>
     </div>
   );
 }

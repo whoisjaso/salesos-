@@ -1,15 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import type { IconProps } from "@phosphor-icons/react";
 import {
-  ArrowCounterClockwise,
   CalendarCheck,
   ChatText,
   Check,
   Clock,
-  EnvelopeSimple,
+  Info,
   Lock,
   Phone,
   PhoneDisconnect,
@@ -21,6 +19,7 @@ import type { NextStepValue } from "@/domain/callIntelligence";
 import type { CallInterpretedOutcome, Contact, ConsentState, User } from "@/domain/types";
 import { obaviaDataset, NOW, CLOSERS } from "@/fixtures/obavia";
 import { Button } from "@/components/ui/Button";
+import { DetailsRow } from "@/components/ui/DetailsRow";
 import { Sheet } from "@/components/ui/Sheet";
 import { Surface } from "@/components/ui/Surface";
 import { cn } from "@/lib/cn";
@@ -41,7 +40,6 @@ import {
   sourceLabel,
   TENANT_TZ,
   todayStrip,
-  type QueueAction,
   type SetterQueueItem,
 } from "@/lib/workspace-setter";
 import { computeGame } from "@/lib/workspace-game";
@@ -50,9 +48,10 @@ import { SetterEmptyToday } from "@/components/onboarding/SetterEmptyToday";
 import { NEXT_STEP_WORD, OUTCOME_WORD, reviewHref, type StageView } from "@/lib/review";
 import { StageStrip } from "@/components/review/StageStrip";
 import { BookingSheet, type Booking } from "./BookingSheet";
+import { Fields, type Field } from "./Fields";
+import { GateLine } from "./GateLine";
 import { HandoffSheet } from "./HandoffSheet";
-import { GameStrip } from "./GameStrip";
-import { NextUp, initials } from "./NextUp";
+import { initials } from "./NextUp";
 import { Segmented } from "./Segmented";
 
 type Phase = "idle" | "reserving" | "ringing" | "connected" | "summary" | "logging" | "dq" | "done" | "provider_failed";
@@ -76,31 +75,10 @@ const IDLE: CallState = { phase: "idle", seconds: 0 };
 const OUTCOMES: CallInterpretedOutcome[] = ["meaningful_interaction", "voicemail", "no_answer", "wrong_contact"];
 const NEXT_STEPS: NextStepValue[] = ["book", "callback", "dq_review"];
 
-const ACTION_ICON: Record<QueueAction, ComponentType<IconProps>> = {
-  call: Phone,
-  reply: ChatText,
-  confirm_appointment: CalendarCheck,
-  review_dq: Prohibit,
-  follow_up: ArrowCounterClockwise,
-  send_proposal: EnvelopeSimple,
-  collect_payment: EnvelopeSimple,
-  handoff_delivery: EnvelopeSimple,
-};
-
 const dataset = obaviaDataset;
 const closers: User[] = dataset.users.filter((u) => CLOSERS.includes(u.userId));
 
-function ConsentChip({ channel, state, icon: Icon }: { channel: string; state: ConsentState; icon: ComponentType<IconProps> }) {
-  return (
-    <span
-      className={cn("chip", state === "granted" ? "text-fg" : state === "revoked" ? "border-[color:var(--perf-issue-line)] text-perf-issue" : "border-dashed text-fg-subtle")}
-      aria-label={`${channel} ${state}`}
-    >
-      <Icon size={12} weight="bold" aria-hidden />
-      {state === "granted" ? channel : `${channel} ${state}`}
-    </span>
-  );
-}
+const CONSENT_WORD: Record<ConsentState, string> = { granted: "OK", unknown: "unknown", revoked: "revoked" };
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
@@ -114,12 +92,14 @@ export function SetterWorkspace({ userId }: { userId: string }) {
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   const [call, setCall] = useState<CallState>(IDLE);
   const providerDown = false;
-  const [expanded, setExpanded] = useState(false);
   const [segment, setSegment] = useState<Segment>("now");
   const [bookingOpen, setBookingOpen] = useState(false);
   const [handoffOpen, setHandoffOpen] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
   const [wrongOpen, setWrongOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [todayOpen, setTodayOpen] = useState(false);
+  const [stoppedOpen, setStoppedOpen] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [bookings, setBookings] = useState<Record<string, Booking[]>>({});
   const [handoffs, setHandoffs] = useState<Record<string, "send" | "clarify">>({});
@@ -157,7 +137,6 @@ export function SetterWorkspace({ userId }: { userId: string }) {
     clearTimers();
     setActiveId(id);
     setCall(IDLE);
-    setExpanded(false);
   };
 
   const advance = () => {
@@ -167,7 +146,6 @@ export function SetterWorkspace({ userId }: { userId: string }) {
     setCompleted((s) => new Set(s).add(active.id));
     setActiveId(next?.id);
     setCall(IDLE);
-    setExpanded(false);
   };
 
   const startCall = () => {
@@ -276,9 +254,9 @@ export function SetterWorkspace({ userId }: { userId: string }) {
   return (
     <>
       <div className="mx-auto flex max-w-[640px] flex-col gap-4">
-        {/* ----- Hero ----- */}
+        {/* ----- Hero: a name, one muted line, one action. Everything else is behind Details. ----- */}
         <Surface padding="md" className="flex flex-col">
-          <div className="min-h-[148px]">
+          <div className="min-h-[72px]">
             <AnimatePresence mode="wait" initial={false}>
               {active ? (
                 <motion.div
@@ -288,10 +266,10 @@ export function SetterWorkspace({ userId }: { userId: string }) {
                   exit={reduce ? undefined : { opacity: 0, y: -6 }}
                   transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                 >
-                  {!inFlow ? <HeroIdle item={active} expanded={expanded} onToggle={() => setExpanded((v) => !v)} /> : <HeroFlow item={active} call={call} setCall={setCall} setOutcome={setOutcome} booking={currentBooking} onHandoff={() => setHandoffOpen(true)} onBook={() => setBookingOpen(true)} handoff={handoffs[active.opportunity.opportunityId]} />}
+                  {!inFlow ? <HeroIdle item={active} onDetails={() => setDetailsOpen(true)} /> : <HeroFlow item={active} call={call} setCall={setCall} setOutcome={setOutcome} booking={currentBooking} onHandoff={() => setHandoffOpen(true)} onBook={() => setBookingOpen(true)} handoff={handoffs[active.opportunity.opportunityId]} />}
                 </motion.div>
               ) : (
-                <motion.div key="empty" initial={false} className="flex h-[148px] flex-col items-center justify-center gap-2 text-center">
+                <motion.div key="empty" initial={false} className="flex h-[72px] flex-col items-center justify-center gap-2 text-center">
                   <Check size={28} aria-hidden className="text-perf-strong" />
                   <span className="text-[15px] font-medium text-fg">Queue clear</span>
                 </motion.div>
@@ -317,12 +295,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
           ) : null}
         </Surface>
 
-        <NextUp
-          items={nextUp.map((q) => ({ id: q.id, name: q.contact.displayName, icon: ACTION_ICON[q.action], hint: q.when }))}
-          onSelect={selectItem}
-        />
-
-        <GameStrip game={game} />
+        <GateLine game={game} />
 
         <Segmented<Segment>
           items={[
@@ -334,51 +307,63 @@ export function SetterWorkspace({ userId }: { userId: string }) {
         />
 
         {segment === "now" ? (
-          <div className="flex flex-col gap-3">
-            <Surface padding="sm" className="flex items-center justify-around">
-              <Stat value={today.dials} label="Dials" />
-              <Divider />
-              <Stat value={today.twoWay} label="Two-way" />
-              <Divider />
-              <Stat value={today.bookings} label="Booked" />
-            </Surface>
-            <StoppedList items={stopped} />
-          </div>
+          <Surface padding="none" as="section" aria-label="Next up">
+            <ul className="divide-y divide-line">
+              {nextUp.map((q) => (
+                <li key={q.id}>
+                  <QueueRow item={q} onClick={() => selectItem(q.id)} />
+                </li>
+              ))}
+              <li>
+                <DetailsRow label="Today" value={`${formatCount(today.dials)} dials`} onClick={() => setTodayOpen(true)} data-testid="today-row" />
+              </li>
+              {stopped.length > 0 ? (
+                <li>
+                  <DetailsRow label="Stopped" value={formatCount(stopped.length)} leading={<Lock size={16} weight="bold" aria-hidden className="text-fg-subtle" />} onClick={() => setStoppedOpen(true)} data-testid="stopped-row" />
+                </li>
+              ) : null}
+            </ul>
+          </Surface>
         ) : null}
 
         {segment === "queue" ? (
-          <div className="flex flex-col gap-3">
-            <Surface padding="none" as="section" aria-label="Queue">
-              <ul className="divide-y divide-line">
-                {queue.map((q) => {
-                  const Icon = ACTION_ICON[q.action];
-                  const isActive = q.id === active?.id;
-                  return (
-                    <li key={q.id}>
-                      <button type="button" onClick={() => selectItem(q.id)} aria-current={isActive ? "true" : undefined} className={cn("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-hover motion-reduce:transition-none", isActive && "bg-accent-soft")}>
-                        <span className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sunken text-[12px] font-semibold text-fg">{initials(q.contact.displayName)}</span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-1.5 text-[14px] font-medium text-fg">
-                            <Icon size={13} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
-                            <span className="truncate">{q.contact.displayName}</span>
-                          </span>
-                          <span className="block truncate text-[12px] text-fg-muted">{q.reason}</span>
-                        </span>
-                        <span className="tabular shrink-0 text-[12px] text-fg-subtle">{q.when}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-                {queue.length === 0 ? <li className="px-4 py-6 text-center text-[13px] text-fg-subtle">Queue clear</li> : null}
-              </ul>
-            </Surface>
-            <StoppedList items={stopped} />
-          </div>
+          <Surface padding="none" as="section" aria-label="Queue">
+            <ul className="divide-y divide-line">
+              {queue.map((q) => (
+                <li key={q.id}>
+                  <QueueRow item={q} active={q.id === active?.id} onClick={() => selectItem(q.id)} />
+                </li>
+              ))}
+              {queue.length === 0 ? <li className="px-4 py-6 text-center text-[13px] text-fg-subtle">Queue clear</li> : null}
+              {stopped.length > 0 ? (
+                <li>
+                  <DetailsRow label="Stopped" value={formatCount(stopped.length)} leading={<Lock size={16} weight="bold" aria-hidden className="text-fg-subtle" />} onClick={() => setStoppedOpen(true)} data-testid="stopped-row" />
+                </li>
+              ) : null}
+            </ul>
+          </Surface>
         ) : null}
       </div>
 
+      <Sheet open={todayOpen} onClose={() => setTodayOpen(false)} title="Today" description="Your day so far">
+        <Fields
+          items={[
+            { label: "Dials", value: formatCount(today.dials) },
+            { label: "Two-way", value: formatCount(today.twoWay) },
+            { label: "Booked", value: formatCount(today.bookings) },
+          ]}
+        />
+      </Sheet>
+
+      <Sheet open={stoppedOpen} onClose={() => setStoppedOpen(false)} title="Stopped" description="Opted out, never contacted">
+        <StoppedList items={stopped} />
+      </Sheet>
+
       {active ? (
         <>
+          <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} title="Details" description={active.contact.displayName}>
+            <Fields items={heroFields(active)} />
+          </Sheet>
           <BookingSheet
             key={active.opportunity.opportunityId}
             open={bookingOpen}
@@ -448,10 +433,42 @@ export function SetterWorkspace({ userId }: { userId: string }) {
   );
 }
 
+/** Everything the old hero showed, as one list behind the Details tap. */
+function heroFields(item: SetterQueueItem): Field[] {
+  const { contact, submission, opportunity } = item;
+  const prior = priorRelationship(dataset, opportunity);
+  const fields: Field[] = [];
+  if (item.reason) fields.push({ label: "Why now", value: item.reason });
+  if (submission) fields.push({ label: "Request", value: <span className="italic text-fg-muted">&ldquo;{submission.requestText}&rdquo;</span> });
+  if (contact.organizationName) fields.push({ label: "Organization", value: contact.organizationName });
+  fields.push({ label: "Source", value: sourceLabel(submission?.source) });
+  if (submission) fields.push({ label: "Received", value: formatRelativeTime(submission.receivedAt, NOW) });
+  fields.push({ label: "Phone consent", value: CONSENT_WORD[contact.consent.phone] });
+  fields.push({ label: "SMS consent", value: CONSENT_WORD[contact.consent.sms] });
+  fields.push({ label: "Email consent", value: CONSENT_WORD[contact.consent.email] });
+  if (contact.preferredLanguage && contact.preferredLanguage !== "en") fields.push({ label: "Language", value: languageLabel(contact.preferredLanguage) });
+  if (prior) fields.push({ label: "History", value: prior });
+  return fields;
+}
+
 function replyChannel(contact: Contact): string {
   if (contact.consent.sms === "granted") return "SMS";
   if (contact.consent.email === "granted") return "email";
   return "phone";
+}
+
+/** One queue row: avatar, name, one muted line, one right-aligned value. Nothing else. */
+function QueueRow({ item, active, onClick }: { item: SetterQueueItem; active?: boolean; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} aria-current={active ? "true" : undefined} className={cn("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-hover motion-reduce:transition-none", active && "bg-accent-soft")}>
+      <span className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sunken text-[12px] font-semibold text-fg">{initials(item.contact.displayName)}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[15px] font-medium text-fg">{item.contact.displayName}</span>
+        <span className="block truncate text-[12px] text-fg-muted">{item.short}</span>
+      </span>
+      <span className="tabular shrink-0 text-[13px] text-fg-subtle">{item.when}</span>
+    </button>
+  );
 }
 
 function RadioRow({ checked, onClick, label }: { checked: boolean; onClick: () => void; label: string }) {
@@ -468,30 +485,13 @@ function RadioRow({ checked, onClick, label }: { checked: boolean; onClick: () =
   );
 }
 
-function Stat({ value, label }: { value: number; label: string }) {
-  return (
-    <div className="flex flex-col items-center">
-      <span className="text-[17px] font-semibold leading-none text-fg">{formatCount(value)}</span>
-      <span className="mt-1 text-[11px] text-fg-subtle">{label}</span>
-    </div>
-  );
-}
-
-function Divider() {
-  return <span aria-hidden className="h-7 w-px bg-line" />;
-}
-
 function StoppedList({ items }: { items: ReturnType<typeof buildSetterQueue>["stopped"] }) {
-  if (items.length === 0) return null;
+  if (items.length === 0) return <p className="text-[13px] text-fg-subtle">Nobody stopped</p>;
   return (
-    <Surface padding="none" as="section" aria-label="Stopped">
-      <div className="section-label flex items-center gap-1.5 px-4 pt-3">
-        <Lock size={11} weight="bold" aria-hidden />
-        Stopped
-      </div>
+    <section aria-label="Stopped">
       <ul className="divide-y divide-line">
         {items.map((s) => (
-          <li key={s.opportunity.opportunityId} className="flex items-center gap-3 px-4 py-3">
+          <li key={s.opportunity.opportunityId} className="flex items-center gap-3 py-3">
             <span className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sunken text-fg-subtle">
               <Lock size={14} weight="bold" aria-hidden />
             </span>
@@ -502,38 +502,21 @@ function StoppedList({ items }: { items: ReturnType<typeof buildSetterQueue>["st
           </li>
         ))}
       </ul>
-    </Surface>
+    </section>
   );
 }
 
-function HeroIdle({ item, expanded, onToggle }: { item: SetterQueueItem; expanded: boolean; onToggle: () => void }) {
-  const { contact, submission, opportunity } = item;
-  const prior = priorRelationship(dataset, opportunity);
+function HeroIdle({ item, onDetails }: { item: SetterQueueItem; onDetails: () => void }) {
+  const { contact } = item;
   return (
-    <div className="flex flex-col gap-3">
-      <div>
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
         <h2 className="text-[26px] font-semibold leading-tight tracking-tight text-fg">{contact.displayName}</h2>
-        <div className="mt-0.5 truncate text-[12px] text-fg-subtle">
-          {contact.organizationName ? `${contact.organizationName}, ` : ""}
-          {sourceLabel(submission?.source)}
-          {submission ? `, ${formatRelativeTime(submission.receivedAt, NOW)}` : ""}
-        </div>
+        <div className="mt-1 line-clamp-2 text-[14px] leading-snug text-fg-muted">{item.reason || contact.organizationName || sourceLabel(item.submission?.source)}</div>
       </div>
-      {submission ? (
-        <button type="button" onClick={onToggle} aria-expanded={expanded} className={cn("text-left text-[14px] italic leading-snug text-fg-muted", expanded ? "" : "line-clamp-1")}>
-          &ldquo;{submission.requestText}&rdquo;
-        </button>
-      ) : null}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <ConsentChip channel="Phone" state={contact.consent.phone} icon={Phone} />
-        <ConsentChip channel="SMS" state={contact.consent.sms} icon={ChatText} />
-        {contact.preferredLanguage && contact.preferredLanguage !== "en" ? <span className="chip text-fg">{languageLabel(contact.preferredLanguage)}</span> : null}
-        {prior ? <span className="chip border-dashed text-fg-muted">{prior}</span> : null}
-      </div>
-      <div className="flex items-center gap-1.5 text-[13px] text-fg-muted">
-        <Clock size={14} aria-hidden className="shrink-0 text-fg-subtle" />
-        <span className="truncate">{item.reason}</span>
-      </div>
+      <Button variant="ghost" size="sm" onClick={onDetails} leading={<Info size={14} weight="bold" />} className="-mr-2 -mt-1 shrink-0">
+        Details
+      </Button>
     </div>
   );
 }
@@ -602,6 +585,7 @@ function HeroFlow({
         </div>
       ) : null}
 
+      {/* Post-call: one word, one bar, and the dock already set to the next step. */}
       {call.phase === "summary" ? (
         <div className="flex flex-col gap-3" data-testid="postcall">
           <div className="text-[24px] font-semibold leading-none tracking-tight text-fg" data-testid="postcall-outcome">
@@ -638,23 +622,22 @@ function HeroFlow({
         </div>
       ) : null}
 
+      {/* Done: one outcome line, one muted state line, the next action. */}
       {call.phase === "done" ? (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2 text-[17px] font-semibold text-fg">
             <Check size={18} weight="bold" aria-hidden className="text-perf-strong" />
             {call.result}
           </div>
           {booking ? (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="chip text-fg">
-                <Check size={12} weight="bold" aria-hidden className="text-perf-strong" />
-                Invitation sent
-              </span>
-              <span className="chip border-dashed text-fg-muted">Customer confirmed: not yet</span>
-              {booking.supersedesInstanceId ? <span className="chip border-line text-fg-subtle">supersedes {booking.supersedesInstanceId}</span> : null}
+            <div className="flex items-center gap-1.5 text-[13px] text-fg-muted">
+              <Clock size={14} aria-hidden className="shrink-0 text-fg-subtle" />
+              <span>Invitation sent</span>
+              <span aria-hidden>·</span>
+              <span>Customer confirmed: not yet</span>
             </div>
           ) : null}
-          {call.result?.startsWith("DQ") ? <div className="text-[12px] text-fg-subtle">Stays in the assigned denominator</div> : null}
+          {call.result?.startsWith("DQ") ? <div className="text-[13px] text-fg-muted">Stays in the assigned denominator</div> : null}
           {booking || call.outcome === "meaningful_interaction" ? (
             <div className="flex gap-2">
               <Button variant="secondary" size="sm" onClick={onHandoff} leading={<UserSound size={14} weight="bold" />}>
@@ -668,10 +651,6 @@ function HeroFlow({
             </div>
           ) : null}
         </div>
-      ) : null}
-
-      {call.phase === "ringing" || call.phase === "connected" || call.phase === "reserving" ? (
-        <p className="line-clamp-2 text-[13px] italic leading-snug text-fg-muted">&ldquo;{item.submission?.requestText}&rdquo;</p>
       ) : null}
     </div>
   );

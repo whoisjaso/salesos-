@@ -15,9 +15,9 @@ test.describe("Route gating: setter", () => {
   test("/coach sends a setter to Me", async ({ page }) => {
     await page.goto("/coach");
     await expect(page).toHaveURL(/\/me$/);
-    await expect(page.getByText(/Level \d+/).first()).toBeVisible();
+    await expect(page.getByRole("region", { name: "Details" }).getByRole("button", { name: /Level/ })).toBeVisible();
     await expect(page.getByRole("button", { name: "Not you?" })).toBeVisible();
-    await expect(page.getByRole("heading", { level: 2, name: PEOPLE.setter.displayName })).toBeVisible();
+    await expect(page.getByRole("button", { name: new RegExp(`^${PEOPLE.setter.displayName}`) })).toBeVisible();
   });
 
   test("/closer and /setter both land on Today", async ({ page }) => {

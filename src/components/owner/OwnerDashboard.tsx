@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Funnel as FunnelIcon } from "@phosphor-icons/react";
-import { cn } from "@/lib/cn";
 import { formatCount } from "@/lib/format";
 import { cohortKeyId, type CohortKey, type OwnerView } from "@/lib/owner-model";
 import { Segmented } from "./Segmented";
@@ -11,7 +10,6 @@ import { CohortSheet } from "./CohortSheet";
 import { HeroTile } from "./HeroTile";
 import { FixFirst } from "./FixFirst";
 import type { CoachingOwner } from "@/domain/types";
-import { TrustLine } from "./TrustLine";
 import { MoneyView } from "./MoneyView";
 import { SourceView } from "./SourceView";
 import { useTenantData } from "@/lib/onboarding";
@@ -29,7 +27,11 @@ export interface OwnerDashboardProps {
   view: OwnerView;
 }
 
-/** Business: Now / Money / Source. Team has its own tab. */
+/**
+ * Business: Now / Money / Source. Team has its own tab. One segmented control at the top;
+ * the cohort filter lives in the hero's Details sheet and surfaces as a single icon only
+ * while a narrower cohort is on.
+ */
 export function OwnerDashboard({ view }: OwnerDashboardProps) {
   const [owners, setOwners] = useState<Record<string, CoachingOwner>>({});
   const reduce = useReducedMotion();
@@ -57,29 +59,25 @@ export function OwnerDashboard({ view }: OwnerDashboardProps) {
     <>
       <div className="mb-4 flex items-center justify-between gap-3 sm:mb-5">
         <Segmented label="View" options={VIEWS} value={tab} onChange={setTab} />
-        <button
-          type="button"
-          onClick={() => setCohortOpen(true)}
-          aria-label={`Cohort filter, ${filtered ? cohort.label : "all"}. Open.`}
-          className={cn(
-            "relative inline-grid h-8 w-8 shrink-0 place-items-center rounded-sm border bg-raised text-fg-muted transition-colors hover:bg-hover hover:text-fg motion-reduce:transition-none",
-            filtered ? "border-accent text-accent" : "border-line-strong",
-          )}
-        >
-          <FunnelIcon size={16} weight={filtered ? "fill" : "bold"} aria-hidden />
-          {filtered ? <span aria-hidden className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-accent ring-2 ring-base" /> : null}
-        </button>
+        {filtered ? (
+          <button
+            type="button"
+            onClick={() => setCohortOpen(true)}
+            aria-label={`Cohort filter, ${cohort.label}. Open.`}
+            className="relative inline-grid h-8 w-8 shrink-0 place-items-center rounded-sm border border-accent bg-raised text-accent transition-colors hover:bg-hover motion-reduce:transition-none"
+          >
+            <FunnelIcon size={16} weight="fill" aria-hidden />
+            <span aria-hidden className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-accent ring-2 ring-base" />
+          </button>
+        ) : null}
       </div>
 
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={`${tab}-${cohort.key}`} {...enter}>
           {tab === "now" ? (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] lg:items-start lg:gap-5">
-              <HeroTile economics={cohort.economics} flow={cohort.flow} cohortLabel={cohort.label} />
-              <FixFirst cards={cohort.cards} cohortLabel={cohort.label} owners={owners} onAssign={(id, o) => setOwners((prev) => ({ ...prev, [id]: o }))} />
-              <div className="lg:col-span-2">
-                <TrustLine items={view.trust} />
-              </div>
+              <HeroTile economics={cohort.economics} flow={cohort.flow} cohortLabel={cohort.label} onOpenCohort={() => setCohortOpen(true)} />
+              <FixFirst cards={cohort.cards} cohortLabel={cohort.label} owners={owners} onAssign={(id, o) => setOwners((prev) => ({ ...prev, [id]: o }))} trust={view.trust} />
             </div>
           ) : null}
           {tab === "money" ? <MoneyView economics={cohort.economics} /> : null}

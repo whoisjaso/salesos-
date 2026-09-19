@@ -19,7 +19,7 @@ export interface BottleneckCardViewProps {
   /** Client-only assignment. */
   owner: CoachingOwner;
   onAssign: (owner: CoachingOwner) => void;
-  /** Full body inline (inside the "See all" sheet). Default is the compact card with a Why sheet. */
+  /** Full body inline (inside the "See all" sheet). Default is the compact card with an Assign sheet. */
   detail?: boolean;
   /** One tag naming the pair furthest behind at this stage, side only ("Pair: Priya and Renata, setter side"). */
   pairTag?: string;
@@ -37,7 +37,7 @@ function OwnerSelect({ owner, onAssign }: { owner: CoachingOwner; onAssign: (own
         value={owner}
         onChange={(e) => onAssign(e.target.value as CoachingOwner)}
         aria-label="Assign owner function"
-        className="h-7 appearance-none rounded-sm border border-line-strong bg-raised pl-2.5 pr-7 text-[12px] font-medium text-fg hover:bg-hover"
+        className="h-9 appearance-none rounded-sm border border-line-strong bg-raised pl-3 pr-8 text-[13px] font-medium text-fg hover:bg-hover"
       >
         {OWNER_OPTIONS.map((o) => (
           <option key={o} value={o}>
@@ -45,27 +45,23 @@ function OwnerSelect({ owner, onAssign }: { owner: CoachingOwner; onAssign: (own
           </option>
         ))}
       </select>
-      <CaretDown size={11} weight="bold" aria-hidden className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-fg-muted" />
+      <CaretDown size={11} weight="bold" aria-hidden className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-muted" />
     </span>
   );
 }
 
-/** Compact: stage, verdict, one observed line, owner, Why. Detail: the whole investigation. */
-export function BottleneckCardView({ card, owner, onAssign, detail = false, pairTag, className }: BottleneckCardViewProps) {
-  const [why, setWhy] = useState(false);
-  const title = STAGE_LABEL[card.stageId] ?? card.stageId;
+/** Verdict, data state, pair tag, and the perception rates when the card carries them. */
+function Chips({ card, pairTag }: { card: BottleneckCard; pairTag?: string }) {
   const perception = perceptionGapOf(card);
-
-  const header = (
-    <div className="flex flex-col gap-1">
+  return (
+    <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="mr-auto text-[15px] font-semibold text-fg">{title}</h3>
         <StateChip state={card.verdict.state} label={card.verdict.label} />
         {card.verdict.state !== "data_state" && card.dataState !== "complete" ? <StateChip state={card.dataState} /> : null}
         {pairTag ? <span className="tag text-fg-muted">{pairTag}</span> : null}
       </div>
       {perception ? (
-        <dl className="tabular flex flex-col text-[12px] leading-snug text-fg-muted" aria-label="Verified and perceived fit rates">
+        <dl className="tabular flex gap-4 text-[12px] leading-snug text-fg-muted" aria-label="Verified and perceived fit rates">
           <div className="flex gap-1.5">
             <dt>Verified</dt>
             <dd className="font-medium text-fg">{formatPercent(perception.verified.value, { digits: 0 })}</dd>
@@ -78,11 +74,24 @@ export function BottleneckCardView({ card, owner, onAssign, detail = false, pair
       ) : null}
     </div>
   );
+}
+
+/**
+ * Compact: title, one plain line, Assign. The Assign sheet holds the owner, the verdict and
+ * data state, and Why (observed, comparator, explanations, investigation, scenario).
+ * Detail: the whole investigation inline.
+ */
+export function BottleneckCardView({ card, owner, onAssign, detail = false, pairTag, className }: BottleneckCardViewProps) {
+  const [open, setOpen] = useState(false);
+  const title = STAGE_LABEL[card.stageId] ?? card.stageId;
 
   if (detail) {
     return (
       <Surface as="article" state={card.verdict.state} padding="md" className={cn("flex flex-col gap-4", className)}>
-        {header}
+        <div className="flex flex-col gap-2">
+          <h3 className="text-[15px] font-semibold text-fg">{title}</h3>
+          <Chips card={card} pairTag={pairTag} />
+        </div>
         <Body card={card} />
         <div className="flex items-center justify-between gap-3 border-t border-line pt-3 text-[12px] text-fg-subtle">
           <span>Owner</span>
@@ -95,19 +104,26 @@ export function BottleneckCardView({ card, owner, onAssign, detail = false, pair
   return (
     <>
       <Surface as="article" state={card.verdict.state} padding="md" className={cn("flex flex-col gap-3", className)}>
-        {header}
-        <p className="tabular truncate text-[13px] text-fg" title={card.observed}>
+        <h3 className="text-[15px] font-semibold text-fg">{title}</h3>
+        <p className="tabular truncate text-[13px] text-fg-muted" title={card.observed}>
           {card.observed}
         </p>
-        <div className="flex items-center justify-between gap-3">
-          <OwnerSelect owner={owner} onAssign={onAssign} />
-          <Button variant="ghost" size="sm" onClick={() => setWhy(true)} className="-mr-2">
-            Why
-          </Button>
-        </div>
+        <Button size="md" onClick={() => setOpen(true)} className="w-full">
+          Assign
+        </Button>
       </Surface>
-      <Sheet open={why} onClose={() => setWhy(false)} title={title} description={card.verdict.label} width={480}>
-        <Body card={card} />
+      <Sheet open={open} onClose={() => setOpen(false)} title={title} description={card.verdict.label} width={480}>
+        <div className="flex flex-col gap-5">
+          <Chips card={card} pairTag={pairTag} />
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[13px] font-medium text-fg">Owner</span>
+            <OwnerSelect owner={owner} onAssign={onAssign} />
+          </div>
+          <div className="flex flex-col gap-3 border-t border-line pt-4">
+            <h3 className="text-[13px] font-medium text-fg">Why</h3>
+            <Body card={card} />
+          </div>
+        </div>
       </Sheet>
     </>
   );

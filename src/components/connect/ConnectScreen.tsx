@@ -6,12 +6,11 @@ import { useRouter } from "next/navigation";
 import { CaretRight, UploadSimple } from "@phosphor-icons/react";
 import { CATEGORY_LABEL, PROVIDERS, providerById, disconnect, type IntegrationProvider, type ProviderConnection } from "@/domain/integrations";
 import { useSession } from "@/lib/session";
-import { formatCount } from "@/lib/format";
 import { Surface } from "@/components/ui/Surface";
 import { LogoTile } from "./LogoTile";
 import { ConnectSheet } from "./ConnectSheet";
-import { DetailSheet, TONE_DOT, TONE_LABEL } from "./DetailSheet";
-import { connectedCount, isConnected, leadsLast7d, POPULAR, seedConnections, toneOf, type ConnectionMap } from "./connect-model";
+import { DetailSheet } from "./DetailSheet";
+import { isConnected, POPULAR, seedConnections, type ConnectionMap } from "./connect-model";
 
 const CATEGORY_ORDER = Object.keys(CATEGORY_LABEL) as IntegrationProvider["category"][];
 
@@ -33,6 +32,10 @@ export function ConnectScreen() {
   return <ConnectBody />;
 }
 
+/**
+ * Logos are the list. A tile or row carries a name and nothing else; counts, health and
+ * setup live in the source's own sheet.
+ */
 function ConnectBody() {
   const [map, setMap] = useState<ConnectionMap>(seedConnections);
   const [connectId, setConnectId] = useState<string | null>(null);
@@ -60,19 +63,13 @@ function ConnectBody() {
       return { ...m, [providerId]: { conn: disconnect(c.conn) } };
     });
 
-  const count = connectedCount(map);
-  const leads = leadsLast7d(map);
   const connectP = connectId ? providerById[connectId] : null;
   const detailP = detailId ? providerById[detailId] : null;
 
   return (
     <div className="mx-auto flex w-full max-w-[720px] flex-col gap-6">
-      <header className="flex items-baseline justify-between gap-3 px-1">
+      <header className="px-1">
         <h1 className="text-[20px] font-semibold leading-none tracking-tight text-fg">Connect</h1>
-        <p className="tabular flex items-center gap-2 text-[12px] text-fg-subtle">
-          <span>{formatCount(count)} connected</span>
-          <span>{formatCount(leads)} leads, 7 days</span>
-        </p>
       </header>
 
       <section aria-label="Move in your data">
@@ -81,10 +78,7 @@ function ConnectBody() {
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-accent-soft text-accent">
               <UploadSimple size={20} weight="bold" aria-hidden />
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[15px] font-medium leading-tight text-fg">Import</span>
-              <span className="mt-0.5 block truncate text-[12px] text-fg-subtle">CSV, Excel, or your old CRM</span>
-            </span>
+            <span className="min-w-0 flex-1 truncate text-[15px] font-medium leading-tight text-fg">Import</span>
             <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
           </Link>
         </Surface>
@@ -92,33 +86,18 @@ function ConnectBody() {
 
       {connected.length ? (
         <section aria-label="Connected" className="flex flex-col gap-2">
-          <div className="flex items-baseline justify-between px-1">
-            <h2 className={LABEL}>Connected</h2>
-            <span className="text-[12px] text-fg-subtle">Leads, 7 days</span>
-          </div>
+          <h2 className={`px-1 ${LABEL}`}>Connected</h2>
           <Surface padding="none">
             <ul className="divide-y divide-line">
-              {connected.map((p) => {
-                const c = map[p.providerId];
-                const tone = toneOf(c);
-                return (
-                  <li key={p.providerId}>
-                    <button type="button" onClick={() => setDetailId(p.providerId)} className={ROW}>
-                      <LogoTile p={p} size={40} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[15px] font-medium leading-tight text-fg">{p.name}</span>
-                        <span className="mt-0.5 block truncate text-[12px] text-fg-subtle">{c.conn.accountLabel}</span>
-                      </span>
-                      <span className="flex shrink-0 items-center gap-2">
-                        <span className="tabular text-[15px] font-semibold text-fg">{c.health ? formatCount(c.health.receivedLast7d) : "New"}</span>
-                        <span aria-hidden className={`h-2 w-2 rounded-full ${TONE_DOT[tone]}`} />
-                        <span className="sr-only">{TONE_LABEL[tone]}</span>
-                      </span>
-                      <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
-                    </button>
-                  </li>
-                );
-              })}
+              {connected.map((p) => (
+                <li key={p.providerId}>
+                  <button type="button" onClick={() => setDetailId(p.providerId)} className={ROW}>
+                    <LogoTile p={p} size={40} />
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-medium leading-tight text-fg">{p.name}</span>
+                    <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
+                  </button>
+                </li>
+              ))}
             </ul>
           </Surface>
         </section>
@@ -151,10 +130,7 @@ function ConnectBody() {
                   <li key={p.providerId}>
                     <button type="button" onClick={() => setConnectId(p.providerId)} className={ROW}>
                       <LogoTile p={p} size={40} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[15px] font-medium leading-tight text-fg">{p.name}</span>
-                        <span className="mt-0.5 block truncate text-[12px] text-fg-subtle">{p.oneLiner}</span>
-                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[15px] font-medium leading-tight text-fg">{p.name}</span>
                       <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
                     </button>
                   </li>

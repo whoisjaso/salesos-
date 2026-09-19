@@ -117,31 +117,38 @@ test.describe("Setter: Tomasz", () => {
     await expect(page.getByText("Customer confirmed", { exact: true })).toHaveCount(0);
     await expect(dock(page)).toHaveText("Next");
 
-    // Handoff brief carries provenance on every line.
+    // Handoff opens on the problem in their words and the two actions. No provenance tag on the first view.
     await page.getByRole("button", { name: "Handoff brief" }).click();
     const handoff = sheet(page, "Handoff");
     await expect(handoff).toBeVisible();
     await expect(handoff).toContainText("Desmond");
-    await expect(handoff.getByRole("heading", { name: "Problem, their words" })).toBeVisible();
-    await expect(handoff.getByText("Customer-stated").first()).toBeVisible();
-    await expect(handoff.getByText("Verified").first()).toBeVisible();
+    await expect(handoff.getByText(/^(Customer-stated|Verified|AI-proposed)$/)).toHaveCount(0);
+
+    // Details carries provenance on every line.
+    await handoff.getByTestId("handoff-details-row").click();
+    const details = sheet(page, "Details");
+    await expect(details).toBeVisible();
+    await expect(details.getByRole("heading", { name: "Problem, their words" })).toBeVisible();
+    await expect(details.getByText("Customer-stated").first()).toBeVisible();
+    await expect(details.getByText("Verified").first()).toBeVisible();
     // Every line in every section carries exactly one provenance tag.
-    const provenanceSections = handoff.locator("section").filter({ hasNot: page.getByRole("heading", { name: "Missing", exact: true }) });
+    const provenanceSections = details.locator("section").filter({ hasNot: page.getByRole("heading", { name: "Missing", exact: true }) });
     for (const line of await provenanceSections.locator("ul > li").all()) {
       await expect(line.locator("span").filter({ hasText: /^(Customer-stated|Verified|AI-proposed)$/ })).toHaveCount(1);
     }
     // AI-proposed appears only where the model actually proposed something (a lens or an unconfirmed
     // observed preference). Desmond's profile has neither, so its absence is the correct output.
-    const lens = handoff.getByText("Coaching lens (hypothesis)");
+    const lens = details.getByText("Coaching lens (hypothesis)");
     if (await lens.count()) {
-      await lens.click();
-      await expect(handoff.getByText("AI-proposed").first()).toBeVisible();
+      await expect(details.getByText("AI-proposed").first()).toBeVisible();
     } else {
-      await expect(handoff.getByText("AI-proposed")).toHaveCount(0);
+      await expect(details.getByText("AI-proposed")).toHaveCount(0);
     }
-    await expect(handoff.getByRole("heading", { name: "Missing" })).toBeVisible();
+    await expect(details.getByRole("heading", { name: "Missing" })).toBeVisible();
     // The appointment just made is in the commitments.
-    await expect(handoff.getByText(/^Appointment apt_new_\d+/)).toBeVisible();
+    await expect(details.getByText(/^Appointment apt_new_\d+/)).toBeVisible();
+    await details.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(details).toHaveCount(0);
     await handoff.getByRole("button", { name: "Send to closer" }).click();
     await expect(handoff.getByText("Sent to closer")).toBeVisible();
     await closeSheet(page);
@@ -150,20 +157,51 @@ test.describe("Setter: Tomasz", () => {
 
   test("an opted-out contact is only ever under Stopped and cannot be called", async ({ page }) => {
     await page.goto("/");
-    const stopped = page.getByRole("region", { name: "Stopped" });
+    // Stopped is one row with a count; the names sit behind the tap.
+    const row = page.getByTestId("stopped-row");
+    await expect(row).toBeVisible();
+    await expect(row).toHaveText(/Stopped\s*\d+/);
+    await row.click();
+    const stopped = sheet(page, "Stopped").getByRole("region", { name: "Stopped" });
     await expect(stopped).toBeVisible();
     const cormac = stopped.getByRole("listitem").filter({ hasText: "Cormac Ferreira" });
     await expect(cormac).toHaveCount(1);
     await expect(cormac).toContainText("Opted out, all channels");
     await expect(cormac.getByRole("button")).toHaveCount(0);
+    await closeSheet(page);
 
     // Not in the queue, not in Next up, never the hero.
     await expect(page.getByRole("heading", { level: 2 }).first()).not.toContainText("Cormac");
-    await expect(page.locator('[aria-label="Next up"]').getByRole("button", { name: /Cormac/ })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Next up" }).getByRole("button", { name: /Cormac/ })).toHaveCount(0);
     await page.getByRole("tab", { name: /^Queue/ }).click();
     await expect(page.getByRole("region", { name: "Queue" }).getByRole("button", { name: /Cormac/ })).toHaveCount(0);
-    await expect(page.getByRole("region", { name: "Stopped" }).getByRole("listitem").filter({ hasText: "Cormac Ferreira" })).toHaveCount(1);
+    await expect(page.getByTestId("stopped-row")).toBeVisible();
     await expect(page.getByRole("button", { name: /Cormac/ })).toHaveCount(0);
+  });
+
+  test("the hero is a name, one line and one action; the rest is behind Details and Today", async ({ page }) => {
+    await page.goto("/");
+    // No consent chips, no quote, no stats on the screen.
+    await expect(page.locator("main").getByText(/SMS (unknown|revoked)/)).toHaveCount(0);
+    await expect(page.locator("main").getByText("Dials", { exact: true })).toHaveCount(0);
+    await expect(page.locator("main").getByText("Two-way")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Details" }).click();
+    const details = sheet(page, "Details");
+    await expect(details).toBeVisible();
+    for (const label of ["Source", "Phone consent", "SMS consent"]) {
+      await expect(details.getByText(label, { exact: true })).toBeVisible();
+    }
+    await closeSheet(page);
+
+    const today = page.getByTestId("today-row");
+    await expect(today).toHaveText(/Today\s*\d+ dials/);
+    await today.click();
+    const todaySheet = sheet(page, "Today");
+    for (const label of ["Dials", "Two-way", "Booked"]) {
+      await expect(todaySheet.getByText(label, { exact: true })).toBeVisible();
+    }
+    await closeSheet(page);
   });
 
   test("the hero never swaps under a live call", async ({ page }) => {

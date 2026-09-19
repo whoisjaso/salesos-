@@ -140,7 +140,6 @@ export function CreateBusiness({ identity, onCancel }: CreateBusinessProps) {
                     </select>
                   </div>
                 </div>
-                <p className="text-[12px] text-fg-subtle">Money is reported in this currency. Reps join by invite.</p>
                 <footer className="mt-2 flex items-center gap-2">
                   {onCancel ? (
                     <Button variant="ghost" size="lg" onClick={onCancel}>
@@ -202,7 +201,7 @@ export function CreateBusiness({ identity, onCancel }: CreateBusinessProps) {
                       </button>
                     ))}
                   </div>
-                  <p className="mt-2 text-[12px] text-fg-subtle">{ACCENT_WORD[accent]}. Tints the business mark.</p>
+                  <p className="mt-2 text-[12px] text-fg-subtle">{ACCENT_WORD[accent]}</p>
                 </div>
                 <footer className="mt-2 flex items-center gap-2">
                   <span className="flex-1" />

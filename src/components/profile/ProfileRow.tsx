@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CaretRight, PencilSimple } from "@phosphor-icons/react";
 import { Avatar } from "@/components/ui/Avatar";
+import { DetailsRow } from "@/components/ui/DetailsRow";
 import { Sheet } from "@/components/ui/Sheet";
 import { useProfiles } from "@/lib/profiles";
 import { useSession } from "@/lib/session";
@@ -39,22 +40,19 @@ export function ProfileRow({ userId, className }: ProfileRowProps) {
   );
 }
 
-/** Opens the session user's profile in edit mode inside a sheet. For MeScreen. */
+/** Opens the session user's profile in edit mode inside a sheet. A DetailsRow: the caller groups it in a Surface. */
 export function EditProfileButton({ className }: { className?: string }) {
   const { session } = useSession();
   const [open, setOpen] = useState(false);
   if (!session) return null;
   return (
     <>
-      <button
-        type="button"
+      <DetailsRow
+        label="Edit profile"
+        leading={<PencilSimple size={18} weight="regular" aria-hidden className="text-fg-subtle" />}
         onClick={() => setOpen(true)}
-        className={`surface flex h-14 w-full items-center gap-3 px-4 text-left transition-colors hover:bg-hover motion-reduce:transition-none ${className ?? ""}`}
-      >
-        <PencilSimple size={18} weight="regular" aria-hidden className="shrink-0 text-accent" />
-        <span className="flex-1 text-[15px] font-medium text-fg">Edit profile</span>
-        <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
-      </button>
+        className={className}
+      />
       <Sheet open={open} onClose={() => setOpen(false)} title="Edit profile" width={420}>
         {open ? <ProfileSetup userId={session.userId} mode="edit" onDone={() => setOpen(false)} onCancel={() => setOpen(false)} /> : null}
       </Sheet>
