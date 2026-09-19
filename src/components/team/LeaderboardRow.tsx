@@ -19,9 +19,11 @@ import {
   formatMoney,
   formatMoneyMinor,
 } from "@/lib/format";
-import { initials, movementOf, rowRole } from "@/lib/team-data";
+import { movementOf, rowRole } from "@/lib/team-data";
+import { Avatar } from "@/components/ui/Avatar";
 import { TierBadge } from "@/components/cash/TierBadge";
 import { seasonTierFor } from "@/components/cash/tier-lookup";
+import { useRepCard } from "@/components/profile/RepCardSheet";
 import { MiniFunnel } from "./MiniFunnel";
 
 export interface LeaderboardRowProps {
@@ -60,6 +62,7 @@ export function LeaderboardRow({
 }: LeaderboardRowProps) {
   const [open, setOpen] = useState(false);
   const reduce = useReducedMotion();
+  const { openCard } = useRepCard();
   const currency = row.revenuePerLead.currency ?? row.totalRevenue.currency;
   const panelId = `row-${row.userId}-${row.role}-detail`;
   const move = movementOf(row);
@@ -71,28 +74,25 @@ export function LeaderboardRow({
       layout={!reduce}
       className="border-b border-line last:border-b-0"
     >
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => setOpen((v) => !v)}
-        className="flex min-h-16 w-full items-center gap-3 py-2.5 text-left hover:bg-hover"
-      >
+      <div className="flex min-h-16 w-full items-center gap-3">
         {row.rank !== null ? (
           <span className="tabular w-5 shrink-0 text-right text-[13px] font-medium text-fg-subtle">
             {row.rank}
           </span>
         ) : null}
-        <span
-          aria-hidden
-          className={cn(
-            "inline-grid h-9 w-9 shrink-0 place-items-center rounded-full text-[12.5px] font-semibold",
-            isMe ? "bg-accent text-accent-fg" : "bg-sunken text-fg-muted",
-          )}
-        >
-          {initials(row.displayName)}
-        </span>
-
+        <Avatar
+          userId={row.userId}
+          size={40}
+          onOpenCard={openCard}
+          className={cn(isMe && "ring-2 ring-accent ring-offset-2 ring-offset-raised")}
+        />
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((v) => !v)}
+        className="flex min-h-16 min-w-0 flex-1 items-center gap-3 py-2.5 text-left hover:bg-hover"
+      >
         <span className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
           <span className="truncate text-[15px] font-medium leading-tight text-fg">
             {row.displayName}
@@ -161,6 +161,7 @@ export function LeaderboardRow({
           ) : null}
         </span>
       </button>
+      </div>
 
       <AnimatePresence initial={false}>
         {open ? (

@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { useSession } from "@/lib/session";
 import { MetricDefinitionProvider } from "@/components/metrics/MetricDefinitionProvider";
+import { ProfilesProvider } from "@/lib/profiles";
+import { RepCardProvider } from "@/components/profile/RepCardSheet";
 import { navFor, isActivePath } from "./nav";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -19,6 +21,16 @@ export interface AppShellProps {
  * Signed out: no chrome, the page is the sign-in screen.
  */
 export function AppShell({ tenantName = "Obavia", children }: AppShellProps) {
+  return (
+    <ProfilesProvider>
+      <RepCardProvider>
+        <ShellFrame tenantName={tenantName}>{children}</ShellFrame>
+      </RepCardProvider>
+    </ProfilesProvider>
+  );
+}
+
+function ShellFrame({ tenantName, children }: { tenantName: string; children: ReactNode }) {
   const pathname = usePathname();
   const { session } = useSession();
   const items = session ? navFor(session.role) : [];

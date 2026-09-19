@@ -8,12 +8,15 @@ import { SEED_CONNECTED_COUNT } from "@/components/connect/connect-model";
 import type { SopModule } from "@/content/sops";
 import type { CoachingRecommendation } from "@/domain/types";
 import { RulesCoachingEngine } from "@/domain/coaching";
-import { cashRace, commissionSummary, recentCashDrops, tierFor } from "@/domain/cashTiers";
+import { cashRace, commissionPolicyFor, commissionSummary, recentCashDrops, tierFor, tierPolicyFor } from "@/domain/cashTiers";
 import { computeMetric } from "@/domain/metrics";
-import { obaviaDataset, NOW } from "@/fixtures/obavia";
+import { obaviaCommissionPolicies, obaviaDataset, obaviaDatasetWithPairs, obaviaPairs, NOW } from "@/fixtures/obavia";
 import { useSession } from "@/lib/session";
 import { formatCount, formatMoneyMinor } from "@/lib/format";
-import { OWNER_LABEL, type RecommendationUiState } from "@/lib/team-data";
+import { buildPairView, OWNER_LABEL, pairForRep, type PairView, type RecommendationUiState } from "@/lib/team-data";
+import { DEFAULT_LEADERBOARD_POLICY } from "@/domain/leaderboard";
+import { PairSheet } from "@/components/pairs/PairSheet";
+import { PartnerCard } from "@/components/pairs/PartnerCard";
 import { Sheet } from "@/components/ui/Sheet";
 import { StateChip } from "@/components/ui/StateChip";
 import { Surface } from "@/components/ui/Surface";
@@ -29,6 +32,16 @@ import { WhySheet } from "@/components/coach/WhySheet";
 import { PlaybooksView } from "@/components/playbooks/PlaybooksView";
 
 const dataset = obaviaDataset;
+
+// TODO(profile): mount `ProfileRow` and `EditProfileButton` from "@/components/profile"
+// at the top of this screen once that module lands (another agent is creating it).
+// Not imported yet because src/components/profile does not exist in this tree.
+
+/** Hypothetical per-role rates for the pair sheet's commission lines (D06). */
+const PAIR_RATES = {
+  setter: commissionPolicyFor(obaviaCommissionPolicies, "setter")?.ratePercent,
+  closer: commissionPolicyFor(obaviaCommissionPolicies, "closer")?.ratePercent,
+};
 
 export interface MeScreenProps {
   data: TodayData;
@@ -93,8 +106,15 @@ function RepMe({ userId, role, data }: { userId: string; role: "setter" | "close
   const m19 = useMemo(() => computeMetric("M19", dataset, { userId, role }, NOW), [userId, role]);
   const currency = m19.currency ?? "USD";
   const season = useMemo(() => ({ from: data.season.from, to: data.season.to }), [data.season.from, data.season.to]);
-  const summary = useMemo(() => commissionSummary(dataset, userId, season, NOW), [userId, season]);
-  const race = useMemo(() => cashRace(dataset, season), [season]);
+  // Role-correct money: the rep's own tier bracket, race, and commission rate all follow the session role.
+  const tierPolicy = useMemo(() => tierPolicyFor(role), [role]);
+  const summary = useMemo(() => commissionSummary(dataset, userId, season, NOW, obaviaCommissionPolicies), [userId, season]);
+  const race = useMemo(() => cashRace(dataset, season, role, tierPolicy), [season, role, tierPolicy]);
+  const pairView = useMemo<PairView | null>(() => {
+    const pair = pairForRep(obaviaDatasetWithPairs, obaviaPairs, userId, NOW);
+    return pair ? buildPairView(obaviaDatasetWithPairs, obaviaPairs, pair, season, NOW, { minMaturedSample: DEFAULT_LEADERBOARD_POLICY.minMaturedSample, policies: obaviaCommissionPolicies }) : null;
+  }, [userId, season]);
+  const [pairOpen, setPairOpen] = useState(false);
   const drops = useMemo(() => {
     const contacts = new Map(dataset.contacts.map((c) => [c.contactId, c]));
     const opps = new Map(dataset.opportunities.map((o) => [o.opportunityId, o]));
@@ -107,10 +127,11 @@ function RepMe({ userId, role, data }: { userId: string; role: "setter" | "close
 
   return (
     <>
-      <CashHero summary={summary} />
+      <CashHero summary={summary} policy={tierPolicy} />
       {model ? <Hero model={model} /> : null}
+      <PartnerCard view={pairView} meId={userId} onOpen={() => setPairOpen(true)} />
       <CashRace entries={race} meId={userId} seasonName={seasonName} currency={summary.currency} />
-      <RecentDrops drops={drops} tier={tierFor(summary.totalMinor)} now={NOW} currency={summary.currency} />
+      <RecentDrops drops={drops} tier={tierFor(summary.totalMinor, tierPolicy)} now={NOW} currency={summary.currency} />
       {model ? <OneNumber model={model} seasonLabel={data.season.label} /> : null}
       {rec && metric ? <HeroCard rec={rec} metric={metric} state={state} onState={setState} /> : null}
       <Surface padding="md" className="flex items-start justify-between gap-3">
@@ -121,10 +142,11 @@ function RepMe({ userId, role, data }: { userId: string; role: "setter" | "close
             {formatMoneyMinor(m19.numerator, currency)} over {formatCount(m19.denominator)} attended
           </div>
         </div>
-        {dataset.commissionPolicy.hypothetical ? (
+        {summary.hypothetical ? (
           <span className="inline-flex h-6 shrink-0 items-center rounded-sm border border-dashed border-line-strong px-2 text-[12px] font-medium text-fg-muted">Hypothetical policy</span>
         ) : null}
       </Surface>
+      <PairSheet open={pairOpen} onClose={() => setPairOpen(false)} view={pairView} viewer={{ role, userId }} rates={PAIR_RATES} />
     </>
   );
 }

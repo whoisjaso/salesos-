@@ -1,4 +1,4 @@
-import { test, expect, PEOPLE, tabLabels } from "./fixtures";
+import { test, expect, PEOPLE, closeSheet, tabLabels } from "./fixtures";
 
 test.describe("Team and Me: Renata", () => {
   test.use({ person: PEOPLE.closerRenata });
@@ -71,6 +71,36 @@ test.describe("Team and Me: Renata", () => {
     await expect(row.getByText(/^\d+ of \d+$/)).toBeVisible();
     await row.getByRole("button", { name: "Request correction" }).click();
     await expect(row.getByText("Sent for review")).toBeVisible();
+  });
+
+  test("Pairs segment lists pair cards with a chosen-by tag; a card opens the pair sheet with the handoff", async ({ page }) => {
+    await page.goto("/team");
+    await page.getByRole("radio", { name: "Pairs" }).click();
+    await expect(page.getByRole("radio", { name: "Pairs" })).toHaveAttribute("aria-checked", "true");
+    // Pairs are a separate board: the individual role switch is gone.
+    await expect(page.getByRole("radiogroup", { name: "Role" })).toHaveCount(0);
+
+    const pairs = page.getByRole("list", { name: "Pairs" });
+    const cards = pairs.getByRole("listitem");
+    expect(await cards.count()).toBeGreaterThanOrEqual(1);
+    const first = cards.first();
+    await expect(first.getByText(/^(Owner|Closer|Setter) picked$/)).toBeVisible();
+    await expect(first.getByText("Net collected cash")).toBeVisible();
+    await expect(first.getByRole("img", { name: /^Pair bar: / })).toBeAttached();
+
+    // Renata's own pair: she sees her commission line, never the setter's.
+    const mine = cards.filter({ hasText: "Priya and Renata" });
+    await expect(mine).toHaveCount(1);
+    await mine.getByRole("button", { name: /open pair$/ }).click();
+    const sheet = page.getByRole("dialog");
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByText("Handoff", { exact: true })).toBeVisible();
+    await expect(sheet.getByText(/^Accepted \d+ of \d+$/)).toBeVisible();
+    await expect(sheet.getByRole("region", { name: "Setter side" })).toBeVisible();
+    await expect(sheet.getByRole("region", { name: "Closer side" })).toBeVisible();
+    await expect(sheet.getByText(/^Closer commission/)).toBeVisible();
+    await expect(sheet.getByText(/^Setter commission/)).toHaveCount(0);
+    await closeSheet(page);
   });
 
   test("Me shows Level and one coaching card", async ({ page }) => {

@@ -4,7 +4,8 @@ import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Info, PauseCircle } from "@phosphor-icons/react";
-import { obaviaDataset, NOW } from "@/fixtures/obavia";
+import { obaviaCommissionPolicies, obaviaDataset, obaviaDatasetWithPairs, obaviaPairs, NOW } from "@/fixtures/obavia";
+import { commissionPolicyFor } from "@/domain/cashTiers";
 import { buildLeaderboard } from "@/domain/leaderboard";
 import { computeFunnel } from "@/domain/metrics";
 import { deriveGameEvents, levelFor, playerState, streakDays as streakOf, XP_TABLE } from "@/domain/game";
@@ -13,6 +14,7 @@ import { RulesCoachingEngine } from "@/domain/coaching";
 import { useSession } from "@/lib/session";
 import { useRouter } from "next/navigation";
 import {
+  buildPairViews,
   descriptivePolicy,
   guardrailCounts,
   missionsForRep,
@@ -24,7 +26,10 @@ import {
   seasonTitle,
   skillPathsForRep,
   stageChampions,
+  type PairView,
 } from "@/lib/team-data";
+import { PairCard } from "@/components/pairs/PairCard";
+import { PairSheet } from "@/components/pairs/PairSheet";
 import { Segmented, Switch } from "./Segmented";
 import { SeasonHero } from "./SeasonHero";
 import { LeaderboardRow } from "./LeaderboardRow";
@@ -33,11 +38,12 @@ import { MeTab } from "./MeTab";
 import { InfoSheet } from "./InfoSheet";
 import { SourceSheetList } from "./SourceSheetList";
 
-type Segment = "board" | "stages" | "missions";
+type Segment = "board" | "pairs" | "stages" | "missions";
 type RoleFilter = "closer" | "setter";
 
 const REP_SEGMENTS = [
   { id: "board" as const, label: "Board" },
+  { id: "pairs" as const, label: "Pairs" },
   { id: "stages" as const, label: "Stages" },
   { id: "missions" as const, label: "Missions" },
 ];
@@ -48,6 +54,11 @@ const ROLES = [
 ];
 
 const dataset = obaviaDataset;
+/** Hypothetical per-role rates for the pair sheet's commission lines (D06). */
+const PAIR_RATES = {
+  setter: commissionPolicyFor(obaviaCommissionPolicies, "setter")?.ratePercent,
+  closer: commissionPolicyFor(obaviaCommissionPolicies, "closer")?.ratePercent,
+};
 const reps = dataset.users.filter((u) => u.active && (u.roles.includes("setter") || u.roles.includes("closer")));
 const repIds = new Set(reps.map((r) => r.userId));
 
@@ -67,6 +78,7 @@ export function TeamView() {
   const [showSource, setShowSource] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [corrections, setCorrections] = useState<Record<string, boolean>>({});
+  const [openPair, setOpenPair] = useState<PairView | null>(null);
 
   const season = useMemo(() => seasonFor(NOW), []);
   const basePolicy = useMemo(() => seasonPolicy(NOW), []);
@@ -79,6 +91,10 @@ export function TeamView() {
   const champions = useMemo(() => stageChampions(dataset, visible, policy, NOW), [visible, policy]);
 
   const window = useMemo(() => ({ from: season.startsAt, to: season.endsAt }), [season]);
+  const pairViews = useMemo(
+    () => buildPairViews(obaviaDatasetWithPairs, obaviaPairs, window, NOW, { minMaturedSample: basePolicy.minMaturedSample, policies: obaviaCommissionPolicies }),
+    [window, basePolicy.minMaturedSample],
+  );
   const player = useMemo(() => (meId ? playerState(dataset, meId, NOW, window, []) : null), [meId, window]);
   const teamTrack = useMemo(() => {
     const events = deriveGameEvents(dataset).filter((e) => repIds.has(e.userId) && e.occurredAt <= NOW);
@@ -118,7 +134,7 @@ export function TeamView() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Segmented options={segments} value={segment} onChange={setSegment} label="View" />
           <div className="flex items-center gap-1">
-            {segment !== "missions" ? <Segmented options={ROLES} value={role} onChange={setRole} label="Role" /> : null}
+            {segment === "board" || segment === "stages" ? <Segmented options={ROLES} value={role} onChange={setRole} label="Role" /> : null}
             <button type="button" onClick={() => setInfoOpen(true)} aria-label="Rules" className="inline-grid h-8 w-8 shrink-0 place-items-center rounded-sm text-fg-muted hover:bg-hover hover:text-fg">
               <Info size={18} weight="regular" aria-hidden />
             </button>
@@ -169,6 +185,16 @@ export function TeamView() {
                   <Switch checked={showSource} onChange={setShowSource} label="Source sheet" className="text-[12px]" />
                 </div>
               </div>
+            ) : segment === "pairs" ? (
+              pairViews.length > 0 ? (
+                <ol className="flex flex-col gap-3" aria-label="Pairs">
+                  {pairViews.map((v) => (
+                    <PairCard key={v.pair.pairId} view={v} meId={meId} onOpen={setOpenPair} />
+                  ))}
+                </ol>
+              ) : (
+                <div className="surface px-4 py-6 text-center text-[13px] text-fg-muted">No active pairs</div>
+              )
             ) : segment === "stages" ? (
               <StageChampions champions={champions} />
             ) : player && milestone ? (
@@ -179,6 +205,7 @@ export function TeamView() {
       </div>
 
       <InfoSheet open={infoOpen} onClose={() => setInfoOpen(false)} policy={basePolicy} guardrails={guardrails} />
+      {session ? <PairSheet open={openPair !== null} onClose={() => setOpenPair(null)} view={openPair} viewer={{ role: session.role, userId: session.userId }} rates={PAIR_RATES} /> : null}
     </>
   );
 }

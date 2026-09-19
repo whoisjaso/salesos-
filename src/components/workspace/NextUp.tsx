@@ -2,6 +2,7 @@
 
 import type { ComponentType } from "react";
 import type { IconProps } from "@phosphor-icons/react";
+import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/cn";
 
 export interface NextUpChip {
@@ -48,7 +49,7 @@ export function NextUp({ items, activeId, onSelect }: NextUpProps) {
               active ? "border-accent bg-accent-soft" : "border-line bg-raised hover:bg-hover",
             )}
           >
-            <span className="inline-grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sunken text-[11px] font-semibold text-fg">{initials(it.name)}</span>
+            <Avatar name={it.name} size={32} />
             <span className="min-w-0">
               <span className="block max-w-[96px] truncate text-[13px] font-medium leading-tight text-fg">{it.name.split(" ")[0]}</span>
               <span className="flex items-center gap-1 text-[11px] leading-tight text-fg-subtle">

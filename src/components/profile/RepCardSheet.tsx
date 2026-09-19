@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { CaretRight, Flame, PencilSimple } from "@phosphor-icons/react";
 import { NOW, obaviaDataset, obaviaPairs } from "@/fixtures/obavia";
 import { Avatar } from "@/components/ui/Avatar";
@@ -54,12 +54,14 @@ export function RepCardSheet({ userId, onClose, onOpen }: RepCardSheetProps) {
   const { session } = useSession();
   const [editing, setEditing] = useState(false);
   const [shown, setShown] = useState<string | null>(userId);
+  const [prev, setPrev] = useState<string | null>(userId);
 
-  // Keep the last person mounted while the sheet animates out.
-  useEffect(() => {
+  // Keep the last person mounted while the sheet animates out; reset edit mode on every open or swap.
+  if (userId !== prev) {
+    setPrev(userId);
+    setEditing(false);
     if (userId) setShown(userId);
-    else setEditing(false);
-  }, [userId]);
+  }
 
   const id = userId ?? shown;
   const profile = id ? get(id) : undefined;

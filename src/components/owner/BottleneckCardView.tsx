@@ -21,6 +21,8 @@ export interface BottleneckCardViewProps {
   onAssign: (owner: CoachingOwner) => void;
   /** Full body inline (inside the "See all" sheet). Default is the compact card with a Why sheet. */
   detail?: boolean;
+  /** One tag naming the pair furthest behind at this stage, side only ("Pair: Priya and Renata, setter side"). */
+  pairTag?: string;
   className?: string;
 }
 
@@ -49,7 +51,7 @@ function OwnerSelect({ owner, onAssign }: { owner: CoachingOwner; onAssign: (own
 }
 
 /** Compact: stage, verdict, one observed line, owner, Why. Detail: the whole investigation. */
-export function BottleneckCardView({ card, owner, onAssign, detail = false, className }: BottleneckCardViewProps) {
+export function BottleneckCardView({ card, owner, onAssign, detail = false, pairTag, className }: BottleneckCardViewProps) {
   const [why, setWhy] = useState(false);
   const title = STAGE_LABEL[card.stageId] ?? card.stageId;
 
@@ -58,6 +60,7 @@ export function BottleneckCardView({ card, owner, onAssign, detail = false, clas
       <h3 className="mr-auto text-[15px] font-semibold text-fg">{title}</h3>
       <StateChip state={card.verdict.state} label={card.verdict.label} />
       {card.verdict.state !== "data_state" && card.dataState !== "complete" ? <StateChip state={card.dataState} /> : null}
+      {pairTag ? <span className="tag text-fg-muted">{pairTag}</span> : null}
     </div>
   );
 

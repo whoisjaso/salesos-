@@ -3,10 +3,11 @@
 import { Flame, HourglassMedium, PauseCircle } from "@phosphor-icons/react";
 import type { LeaderboardRow } from "@/domain/types";
 import type { LevelState } from "@/domain/game";
+import { Avatar } from "@/components/ui/Avatar";
 import { ProgressRing } from "@/components/ui/ProgressRing";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { TierBadge } from "@/components/cash/TierBadge";
 import { seasonTierFor } from "@/components/cash/tier-lookup";
+import { useRepCard } from "@/components/profile/RepCardSheet";
 import { formatCount } from "@/lib/format";
 import { rowRole } from "@/lib/team-data";
 
@@ -32,21 +33,29 @@ export function SeasonHero({ title, daysLeft, level, streakDays, pausedReasons =
   const toNext = level.xpForNextLevel === null ? null : level.xpForNextLevel - level.xp;
   const paused = pausedReasons.length > 0;
   const tier = !team && myRow ? seasonTierFor(myRow.userId, rowRole(myRow)) : undefined;
+  const { openCard } = useRepCard();
 
   return (
     <section aria-label="Season" className="surface flex items-center gap-4 p-4 sm:p-5">
-      <span className="relative shrink-0">
-        <ProgressRing value={level.progress} size={72} strokeWidth={6} label={`${team ? "Team level" : "Level"} ${level.level}, ${Math.round(level.progress * 100)}% to next`} centerText={`L${level.level}`} className="[&>span]:text-[17px] [&>span]:font-semibold" />
-        {tier ? (
-          <TierBadge tier={tier} size={24} tooltip={`${tier.label} tier, by net collected cash this season. Display only.`} className="absolute -right-1 -bottom-1 ring-2 ring-raised" />
-        ) : null}
-      </span>
+      {!team && myRow ? (
+        <Avatar
+          userId={myRow.userId}
+          size={64}
+          ring={level.progress}
+          ringLabel={`Level ${level.level}, ${Math.round(level.progress * 100)}% to next`}
+          badge={tier}
+          onOpenCard={openCard}
+        />
+      ) : (
+        <ProgressRing value={level.progress} size={72} strokeWidth={6} label={`${team ? "Team level" : "Level"} ${level.level}, ${Math.round(level.progress * 100)}% to next`} centerText={`L${level.level}`} className="shrink-0 [&>span]:text-[17px] [&>span]:font-semibold" />
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <h2 className="text-[17px] font-semibold tracking-tight text-fg">{title}</h2>
           <span className="tabular text-[12px] text-fg-subtle">{daysLeft} days left</span>
         </div>
         <div className="tabular mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-fg-muted">
+          {!team && myRow ? <span className="font-medium text-fg">Level {level.level}</span> : null}
           <span>
             {team ? "Team, " : ""}
             {formatCount(level.xp)} XP

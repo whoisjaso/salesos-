@@ -2,17 +2,19 @@
 
 import { Flame } from "@phosphor-icons/react";
 import { motion, useReducedMotion } from "motion/react";
-import { ProgressRing } from "@/components/ui/ProgressRing";
+import { Avatar } from "@/components/ui/Avatar";
 import { StateChip } from "@/components/ui/StateChip";
 import { Surface } from "@/components/ui/Surface";
+import { useRepCard } from "@/components/profile/RepCardSheet";
 import { formatCount } from "@/lib/format";
 import type { TodayModel } from "./today-model";
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
-/** Compact level row: small ring, name, level and XP to next, streak. Not a hero; the cash card is. */
+/** Compact level row: avatar with level ring, name, level and XP to next, streak. Not a hero; the cash card is. */
 export function Hero({ model }: { model: TodayModel }) {
   const reduce = useReducedMotion();
+  const { openCard } = useRepCard();
   const { track } = model;
   const toNext = track.xpForNextLevel === null ? null : track.xpForNextLevel - track.xp;
   const levelWord = model.role === "owner" ? "Team level" : "Level";
@@ -26,13 +28,12 @@ export function Hero({ model }: { model: TodayModel }) {
         transition={{ duration: 0.4, ease }}
         className="flex min-h-16 items-center gap-3 px-4 py-3"
       >
-        <ProgressRing
-          value={track.progress}
-          size={44}
-          strokeWidth={4}
-          label={`${levelWord} ${track.level}, ${Math.round(track.progress * 100)}% to next`}
-          centerText={`L${track.level}`}
-          className="shrink-0 [&>span]:text-[12px] [&>span]:font-semibold"
+        <Avatar
+          userId={model.userId}
+          size={48}
+          ring={track.progress}
+          ringLabel={`${levelWord} ${track.level}, ${Math.round(track.progress * 100)}% to next`}
+          onOpenCard={openCard}
         />
         <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <div className="min-w-0">
