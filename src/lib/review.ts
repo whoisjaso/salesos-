@@ -22,7 +22,7 @@ import {
 import { BUYER_MODE_DIMENSIONS, BUYER_MODE_LABEL, UNKNOWN_VALUE, emptyBuyerMode, isConfident, type ArchetypeRead, type BuyerMode, type BuyerModeDimension } from "@/domain/buyerMode";
 import { RulesCoachingEngine } from "@/domain/coaching";
 import { lensByName } from "@/content/lenses";
-import { MEANING_WORD, ORIGIN_WORD, reject, suggestReuse, type CitedReference } from "@/domain/references";
+import { MEANING_WORD, ORIGIN_WORD, reject, significance, suggestReuse, type CitedReference } from "@/domain/references";
 import type { Call, CallInterpretedOutcome, CoachingRecommendation, Contact, DomainEvent, Id, Opportunity, User } from "@/domain/types";
 import { NOW, obaviaDataset } from "@/fixtures/obavia";
 import { TRANSCRIPT_CALL_IDS, transcriptFor } from "@/fixtures/calls";
@@ -99,6 +99,10 @@ export interface ReferenceView {
   domain: string;
   /** Index into `transcript` of the cited span. */
   spanIndex: number;
+  /** Customer occurrences merged into this reference. */
+  occurrenceCount: number;
+  /** `significance(reference)` from src/domain/references.ts, 0..1. Cards order by it. */
+  significance: number;
 }
 
 /** The one Angle chip: a line in the prospect's own frame, under a later customer turn. */
@@ -472,6 +476,8 @@ function buildReferences(x: CallExtraction, transcript: TranscriptSpan[]): Refer
       meaningWord: MEANING_WORD[r.semantics.meaningStatus],
       domain: r.semantics.sourceDomain,
       spanIndex: indexes(transcript, r.spans)[0] ?? -1,
+      occurrenceCount: r.lifecycle.occurrenceCount,
+      significance: significance(r),
     }))
     .filter((v) => v.spanIndex >= 0);
 }

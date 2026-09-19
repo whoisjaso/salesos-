@@ -11,8 +11,8 @@ export interface TranscriptProps {
   contactName: string;
   /** spanIndex -> labels of fields that cite it. */
   citations: Map<number, string[]>;
-  /** The span a moment or coaching card jumped to. */
-  active?: number;
+  /** The span a moment or coaching card jumped to, or every span a vocabulary chip cites. */
+  active?: number | number[];
   /** The span whose citations are shown. */
   inspected?: number;
   /** The one Angle for the call, shown quietly under its customer turn. */
@@ -36,7 +36,7 @@ export function Transcript({ transcript, contactName, citations, active, inspect
         {transcript.map((s, i) => {
           const rep = s.speaker === "rep";
           const cited = citations.get(i) ?? [];
-          const isActive = active === i;
+          const isActive = Array.isArray(active) ? active.includes(i) : active === i;
           const showCites = inspected === i;
           const prev = transcript[i - 1];
           const newSpeaker = !prev || prev.speaker !== s.speaker;

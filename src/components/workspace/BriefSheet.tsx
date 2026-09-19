@@ -136,9 +136,9 @@ export function ReadBlock({ read, className }: { read: ReadLine[]; className?: s
               return (
                 <li key={r.name} className={cn("flex flex-col gap-1 py-1.5", none && "opacity-60")} data-testid="read-row" data-signal={!none}>
                   <div className="flex items-center gap-3">
-                    <span className="w-[104px] shrink-0 truncate text-[13px] text-fg">{r.label}</span>
+                    <span className="w-[92px] shrink-0 truncate text-[13px] text-fg">{r.label}</span>
                     <ReadBar percent={r.percent} />
-                    <span className="tabular w-[76px] shrink-0 text-right text-[12px] text-fg-muted">{none ? NO_SIGNAL_SHORT : `${r.percent}%, ${confidenceWordFor(r.percent / 100)}`}</span>
+                    <span className="tabular w-[96px] shrink-0 whitespace-nowrap text-right text-[12px] text-fg-muted">{none ? NO_SIGNAL_SHORT : `${r.percent}% ${confidenceWordFor(r.percent / 100)}`}</span>
                   </div>
                   {r.quotes.length > 0 ? <QuoteList quotes={r.quotes} /> : null}
                 </li>

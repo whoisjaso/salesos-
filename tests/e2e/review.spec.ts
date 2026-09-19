@@ -186,9 +186,10 @@ test.describe("Review: owner", () => {
   test("sees every call and can share a good example", async ({ page }) => {
     await page.goto("/review");
     const rows = page.getByTestId("review-row");
-    await expect(rows).toHaveCount(4);
+    // Five transcripts in src/fixtures/calls.ts: four review shapes plus the Svetlana confirmation call (call_089c).
+    await expect(rows).toHaveCount(5);
     await expect(rows.filter({ hasText: "Bartholomew Haddad" })).toHaveCount(1);
-    await expect(rows.getByTestId("stage-word")).toHaveCount(4);
+    await expect(rows.getByTestId("stage-word")).toHaveCount(5);
     await expect(page.getByText("Needs confirm")).toHaveCount(0);
 
     // The owner sees the same hero, bar, and Details as the rep.

@@ -19,6 +19,7 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/Button";
+import type { TranscriptSpan } from "@/domain/callIntelligence";
 import { ConfidenceDot, ReadBlock } from "@/components/workspace/BriefSheet";
 import { Sheet } from "@/components/ui/Sheet";
 import { Surface } from "@/components/ui/Surface";
@@ -71,7 +72,8 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
   const [disputed, setDisputed] = useState<Set<string>>(() => new Set());
   const [pinned, setPinned] = useState<Set<string>>(() => new Set());
   const [rejected, setRejected] = useState<Set<string>>(() => new Set());
-  const [active, setActive] = useState<number | undefined>(undefined);
+  /** One span after a jump, or every span a vocabulary chip cites. */
+  const [active, setActive] = useState<number | number[] | undefined>(undefined);
   const [activeStage, setActiveStage] = useState<string | undefined>(undefined);
   const [inspected, setInspected] = useState<number | undefined>(undefined);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -100,6 +102,16 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
   const jumpFromSheet = (i: number) => {
     setDetailsOpen(false);
     window.setTimeout(() => jumpTo(i), reduce ? 0 : 120);
+  };
+
+  /** Highlight every given span (a vocabulary chip), close the sheet, and scroll to the first. */
+  const selectSpans = (spans: TranscriptSpan[]) => {
+    const idx = spans.map((sp) => transcript.findIndex((t) => t.startMs === sp.startMs && t.endMs === sp.endMs)).filter((i) => i >= 0);
+    if (idx.length === 0) return;
+    setDetailsOpen(false);
+    setInspected(undefined);
+    setActive(idx);
+    window.setTimeout(() => spanRefs.current.get(idx[0])?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" }), reduce ? 0 : 120);
   };
 
   const jumpToStage = (s: StageView) => {
@@ -243,7 +255,7 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
             {moments.length > 0 ? (
               <div className="flex flex-wrap gap-1.5">
                 {moments.map((m) => (
-                  <MomentChip key={`${m.kind}:${m.spanIndex}`} moment={m} active={active === m.spanIndex} onClick={() => jumpFromSheet(m.spanIndex)} />
+                  <MomentChip key={`${m.kind}:${m.spanIndex}`} moment={m} active={Array.isArray(active) ? active.includes(m.spanIndex) : active === m.spanIndex} onClick={() => jumpFromSheet(m.spanIndex)} />
                 ))}
               </div>
             ) : (
@@ -255,6 +267,8 @@ export function ReviewCall({ review, viewer }: { review: Review; viewer: Viewer 
             <span className="section-label">Their words</span>
             <ReferenceCards
               references={review.references}
+              transcript={transcript}
+              onSelectSpans={selectSpans}
               pinned={pinned}
               rejected={rejected}
               onJump={jumpFromSheet}

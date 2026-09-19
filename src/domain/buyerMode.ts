@@ -132,7 +132,7 @@ const RULES: readonly Rule[] = [
   { dimension: "riskSensitivity", value: "Medium", confidence: 0.6, pattern: /\b(not sure (about|it|this|the)|hesitant|some concerns?|a bit (worried|concerned|nervous))\b/i },
   { dimension: "riskSensitivity", value: "Low", confidence: 0.7, pattern: /\b(not worried|i'?m not (too )?concerned|doesn'?t bother me|we'?ll figure it out|let'?s just try it|happy to try)\b/i },
   // Control orientation
-  { dimension: "controlOrientation", value: "High", confidence: 0.85, pattern: /\b(i decide|my call|my decision|i make the (call|decision|decisions)|i sign (for|off)|i'?ll decide|up to me|i run (this|the) (place|store|show)|i'?m the one who (decides|signs))\b/i },
+  { dimension: "controlOrientation", value: "High", confidence: 0.85, pattern: /\b(i decide|my call|my decision|i make the (call|decision|decisions)|i sign (for|off)|i'?ll decide|up to me|(?<!and )i run (this|the) (place|store|show)|i'?m the one who (decides|signs))\b/i },
   { dimension: "controlOrientation", value: "Low", confidence: 0.75, pattern: /\b((partner|boss|gm|owner|manager|wife|husband|board|controller) (decides|handles that|signs|makes the call|has to (approve|sign))|i don'?t sign|not my (call|decision)|have to (ask|check with|run it by)|need (his|her|their) (ok|okay|sign-?off|approval)|takes? it to my (partner|boss|owner))\b/i },
   // Detail appetite
   { dimension: "detailAppetite", value: "Low", confidence: 0.85, pattern: /\b(short version|keep it (tight|short|brief|quick)|bottom line|skip the (details|backstory|slides|slideshow)|don'?t need the (details|slideshow|slides|pitch)|just tell me|cut to the chase|high level|in a nutshell|not a pitch)\b/i },
