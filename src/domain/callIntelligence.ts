@@ -16,6 +16,7 @@
  */
 import { createEvent } from "./events";
 import { buildSystemPrompt, type LensPack } from "./lens";
+import { extractReferences, type CitedReference } from "./references";
 import type { Call, CallInterpretedOutcome, DomainEvent, FitValue, Id, ISODateTime, Opportunity, Task } from "./types";
 
 // ---------- Schema ----------
@@ -110,6 +111,11 @@ export interface CallExtraction {
   stageEvidence: Record<StageKey, TranscriptSpan[]>;
   /** At most MAX_FEEDBACK angles, each citing spans. */
   feedback: Feedback[];
+  /**
+   * The prospect's own distinctive expressions (Personal Meaning Listener, src/domain/references.ts).
+   * Each cites the customer span it was read from. Default [].
+   */
+  references: CitedReference[];
   /** The lens pack version the extraction was made through, when a model ran. */
   lensVersion?: string;
 }
@@ -200,6 +206,17 @@ export function validateExtraction(x: CallExtraction): ValidationResult {
       if (FORBIDDEN_EXTRACTION_FIELD.test(`${f?.angle ?? ""} ${f?.hint ?? ""}`) && /\$|\d+\s*%|\d{3,}/.test(`${f?.angle ?? ""} ${f?.hint ?? ""}`)) errors.push(`feedback[${i}] states a money or consent term; the model may not establish it`);
     });
   }
+  // References: the prospect's words. Each cites a span the customer spoke, and the quote must be in it.
+  if (x.references !== undefined && !Array.isArray(x.references)) errors.push("references must be an array");
+  (Array.isArray(x.references) ? x.references : []).forEach((r, i) => {
+    const expression = r?.evidence?.exactExpression;
+    if (!expression?.trim()) errors.push(`references[${i}] has no exact expression`);
+    if (!spansOk(r?.spans)) errors.push(`references[${i}] asserted without a transcript span`);
+    else {
+      if (!r.spans.every((s) => s.speaker === "customer")) errors.push(`references[${i}] cites a span the customer did not speak`);
+      if (expression?.trim() && !r.spans.some((s) => s.text.includes(expression))) errors.push(`references[${i}] quotes words that are not in its span`);
+    }
+  });
   return { ok: errors.length === 0, errors };
 }
 
@@ -211,6 +228,8 @@ export interface ExtractInput {
   transcript: TranscriptSpan[];
   /** Objective fit rule ids the offer policy asks about (SOS-13). */
   offerFitKeys: string[];
+  /** Stamped on reference identities when known. */
+  tenantId?: Id;
 }
 
 export interface CallIntelligence {
