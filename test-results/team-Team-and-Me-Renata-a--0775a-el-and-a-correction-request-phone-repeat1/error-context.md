@@ -1,0 +1,85 @@
+# Page snapshot
+
+```yaml
+- main [ref=e2]:
+  - generic [ref=e4]:
+    - region "Season" [ref=e5]:
+      - progressbar "Team level 7, 75% to next" [ref=e6]:
+        - img [ref=e7]
+        - text: L7
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - heading "September 2026" [level=2] [ref=e12]
+          - generic [ref=e13]: 13 days left
+        - generic [ref=e14]:
+          - text: Team, 2,600 XP
+          - generic [ref=e15]: · 200 to next
+          - generic [ref=e16]:
+            - img [ref=e17]
+            - text: "29"
+    - generic [ref=e19]:
+      - radiogroup "View" [ref=e20]:
+        - radio "Board" [checked] [ref=e21]
+        - radio "Stages" [ref=e22]
+        - radio "Missions" [ref=e23]
+      - generic [ref=e24]:
+        - radiogroup "Role" [ref=e25]:
+          - radio "Closers" [checked] [ref=e26]
+          - radio "Setters" [ref=e27]
+        - button "Rules" [ref=e28]:
+          - img [ref=e29]
+    - generic [ref=e32]:
+      - generic [ref=e33]:
+        - generic [ref=e34]:
+          - img [ref=e35]
+          - generic [ref=e37]: "Ranking paused: 1 unlinked payment, 4 unresolved attendances."
+        - switch "Show ranks anyway" [ref=e38]
+      - list "Board" [ref=e39]:
+        - listitem [ref=e40]:
+          - button "Renata SolísT1Lead tier 1. Compared within this tier only.Provisional12 assigned opportunities, minimum 25 for eligible rank (2 matured); 2 unresolved attendance outcome(s); consequential ranking paused; 1 unlinked payment(s) awaiting reconciliation; ranking paused$462.50Net collected cashDown on own prior period" [active] [ref=e41]:
+            - text: RS
+            - generic [ref=e42]:
+              - text: Renata Solís
+              - generic [ref=e43]:
+                - generic [ref=e44]:
+                  - generic [ref=e46]: T1
+                  - tooltip "Lead tier 1. Compared within this tier only." [ref=e47]
+                - generic [ref=e48]:
+                  - generic "Provisional" [ref=e50]:
+                    - img [ref=e51]
+                  - tooltip "12 assigned opportunities, minimum 25 for eligible rank (2 matured); 2 unresolved attendance outcome(s); consequential ranking paused; 1 unlinked payment(s) awaiting reconciliation; ranking paused" [ref=e53]
+            - generic [ref=e54]: $462.50Net collected cash
+            - generic "Down on own prior period" [ref=e55]:
+              - img [ref=e56]
+        - listitem [ref=e58]:
+          - button "Devin AchterbergT2Lead tier 2. Compared within this tier only.Provisional13 assigned opportunities, minimum 25 for eligible rank (3 matured); 1 unlinked payment(s) awaiting reconciliation; ranking paused$369.23Net collected cash" [ref=e59]:
+            - text: DA
+            - generic [ref=e60]:
+              - text: Devin Achterberg
+              - generic [ref=e61]:
+                - generic [ref=e62]:
+                  - generic [ref=e64]: T2
+                  - tooltip "Lead tier 2. Compared within this tier only." [ref=e65]
+                - generic [ref=e66]:
+                  - generic "Provisional" [ref=e68]:
+                    - img [ref=e69]
+                  - tooltip "13 assigned opportunities, minimum 25 for eligible rank (3 matured); 1 unlinked payment(s) awaiting reconciliation; ranking paused" [ref=e71]
+            - generic [ref=e72]: $369.23Net collected cash
+        - listitem [ref=e73]:
+          - button "Marcus ElleryT2Lead tier 2. Compared within this tier only.Provisional13 assigned opportunities, minimum 25 for eligible rank (3 matured); 1 unlinked payment(s) awaiting reconciliation; ranking paused$0.00Net collected cashDown on own prior period" [ref=e74]:
+            - text: ME
+            - generic [ref=e75]:
+              - text: Marcus Ellery
+              - generic [ref=e76]:
+                - generic [ref=e77]:
+                  - generic [ref=e79]: T2
+                  - tooltip "Lead tier 2. Compared within this tier only." [ref=e80]
+                - generic [ref=e81]:
+                  - generic "Provisional" [ref=e83]:
+                    - img [ref=e84]
+                  - tooltip "13 assigned opportunities, minimum 25 for eligible rank (3 matured); 1 unlinked payment(s) awaiting reconciliation; ranking paused" [ref=e86]
+            - generic [ref=e87]: $0.00Net collected cash
+            - generic "Down on own prior period" [ref=e88]:
+              - img [ref=e89]
+      - switch "Source sheet" [ref=e92]
+```
