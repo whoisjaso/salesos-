@@ -103,7 +103,7 @@ export function OneNumber({ model, seasonLabel }: { model: TodayModel; seasonLab
         onClose={() => setOpen(false)}
         title={focused ? `${focused.label}, ${formatCount(focused.count)}` : "Funnel"}
         description={model.role === "owner" ? "Whole tenant, all assigned opportunities" : `${model.firstName}, ${seasonLabel}`}
-        width={720}
+        width={1280}
       >
         <ul className="mb-5 flex flex-wrap gap-x-4 gap-y-2" aria-label="Legend">
           {model.segments.map((s) => (
