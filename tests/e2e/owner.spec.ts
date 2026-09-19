@@ -25,7 +25,7 @@ test.describe("Owner: Delphine", () => {
     // Nothing else on the first view: no basis chip, no sum over sum, no funnel tiles, no data-state chip.
     await expect(page.getByText("Sum over sum")).toHaveCount(0);
     await expect(page.getByRole("list", { name: /^Funnel stages/ })).toHaveCount(0);
-    await expect(page.locator("main").getByText("Net collected cash", { exact: true })).toHaveCount(0);
+    await expect(page.locator("main").getByText(/^\$[\d,]+ over \d+$/)).toHaveCount(0);
     await expect(page.locator("main").getByText("Partial", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /^Cohort filter/ })).toHaveCount(0);
 
@@ -174,7 +174,7 @@ test.describe("Owner: Delphine", () => {
     const def = page.getByRole("dialog");
     await expect(def).toBeVisible();
     await expect(def).toContainText("Not cash");
-    await expect(def.getByText("Descriptive")).toBeVisible();
+    await expect(def.getByText("Descriptive", { exact: true })).toBeVisible();
     await closeSheet(page);
 
     await cash.click();

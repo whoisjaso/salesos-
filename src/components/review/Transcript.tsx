@@ -28,9 +28,8 @@ export interface TranscriptProps {
 export function Transcript({ transcript, contactName, citations, active, inspected, angle, onInspect, registerRef }: TranscriptProps) {
   return (
     <Surface padding="none" as="section" aria-label="Transcript">
-      <div className="flex items-center justify-between px-4 pt-3">
+      <div className="px-4 pt-3">
         <span className="section-label">Transcript</span>
-        <span className="tabular text-[11px] text-fg-subtle">{transcript.length} turns</span>
       </div>
       <ol className="flex flex-col gap-1.5 px-3 py-3">
         {transcript.map((s, i) => {

@@ -45,7 +45,7 @@ test.describe("Route gating: owner", () => {
   test("/owner and /coach resolve to Business and Me", async ({ page }) => {
     await page.goto("/owner");
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByText("Net collected per assigned opportunity")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Net collected per assigned opportunity/ })).toBeVisible();
     await page.goto("/coach");
     await expect(page).toHaveURL(/\/me$/);
     await expect(page.getByRole("link", { name: "Connect" })).toBeVisible();

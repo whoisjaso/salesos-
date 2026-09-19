@@ -43,7 +43,8 @@ test.describe("Review: setter", () => {
     await expect(page.getByTestId("moment")).toHaveCount(0);
     await expect(page.locator("main").getByText("From transcript")).toHaveCount(0);
     await expect(page.locator("main").getByText("Not asserted")).toHaveCount(0);
-    await expect(page.locator("main").locator(".chip")).toHaveCount(1); // the one Angle
+    await expect(page.locator("main").locator(".chip")).toHaveCount(0);
+    await expect(page.getByTestId("angle-chip")).toHaveCount(1); // the one Angle, not a chip
   });
 
   test("the stage bar has four segments, percent on tap, and a tap goes to the cited span", async ({ page }) => {
