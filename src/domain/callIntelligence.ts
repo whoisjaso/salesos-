@@ -466,6 +466,9 @@ export class RuleBasedCallIntelligence implements CallIntelligence {
       feedback.push({ angle: `${unknownFit.length} fit ${unknownFit.length === 1 ? "fact" : "facts"} still unknown`, hint: `Ask about ${unknownFit.map((k) => k.replace(/_/g, " ")).join(", ")} before the next step.`, spans: evidence.contacted.slice(0, 1) });
     }
 
+    // ----- Their words: first-mention references from customer turns only. -----
+    const references = conversational ? extractReferences(spans, { tenantId: input.tenantId, conversationId: input.callId }) : [];
+
     // Unknown fit facts and an unknown next step are honest unknowns, not doubt about the
     // outcome. Uncertainty describes how sure the outcome assertion is.
     return {
@@ -485,6 +488,7 @@ export class RuleBasedCallIntelligence implements CallIntelligence {
       stageScores,
       stageEvidence,
       feedback,
+      references,
     };
   }
 }
@@ -513,6 +517,7 @@ export class StubCallIntelligence implements CallIntelligence {
       stageScores: { ...EMPTY_STAGE_SCORES },
       stageEvidence: { contacted: [], qualified: [], buying: [], bought: [] },
       feedback: [],
+      references: [],
     };
   }
 }
@@ -551,6 +556,8 @@ export const EXTRACTION_JSON_SCHEMA = {
     stageScores: { type: "object", required: STAGE_KEYS, properties: Object.fromEntries(STAGE_KEYS.map((k) => [k, { type: "number", minimum: 0, maximum: 1 }])) },
     stageEvidence: { type: "object", required: STAGE_KEYS, properties: Object.fromEntries(STAGE_KEYS.map((k) => [k, SPANS])) },
     feedback: { type: "array", maxItems: MAX_FEEDBACK, items: { type: "object", required: ["angle", "hint", "spans"], properties: { angle: { type: "string" }, hint: { type: "string" }, spans: SPANS } } },
+    /** Optional: the prospect's own expressions, each citing a customer span. Validated like every other cited field. */
+    references: { type: "array", items: { type: "object", required: ["identity", "evidence", "semantics", "lifecycle", "reuse", "spans"], properties: { spans: SPANS } } },
   },
 } as const;
 
@@ -598,6 +605,7 @@ function coerceModelOutput(raw: unknown, input: ExtractInput, modelVersion: stri
     stageScores,
     stageEvidence,
     feedback: (Array.isArray(r.feedback) ? r.feedback.slice(0, MAX_FEEDBACK) : []) as Feedback[],
+    references: (Array.isArray(r.references) ? r.references.filter(isRecord) : []) as unknown as CitedReference[],
     lensVersion,
   };
 }

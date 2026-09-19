@@ -1,9 +1,10 @@
 "use client";
 
+import { Sparkle } from "@phosphor-icons/react";
 import type { TranscriptSpan } from "@/domain/callIntelligence";
 import { Surface } from "@/components/ui/Surface";
 import { cn } from "@/lib/cn";
-import { formatClock as clock } from "@/lib/review";
+import { formatClock as clock, type Angle } from "@/lib/review";
 
 export interface TranscriptProps {
   transcript: TranscriptSpan[];
@@ -14,6 +15,8 @@ export interface TranscriptProps {
   active?: number;
   /** The span whose citations are shown. */
   inspected?: number;
+  /** The one Angle for the call, shown quietly under its customer turn. */
+  angle?: Angle;
   onInspect: (i: number) => void;
   registerRef: (i: number, el: HTMLLIElement | null) => void;
 }
@@ -22,7 +25,7 @@ export interface TranscriptProps {
  * Two-speaker thread. Customer left, rep right and muted. Cited spans carry the accent
  * outline; the active one is filled. Tap a span to see which fields cite it.
  */
-export function Transcript({ transcript, contactName, citations, active, inspected, onInspect, registerRef }: TranscriptProps) {
+export function Transcript({ transcript, contactName, citations, active, inspected, angle, onInspect, registerRef }: TranscriptProps) {
   return (
     <Surface padding="none" as="section" aria-label="Transcript">
       <div className="flex items-center justify-between px-4 pt-3">
@@ -77,6 +80,15 @@ export function Transcript({ transcript, contactName, citations, active, inspect
                   ) : (
                     <span className="tag border-dashed text-fg-subtle">Not cited</span>
                   )}
+                </div>
+              ) : null}
+              {angle && angle.spanIndex === i ? (
+                <div className="mt-1.5 flex max-w-[88%] items-start gap-1.5 px-1 text-[12px] leading-snug text-fg-muted" data-testid="angle-chip">
+                  <Sparkle size={12} weight="bold" aria-hidden className="mt-0.5 shrink-0 text-accent" />
+                  <span>
+                    <span className="font-medium text-accent">Angle </span>
+                    {angle.line}
+                  </span>
                 </div>
               ) : null}
             </li>

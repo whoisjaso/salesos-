@@ -7,7 +7,7 @@ import type { Band } from "@/domain/callIntelligence";
 import type { StageView } from "@/lib/review";
 import { cn } from "@/lib/cn";
 
-/** Band as color plus a word plus an icon, never color alone (SOS-20). */
+/** Band as color plus a word plus an icon, never color alone (SOS-20). Used where a band is spelled out. */
 export const BAND_ICON: Record<Band, ComponentType<IconProps>> = {
   yes: CheckCircle,
   likely: TrendUp,
@@ -37,40 +37,42 @@ export const BAND_STROKE: Record<Band, string> = {
 };
 
 /**
- * Four segments, Contacted to Bought. Each shows its band (color, word, icon) and the
- * percent. Tapping one goes to the stage's first cited span when there is one.
+ * One slim bar, four segments, each filled to its score in the band hue, with a tiny
+ * label under each. The percent shows only on tap (and in the accessible name, with
+ * the band word, so the bar never carries meaning by color alone). No borders, no icons.
+ * Tapping a segment goes to the stage's first cited span when there is one.
  */
-export function StageStrip({ stages, active, onSelect, compact = false, className }: { stages: StageView[]; active?: string; onSelect?: (stage: StageView) => void; compact?: boolean; className?: string }) {
+export function StageStrip({ stages, active, onSelect, className }: { stages: StageView[]; active?: string; onSelect?: (stage: StageView) => void; className?: string }) {
   return (
-    <div role="group" aria-label="Stages" data-testid="stage-strip" className={cn("grid grid-cols-4 gap-1.5", className)}>
+    <div role="group" aria-label="Stages" data-testid="stage-strip" className={cn("grid grid-cols-4 gap-1", className)}>
       {stages.map((s) => {
-        const Icon = BAND_ICON[s.band];
         const cited = s.spanIndexes.length > 0;
         const isActive = active === s.key;
+        const tappable = Boolean(onSelect);
         return (
           <button
             key={s.key}
             type="button"
             onClick={() => onSelect?.(s)}
-            disabled={!onSelect || !cited}
-            aria-pressed={onSelect ? isActive : undefined}
+            disabled={!tappable}
+            aria-pressed={tappable ? isActive : undefined}
             aria-label={`${s.label} ${s.percent} percent, ${s.bandLabel}${cited ? ", see moment" : ""}`}
+            title={`${s.percent}%`}
             data-testid="stage-segment"
             data-stage={s.key}
             data-band={s.band}
-            className={cn(
-              "flex min-w-0 flex-col items-start gap-0.5 rounded-sm border px-2 text-left transition-colors motion-reduce:transition-none",
-              compact ? "py-1.5" : "py-2",
-              BAND_BORDER[s.band],
-              isActive ? "bg-accent-soft" : cited && onSelect ? "hover:bg-hover" : "",
-              "disabled:cursor-default",
-            )}
+            className={cn("flex min-w-0 flex-col gap-1.5 rounded-sm py-1 text-left disabled:cursor-default", tappable && "hover:bg-hover motion-reduce:transition-none")}
           >
-            <span className={cn("truncate text-[11px] font-medium", s.band === "no" ? "text-fg-subtle" : "text-fg-muted")}>{s.label}</span>
-            <span className={cn("tabular font-semibold leading-none text-fg", compact ? "text-[15px]" : "text-[17px]")}>{s.percent}%</span>
-            <span className={cn("inline-flex items-center gap-1 text-[11px] font-medium", BAND_TEXT[s.band])}>
-              <Icon size={11} weight="bold" aria-hidden />
-              {s.bandLabel}
+            <span className="block h-2 w-full overflow-hidden rounded-full bg-line" aria-hidden>
+              <span className="block h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none" style={{ width: `${s.percent}%`, background: BAND_STROKE[s.band] }} />
+            </span>
+            <span className={cn("flex items-baseline gap-1 truncate text-[11px] leading-none", isActive ? "font-medium text-fg" : "text-fg-subtle")}>
+              <span className="truncate">{s.label}</span>
+              {isActive ? (
+                <span className="tabular shrink-0 text-fg-muted" data-testid="stage-percent">
+                  {s.percent}%
+                </span>
+              ) : null}
             </span>
           </button>
         );

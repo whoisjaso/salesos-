@@ -12,6 +12,11 @@
  * - call_008: voicemail, rep leaves a message (setter Tomasz).
  * - call_016: meaningful, unresolved stakeholder ("my partner handles that") (setter Tomasz).
  * - call_010: meaningful, price objection the rep answers without a discount (closer Marcus).
+ *
+ * Three prospect-originated expressions for the Personal Meaning Listener (src/domain/references.ts):
+ * call_005 "like a jazz band where everybody wants to play a solo" with a later "text robot" concern;
+ * call_016 "like a hockey team where nobody knows who is defending" with a later "who handles the reply" concern;
+ * call_010 "ambushed by the setup fee", clarified by the rep and explained by the customer ("By then they had our website").
  */
 import type { TranscriptSpan } from "@/domain/callIntelligence";
 import type { Id } from "@/domain/types";
@@ -39,7 +44,7 @@ const BOOKS: Line[] = [
   ["rep", "Thanks. You wrote that leads are going cold before anyone calls them. What does that look like day to day?", 7],
   ["customer", "We get maybe sixty internet leads a week across the two stores. My BDC rep calls the ones that come in during her shift. Nights and weekends just sit.", 12],
   ["rep", "So the ones that come in after six get their first call the next morning.", 5],
-  ["customer", "If they get one at all. Half the time the salesperson grabs it and never logs anything.", 7],
+  ["customer", "If they get one at all. Half the time the salesperson grabs it and never logs anything. It's like a jazz band where everybody wants to play a solo.", 11],
   ["rep", "That gap is exactly what we close. Every lead gets a first touch inside five minutes, logged, and the salesperson gets the handoff with the notes.", 10],
   ["customer", "Honestly I'm not sure a text robot is what my customers want. They're buying trucks, not phones.", 8],
   ["rep", "Fair. It's not a robot conversation. It's a first reply and a time held for your team, and your people take it from there. The customer talks to a person.", 11],
@@ -90,13 +95,15 @@ const STAKEHOLDER: Line[] = [
   ["rep", "Tell me about the chat leads. What happens after someone types in a question at night?", 6],
   ["customer", "It goes to a shared inbox. Whoever opens first in the morning answers it. By then they've usually bought somewhere else.", 9],
   ["rep", "So the first reply is the whole problem.", 3],
-  ["customer", "Pretty much. We've got one rooftop, twelve people on the floor, and nobody owns the inbox.", 7],
+  ["customer", "Pretty much. It's like a hockey team where nobody knows who is defending. We've got one rooftop, twelve people on the floor, and nobody owns the inbox.", 11],
   ["rep", "That's the same story we hear from single-store groups. The system answers inside five minutes and assigns it to a person by name.", 9],
   ["customer", "I'm worried about another tool nobody logs into. We tried something before and it died in a month.", 8],
   ["rep", "What did the last one ask your people to do?", 3],
   ["customer", "Log into a dashboard and update statuses. Nobody did it.", 5],
   ["rep", "Ours asks nothing of the floor. The setter handles the reply and the appointment, and the salesperson gets a text with the notes.", 9],
-  ["customer", "That's better. But I don't sign for software. My partner handles that, and the budget, and he's on vacation.", 9],
+  ["customer", "That's better. But who handles the reply when your setter is out? I don't want it landing back in the inbox.", 8],
+  ["rep", "A second setter covers the queue, and the assignment stays with the same salesperson by name.", 6],
+  ["customer", "Okay. But I don't sign for software. My partner handles that, and the budget, and he's on vacation.", 8],
   ["rep", "Got it. When is he back?", 2],
   ["customer", "Two weeks. And he'll want to see numbers, not a pitch.", 5],
   ["rep", "Then let's not waste your time with a walkthrough he's not on. What's the best way to loop him in?", 7],
@@ -125,13 +132,15 @@ const PRICE: Line[] = [
   ["rep", "Nothing. The reply and the appointment are logged for them. They show up and sell.", 6],
   ["customer", "Okay. What does it cost?", 2],
   ["rep", "Four thousand eight hundred, one time, for the first store. A second rooftop is nineteen hundred. Onboarding on site is seven fifty if you want us there.", 12],
-  ["customer", "That's too expensive for what it is. My website guy said he could bolt on an auto-reply for a few hundred bucks.", 9],
-  ["rep", "He might be right about the auto-reply. What's the auto-reply going to do at eight at night when the customer answers back?", 8],
+  ["customer", "That's too expensive for what it is. With the last vendor I felt ambushed by the setup fee. My website guy said he could bolt on an auto-reply for a few hundred bucks.", 12],
+  ["rep", "When you say ambushed, was it that the fee wasn't disclosed, or that you were already committed before it appeared?", 8],
+  ["customer", "By then they had our website and we couldn't easily leave.", 5],
+  ["rep", "Understood. He might be right about the auto-reply. What's the auto-reply going to do at eight at night when the customer answers back?", 9],
   ["customer", "Nothing, I guess. It sends one text.", 3],
   ["rep", "That's the difference. The first reply is cheap. The second one, from a person, inside the hour, is what gets the appointment. That's what you're paying for.", 11],
   ["customer", "I hear you. I'm still not sure the number's right for four stores.", 6],
   ["rep", "I'm not going to move the number. What I can do is show you what one store did in its first sixty days and let you decide if the second store earns its keep.", 12],
-  ["customer", "Fine. Send me the numbers from that store and the breakdown for four rooftops, and I'll take it to my partner.", 9],
+  ["customer", "Fine. Send me the numbers from that store and the breakdown for four rooftops with every fee on it, and I'll take it to my partner.", 10],
   ["rep", "I'll send the breakdown at list, with the second store and onboarding as separate lines, so what he sees is what he'd sign.", 9],
   ["customer", "And if he says it's too much?", 2],
   ["rep", "Then you tell me which store you'd start with, and we run one. Nobody needs four on day one.", 7],

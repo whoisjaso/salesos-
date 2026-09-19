@@ -20,6 +20,7 @@ import {
   type ValidationResult,
 } from "@/domain/callIntelligence";
 import { RulesCoachingEngine } from "@/domain/coaching";
+import { MEANING_WORD, ORIGIN_WORD, reject, suggestReuse, type CitedReference } from "@/domain/references";
 import type { Call, CallInterpretedOutcome, CoachingRecommendation, Contact, DomainEvent, Id, Opportunity, User } from "@/domain/types";
 import { NOW, obaviaDataset } from "@/fixtures/obavia";
 import { TRANSCRIPT_CALL_IDS, transcriptFor } from "@/fixtures/calls";
@@ -30,7 +31,7 @@ const intelligence = new RuleBasedCallIntelligence();
 /** Objective fit rule ids the offer policy asks about (mirrors the fixture assessments, SOS-13). */
 export const OFFER_FIT_KEYS = ["rooftop_count_known", "budget_authority", "dms_compatible"];
 
-export type MomentKind = "commitment" | "stakeholder" | "objection" | "next_step" | "outcome";
+export type MomentKind = "commitment" | "stakeholder" | "objection" | "next_step" | "outcome" | "reference";
 
 export interface Moment {
   /** Index into `transcript`. */
@@ -84,6 +85,27 @@ export interface ExtractedField {
   spanIndexes: number[];
 }
 
+/** One "Their words" card: the prospect's exact expression and what it stood for here. */
+export interface ReferenceView {
+  referenceId: string;
+  /** Exactly as spoken. */
+  expression: string;
+  /** One line: the relationship the expression carries, or the prospect's own explanation once confirmed. */
+  meaning: string;
+  originWord: string;
+  meaningWord: string;
+  domain: string;
+  /** Index into `transcript` of the cited span. */
+  spanIndex: number;
+}
+
+/** The one Angle chip: a line in the prospect's own frame, under a later customer turn. */
+export interface Angle {
+  spanIndex: number;
+  referenceId: string;
+  line: string;
+}
+
 export interface Review {
   call: Call;
   contact: Contact;
@@ -101,6 +123,8 @@ export interface Review {
   stages: StageView[];
   hero: Hero;
   feedback: FeedbackCard[];
+  /** Their words, in transcript order. */
+  references: ReferenceView[];
 }
 
 export interface ReviewRow {
@@ -320,6 +344,7 @@ function buildFields(x: CallExtraction, transcript: TranscriptSpan[]): Extracted
   x.commitments.forEach((c, i) => fields.push({ id: `commitment:${i}`, kind: "commitment", label: `Commitment, ${c.owner === "rep" ? "you" : "customer"}`, value: c.text, spanIndexes: indexes(transcript, c.spans) }));
   x.stakeholders.forEach((s, i) => fields.push({ id: `stakeholder:${i}`, kind: "stakeholder", label: "Stakeholder", value: s.name ? `${s.name}, ${stakeholderWord(s.role)}` : stakeholderWord(s.role), spanIndexes: indexes(transcript, s.spans) }));
   x.objections.forEach((o, i) => fields.push({ id: `objection:${i}`, kind: "objection", label: `Objection, ${o.resolved ? "resolved" : "open"}`, value: o.text, spanIndexes: indexes(transcript, o.spans) }));
+  x.references.forEach((r, i) => fields.push({ id: `reference:${i}`, kind: "reference", label: "Their words", value: r.evidence.exactExpression, spanIndexes: indexes(transcript, r.spans) }));
   for (const [key, f] of Object.entries(x.fitFacts)) {
     fields.push({ id: `fit:${key}`, kind: "fit", label: humanizeFitKey(key), value: f.value === "unknown" ? "Unknown" : f.value.charAt(0).toUpperCase() + f.value.slice(1), spanIndexes: indexes(transcript, f.spans) });
   }
@@ -381,10 +406,49 @@ function buildMoments(x: CallExtraction, transcript: TranscriptSpan[]): Moment[]
   x.commitments.forEach((c, i) => push(c.spans, "commitment", c.owner === "rep" ? "Commitment, you" : "Commitment, customer", `commitment:${i}`));
   x.stakeholders.forEach((s, i) => push(s.spans, "stakeholder", `Stakeholder, ${stakeholderWord(s.role).toLowerCase()}`, `stakeholder:${i}`));
   x.objections.forEach((o, i) => push(o.spans, "objection", `Objection, ${objectionWord(o.text).toLowerCase()}`, `objection:${i}`));
+  x.references.forEach((r, i) => push(r.spans, "reference", `Their words, ${referenceWord(r)}`, `reference:${i}`));
   if (x.nextStep.value !== "none") push(x.nextStep.spans.slice(0, 1), "next_step", `Next step, ${NEXT_STEP_WORD[x.nextStep.value].toLowerCase()}`, "nextStep");
   out.sort((a, b) => a.spanIndex - b.spanIndex);
   if (x.outcome.value !== "unknown") push(x.outcome.spans.slice(0, 1), "outcome", `Outcome, ${OUTCOME_WORD[x.outcome.value].toLowerCase()}`, "outcome");
   return out;
+}
+
+/** The short word on a reference moment: the domain for an analogy, the term itself otherwise. */
+function referenceWord(r: CitedReference): string {
+  const d = r.semantics.sourceDomain;
+  if (r.semantics.kind === "analogy" && d && d !== "none") return d;
+  return r.evidence.exactExpression.split(/\s+/).slice(0, 2).join(" ").toLowerCase();
+}
+
+function buildReferences(x: CallExtraction, transcript: TranscriptSpan[]): ReferenceView[] {
+  return x.references
+    .map((r) => ({
+      referenceId: r.identity.referenceId,
+      expression: r.evidence.exactExpression,
+      meaning: r.semantics.explainedMeaning?.text ?? r.semantics.comparisonRelationship,
+      originWord: ORIGIN_WORD[r.semantics.origin],
+      meaningWord: MEANING_WORD[r.semantics.meaningStatus],
+      domain: r.semantics.sourceDomain,
+      spanIndex: indexes(transcript, r.spans)[0] ?? -1,
+    }))
+    .filter((v) => v.spanIndex >= 0);
+}
+
+/**
+ * The one Angle for the call: the first later customer turn where a reference the rep
+ * has not rejected retrieves by concept. At most one per call. Pure over client state.
+ */
+export function angleFor(review: Review, rejected: ReadonlySet<string> = new Set()): Angle | undefined {
+  const refs = review.extraction.references.map((r) => (rejected.has(r.identity.referenceId) ? reject(r) : r));
+  if (refs.length === 0) return undefined;
+  const stage = review.hero.key ?? "contacted";
+  for (let i = 0; i < review.transcript.length; i++) {
+    const turn = review.transcript[i];
+    if (turn.speaker !== "customer") continue;
+    const s = suggestReuse(refs, turn, stage);
+    if (s) return { spanIndex: i, referenceId: s.referenceId, line: s.line };
+  }
+  return undefined;
 }
 
 function buildCitations(fields: ExtractedField[]): Map<number, string[]> {
@@ -409,7 +473,7 @@ export function buildReview(callId: Id): Review | undefined {
   const contact = opportunity && dataset.contacts.find((c) => c.contactId === opportunity.primaryContactId);
   if (!opportunity || !rep || !contact) return undefined;
 
-  const extraction = intelligence.extract({ callId, opportunityId: opportunity.opportunityId, transcript, offerFitKeys: OFFER_FIT_KEYS });
+  const extraction = intelligence.extract({ callId, opportunityId: opportunity.opportunityId, transcript, offerFitKeys: OFFER_FIT_KEYS, tenantId: call.tenantId });
   const validation = validateExtraction(extraction);
   const policy = applyExtractionPolicy(extraction, call, opportunity, { ...DEFAULT_EXTRACTION_POLICY, now: NOW });
   const recs = RulesCoachingEngine.recommend(dataset, rep.userId, NOW);
@@ -433,6 +497,7 @@ export function buildReview(callId: Id): Review | undefined {
     stages,
     hero: heroFor(stages),
     feedback: buildFeedback(extraction, transcript),
+    references: buildReferences(extraction, transcript),
   };
 }
 
@@ -455,9 +520,14 @@ export function coachingMoment(review: Review): Moment | undefined {
   return (
     review.moments.find((m) => open.includes(m.fieldId)) ??
     review.moments.find((m) => m.kind === "next_step") ??
-    review.moments.find((m) => m.kind !== "outcome") ??
+    review.moments.find((m) => m.kind !== "outcome" && m.kind !== "reference") ??
     review.moments[0]
   );
+}
+
+/** "65%, likely": the one caption under the hero word. */
+export function heroCaption(hero: Hero): string {
+  return `${hero.percent}%, ${hero.bandLabel.toLowerCase()}`;
 }
 
 /** A good example for the playbook: meaningful, booked, and every objection resolved. */

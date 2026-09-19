@@ -5,26 +5,11 @@ import Link from "next/link";
 import { CaretRight, PhoneSlash } from "@phosphor-icons/react";
 import { Surface } from "@/components/ui/Surface";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { cn } from "@/lib/cn";
-import { formatDuration, reviewableCalls, type Hero, type Viewer } from "@/lib/review";
+import { formatDuration, reviewableCalls, type Viewer } from "@/lib/review";
 import { formatDateTimeIn, TENANT_TZ } from "@/lib/workspace-setter";
 import { initials } from "@/components/workspace/NextUp";
-import { OutcomeChip } from "./OutcomeChip";
-import { BAND_BORDER, BAND_ICON, BAND_TEXT } from "./StageStrip";
 
-/** The stage the transcript cleared, with its percent and band. */
-function StageChip({ hero }: { hero: Hero }) {
-  const Icon = BAND_ICON[hero.band];
-  return (
-    <span className={cn("chip", BAND_BORDER[hero.band], BAND_TEXT[hero.band])} data-testid="stage-chip">
-      <Icon size={12} weight="bold" aria-hidden />
-      {hero.word}
-      <span className="tabular text-fg-muted">{hero.percent}%</span>
-    </span>
-  );
-}
-
-/** Reviewable calls for the viewer: own calls for a rep, every call for the owner. */
+/** Reviewable calls for the viewer: own calls for a rep, every call for the owner. One row: contact, one word, date. */
 export function ReviewList({ viewer }: { viewer: Viewer }) {
   const rows = useMemo(() => reviewableCalls(viewer), [viewer]);
 
@@ -57,10 +42,9 @@ export function ReviewList({ viewer }: { viewer: Viewer }) {
                         </>
                       ) : null}
                     </span>
-                    <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <StageChip hero={r.hero} />
-                      <OutcomeChip outcome={r.outcome} />
-                    </span>
+                  </span>
+                  <span className="shrink-0 text-[13px] font-medium text-fg" data-testid="stage-word">
+                    {r.hero.word}
                   </span>
                   <CaretRight size={14} weight="bold" aria-hidden className="shrink-0 text-fg-subtle" />
                 </Link>

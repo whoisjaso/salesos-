@@ -301,7 +301,9 @@ function analogyCandidates(text: string): Candidate[] {
     const relationship = relationshipClause(expression);
     const before = s.text.slice(0, start);
     const target = targetBeforeMarker(before, text);
-    const valence = valenceOf(expression, relationship);
+    // With no relationship clause ("as bad as breaking your leg in basketball") the valence attaches to
+    // the described target and the compared event, never to the domain.
+    const valence = valenceOf(expression, relationship === expression ? `${target}, compared to ${trimPunct(afterMarker)}`.replace(/ in [\w' -]+$/, "") : relationship);
     out.push({
       kind: "analogy",
       expression,
@@ -562,6 +564,8 @@ function lineFor(r: Reference, concept: ConceptTag): string | undefined {
  * discount, guarantee, or contract terms.
  */
 export function suggestReuse(references: readonly Reference[], currentTurn: TranscriptSpan, stage: StageKey): ReuseSuggestion | null {
+  // A suggestion answers the prospect. The rep's own turns never trigger one.
+  if (currentTurn.speaker === "rep") return null;
   const wanted = conceptsInTurn(currentTurn.text);
   if (wanted.length === 0) return null;
   if (stage === "contacted" && wanted.every((t) => t === "priority")) return null;

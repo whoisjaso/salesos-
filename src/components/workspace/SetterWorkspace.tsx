@@ -15,7 +15,6 @@ import {
   PhoneDisconnect,
   Prohibit,
   Question,
-  Sparkle,
   UserSound,
 } from "@phosphor-icons/react";
 import type { NextStepValue } from "@/domain/callIntelligence";
@@ -48,7 +47,7 @@ import {
 import { computeGame } from "@/lib/workspace-game";
 import { useTenantData } from "@/lib/onboarding";
 import { SetterEmptyToday } from "@/components/onboarding/SetterEmptyToday";
-import { NEXT_STEP_WORD, reviewHref, type StageView } from "@/lib/review";
+import { NEXT_STEP_WORD, OUTCOME_WORD, reviewHref, type StageView } from "@/lib/review";
 import { StageStrip } from "@/components/review/StageStrip";
 import { BookingSheet, type Booking } from "./BookingSheet";
 import { HandoffSheet } from "./HandoffSheet";
@@ -69,11 +68,13 @@ interface CallState {
   seconds: number;
   dqReason?: string;
   result?: string;
-  /** "Wrong?" was tapped: the outcome radios are open. */
-  changing: boolean;
 }
 
-const IDLE: CallState = { phase: "idle", seconds: 0, changing: false };
+const IDLE: CallState = { phase: "idle", seconds: 0 };
+
+/** The alternatives behind Wrong?: the outcome, then the next step. */
+const OUTCOMES: CallInterpretedOutcome[] = ["meaningful_interaction", "voicemail", "no_answer", "wrong_contact"];
+const NEXT_STEPS: NextStepValue[] = ["book", "callback", "dq_review"];
 
 const ACTION_ICON: Record<QueueAction, ComponentType<IconProps>> = {
   call: Phone,
@@ -118,6 +119,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
   const [bookingOpen, setBookingOpen] = useState(false);
   const [handoffOpen, setHandoffOpen] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
+  const [wrongOpen, setWrongOpen] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [bookings, setBookings] = useState<Record<string, Booking[]>>({});
   const [handoffs, setHandoffs] = useState<Record<string, "send" | "clarify">>({});
@@ -186,7 +188,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
     if (!active) return;
     clearTimers();
     const sim = simulatedPostCall(active.opportunity.opportunityId, active.priorAttempts);
-    setCall((c) => ({ ...c, phase: "summary", proposed: sim.outcome, outcome: sim.outcome, nextStep: sim.nextStep, stages: sim.stages, changing: false }));
+    setCall((c) => ({ ...c, phase: "summary", proposed: sim.outcome, outcome: sim.outcome, nextStep: sim.nextStep, stages: sim.stages }));
   };
 
   /** A disputed or manually logged outcome recomputes the stages and the next step. */
@@ -196,7 +198,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
     setCall((c) => ({ ...c, outcome, nextStep: nextStepFor(outcome), stages: simulatedStages(outcome, id) }));
   };
 
-  const logResult = () => setCall((c) => (c.outcome ? { ...c, phase: "summary", changing: false } : c));
+  const logResult = () => setCall((c) => (c.outcome ? { ...c, phase: "summary" } : c));
 
   const callback = () => finish(`Callback ${formatTimeIn(new Date(Date.parse(NOW) + 3 * 3_600_000).toISOString(), TENANT_TZ)}`);
 
@@ -286,7 +288,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
                   exit={reduce ? undefined : { opacity: 0, y: -6 }}
                   transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                 >
-                  {!inFlow ? <HeroIdle item={active} expanded={expanded} onToggle={() => setExpanded((v) => !v)} /> : <HeroFlow item={active} call={call} setCall={setCall} setOutcome={setOutcome} onCallback={callback} booking={currentBooking} onHandoff={() => setHandoffOpen(true)} onBook={() => setBookingOpen(true)} handoff={handoffs[active.opportunity.opportunityId]} />}
+                  {!inFlow ? <HeroIdle item={active} expanded={expanded} onToggle={() => setExpanded((v) => !v)} /> : <HeroFlow item={active} call={call} setCall={setCall} setOutcome={setOutcome} booking={currentBooking} onHandoff={() => setHandoffOpen(true)} onBook={() => setBookingOpen(true)} handoff={handoffs[active.opportunity.opportunityId]} />}
                 </motion.div>
               ) : (
                 <motion.div key="empty" initial={false} className="flex h-[148px] flex-col items-center justify-center gap-2 text-center">
@@ -301,6 +303,18 @@ export function SetterWorkspace({ userId }: { userId: string }) {
               {dock.label}
             </Button>
           </div>
+          {active && call.phase === "summary" ? (
+            <div className="mt-2 flex items-center justify-center gap-2 text-[12px] font-medium text-fg-subtle">
+              <Button variant="ghost" size="sm" href={reviewHref(active.opportunity.opportunityId)} className="h-6 px-1.5 text-[12px] text-fg-subtle">
+                Review
+              </Button>
+              <span aria-hidden>·</span>
+              <button type="button" onClick={() => setWrongOpen(true)} className="inline-flex h-6 items-center gap-1 px-1.5 underline-offset-2 hover:underline" data-testid="wrong">
+                <Question size={12} weight="bold" aria-hidden />
+                Wrong?
+              </button>
+            </div>
+          ) : null}
         </Surface>
 
         <NextUp
@@ -412,6 +426,22 @@ export function SetterWorkspace({ userId }: { userId: string }) {
             <p className="mb-3 text-[13px] italic leading-snug text-fg-muted">&ldquo;{active.submission?.requestText}&rdquo;</p>
             <textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} rows={5} placeholder="Your reply" className="w-full resize-none rounded-sm border border-line-strong bg-raised px-3 py-2 text-[14px] leading-snug text-fg outline-none focus-visible:border-accent" />
           </Sheet>
+          <Sheet open={wrongOpen} onClose={() => setWrongOpen(false)} title="Wrong?" description={active.contact.displayName}>
+            <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Outcome">
+                <span className="section-label">Outcome</span>
+                {OUTCOMES.map((o) => (
+                  <RadioRow key={o} checked={call.outcome === o} onClick={() => setOutcome(o)} label={OUTCOME_LABEL[o]} />
+                ))}
+              </div>
+              <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Next step">
+                <span className="section-label">Next step</span>
+                {NEXT_STEPS.map((n) => (
+                  <RadioRow key={n} checked={call.nextStep === n} onClick={() => setCall((c) => ({ ...c, nextStep: n }))} label={NEXT_STEP_WORD[n]} />
+                ))}
+              </div>
+            </div>
+          </Sheet>
         </>
       ) : null}
     </>
@@ -422,6 +452,20 @@ function replyChannel(contact: Contact): string {
   if (contact.consent.sms === "granted") return "SMS";
   if (contact.consent.email === "granted") return "email";
   return "phone";
+}
+
+function RadioRow({ checked, onClick, label }: { checked: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={checked}
+      onClick={onClick}
+      className={cn("h-11 rounded-sm border px-3 text-left text-[14px] font-medium transition-colors motion-reduce:transition-none", checked ? "border-accent bg-accent-soft text-fg" : "border-line-strong text-fg-muted hover:bg-hover")}
+    >
+      {label}
+    </button>
+  );
 }
 
 function Stat({ value, label }: { value: number; label: string }) {
@@ -509,7 +553,6 @@ function HeroFlow({
   call,
   setCall,
   setOutcome,
-  onCallback,
   booking,
   onHandoff,
   onBook,
@@ -519,7 +562,6 @@ function HeroFlow({
   call: CallState;
   setCall: (fn: (c: CallState) => CallState) => void;
   setOutcome: (o: CallInterpretedOutcome) => void;
-  onCallback: () => void;
   booking?: Booking;
   onHandoff: () => void;
   onBook: () => void;
@@ -537,8 +579,6 @@ function HeroFlow({
       ) : null}
     </div>
   );
-
-  const outcomes: CallInterpretedOutcome[] = ["meaningful_interaction", "voicemail", "no_answer", "wrong_contact"];
 
   return (
     <div className="flex flex-col gap-3">
@@ -562,64 +602,21 @@ function HeroFlow({
         </div>
       ) : null}
 
-      {call.phase === "summary" || call.phase === "logging" ? (
-        <div className="rounded-md border border-dashed border-line-strong p-3" data-testid="postcall">
-          <div className="flex items-center justify-between">
-            <span className="section-label inline-flex items-center gap-1 text-accent">
-              <Sparkle size={11} weight="bold" aria-hidden />
-              {call.phase === "summary" ? "Transcript decided" : "No AI evidence"}
-            </span>
-            {call.phase === "summary" ? (
-              <span className="flex items-center gap-1">
-                <Button variant="ghost" size="sm" href={reviewHref(item.opportunity.opportunityId)} className="h-6 px-2 text-[12px]">
-                  Review
-                </Button>
-                {!call.changing ? (
-                  <button type="button" onClick={() => setCall((c) => ({ ...c, changing: true }))} className="inline-flex h-6 items-center gap-1 px-1 text-[12px] font-medium text-fg-muted underline-offset-2 hover:underline" data-testid="wrong">
-                    <Question size={12} weight="bold" aria-hidden />
-                    Wrong?
-                  </button>
-                ) : null}
-              </span>
-            ) : null}
+      {call.phase === "summary" ? (
+        <div className="flex flex-col gap-3" data-testid="postcall">
+          <div className="text-[24px] font-semibold leading-none tracking-tight text-fg" data-testid="postcall-outcome">
+            {OUTCOME_WORD[call.outcome ?? "unknown"]}
           </div>
-          {call.phase === "summary" && !call.changing ? (
-            <div className="mt-1.5 text-[17px] font-semibold text-fg">{OUTCOME_LABEL[call.outcome ?? "unknown"]}</div>
-          ) : (
-            <div className="mt-2 grid grid-cols-1 gap-1.5" role="radiogroup" aria-label="Outcome">
-              {outcomes.map((o) => (
-                <button
-                  key={o}
-                  type="button"
-                  role="radio"
-                  aria-checked={call.outcome === o}
-                  onClick={() => setOutcome(o)}
-                  className={cn("h-11 rounded-sm border px-3 text-left text-[14px] font-medium transition-colors motion-reduce:transition-none", call.outcome === o ? "border-accent bg-accent-soft text-fg" : "border-line-strong text-fg-muted hover:bg-hover")}
-                >
-                  {OUTCOME_LABEL[o]}
-                </button>
-              ))}
-            </div>
-          )}
-          {call.stages ? <StageStrip stages={call.stages} compact className="mt-2" /> : null}
-          {call.phase === "summary" && call.nextStep && call.nextStep !== "none" ? (
-            <div className="mt-2 flex items-center gap-2 text-[13px]">
-              <span className="text-fg-muted">Next</span>
-              <span className="font-medium text-fg" data-testid="next-step">{NEXT_STEP_WORD[call.nextStep]}</span>
-              <span className="ml-auto flex items-center gap-1">
-                {call.nextStep !== "callback" ? (
-                  <Button variant="ghost" size="sm" onClick={onCallback} className="h-6 px-2 text-[12px]">
-                    Callback
-                  </Button>
-                ) : null}
-                {call.nextStep !== "dq_review" ? (
-                  <Button variant="ghost" size="sm" onClick={() => setCall((c) => ({ ...c, phase: "dq" }))} className="h-6 px-2 text-[12px]">
-                    DQ
-                  </Button>
-                ) : null}
-              </span>
-            </div>
-          ) : null}
+          {call.stages ? <StageStrip stages={call.stages} /> : null}
+        </div>
+      ) : null}
+
+      {call.phase === "logging" ? (
+        <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Outcome" data-testid="postcall">
+          <span className="section-label">Outcome, no AI evidence</span>
+          {OUTCOMES.map((o) => (
+            <RadioRow key={o} checked={call.outcome === o} onClick={() => setOutcome(o)} label={OUTCOME_LABEL[o]} />
+          ))}
         </div>
       ) : null}
 
