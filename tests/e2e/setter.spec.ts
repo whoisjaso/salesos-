@@ -62,25 +62,31 @@ test.describe("Setter: Tomasz", () => {
       .poll(() => page.evaluate(() => (window as unknown as { __providerStates: string[] }).__providerStates))
       .toEqual(["Reserving", "Ringing", "Connected"]);
 
-    // End the call: the transcript decides and the dock is already the next step. No Confirm.
+    // End the call: one word, the stage bar, and the dock already set to the next step. No Confirm, no label, no box.
     await dock(page).click();
     const postcall = page.getByTestId("postcall");
-    await expect(postcall).toContainText("Transcript decided");
+    await expect(postcall.getByTestId("postcall-outcome")).toHaveText("Voicemail");
+    await expect(page.getByText(/transcript decided/i)).toHaveCount(0);
     await expect(postcall.getByTestId("stage-strip")).toBeVisible();
     await expect(postcall.getByTestId("stage-segment")).toHaveCount(4);
+    await expect(postcall.getByText("Next", { exact: true })).toHaveCount(0);
     // A reattempt simulates Voicemail: next step callback, preselected on the dock.
-    await expect(postcall.getByTestId("next-step")).toHaveText("Callback");
     await expect(dock(page)).toHaveText("Callback");
     await expect(page.getByRole("button", { name: "Confirm", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Change", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Review" })).toBeVisible();
 
-    // Wrong? opens the dispute: the rep corrects it to a real conversation so booking is possible.
-    await postcall.getByTestId("wrong").click();
-    const outcomes = page.getByRole("radiogroup", { name: "Outcome" });
+    // Wrong? opens the alternatives: the rep corrects it to a real conversation so booking is possible.
+    await page.getByTestId("wrong").click();
+    const wrong = sheet(page, "Wrong?");
+    await expect(wrong).toBeVisible();
+    const outcomes = wrong.getByRole("radiogroup", { name: "Outcome" });
     await expect(outcomes.getByRole("radio")).toHaveCount(4);
     await outcomes.getByRole("radio", { name: "Meaningful interaction" }).click();
     await expect(outcomes.getByRole("radio", { name: "Meaningful interaction" })).toHaveAttribute("aria-checked", "true");
-    await expect(postcall.getByTestId("next-step")).toHaveText("Book");
+    await expect(wrong.getByRole("radiogroup", { name: "Next step" }).getByRole("radio", { name: "Book" })).toHaveAttribute("aria-checked", "true");
+    await closeSheet(page);
+    await expect(postcall.getByTestId("postcall-outcome")).toHaveText("Meaningful");
 
     // Book: first slot, confirm.
     await expect(dock(page)).toHaveText("Book");

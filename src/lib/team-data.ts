@@ -22,7 +22,7 @@ import {
 import type { SeasonWindow } from "@/domain/cashTiers";
 import { computeMetric } from "@/domain/metrics";
 import { DEFAULT_LEADERBOARD_POLICY, type LeaderboardPolicy } from "@/domain/leaderboard";
-import { COACHING_ENGINE_VERSION, STAGE_ACTION_LIBRARY, sensitivityTable, type StageAction } from "@/domain/coaching";
+import { COACHING_ENGINE_VERSION, STAGE_ACTION_LIBRARY, perceptionGap, sensitivityTable, type PerceptionGap, type StageAction } from "@/domain/coaching";
 import { defaultSkillPaths, missionFromRecommendation, seasonFor } from "@/domain/gamification";
 import type { StageChampion } from "@/domain/game";
 import { fromDollars } from "@/domain/money";
@@ -122,6 +122,14 @@ const STAGE_METRIC: { stageId: StageChampion["stageId"]; label: string; metricId
 ];
 
 export const CHAMPION_MIN_DENOMINATOR = 10;
+
+/**
+ * A rep's perception gap (perceived minus verified fit, in points) over their
+ * attributed opportunities. Reserved for the board; not rendered there yet.
+ */
+export function perceptionGapFor(dataset: Dataset, userId: Id, now: ISODateTime, role?: "setter" | "closer"): PerceptionGap {
+  return perceptionGap(dataset, role ? { userId, role } : { userId }, now);
+}
 
 export interface ChampionRow extends StageChampion {
   metricId: MetricId;

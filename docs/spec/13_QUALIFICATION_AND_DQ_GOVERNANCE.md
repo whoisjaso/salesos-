@@ -74,6 +74,8 @@ Low perceived qualification triggers an investigation: compare actual lead chara
 
 High DQ also needs context. It may be appropriate for an unsuitable acquisition source. Reducing DQ merely to boost booking or show volume can waste time and harm customers. Evaluate whole-cohort cash/contribution and suitability outcomes, not a universal low-DQ target.
 
+Production note: the perception gap (perceived minus verified, in points) is shown as coaching data with alternative explanations; it is never a confidence diagnosis. `perceptionGap` in `src/domain/coaching.ts` computes it on the same attended denominator as M09 and M10, names a direction only from 10 attended cases on complete data, treats a gap within 10 points as aligned, lists lead mix, assessment coverage, inconsistent criteria, product knowledge, and small sample as alternatives every time, and its action is a clarification question or a product lesson. The owner sees a team card above 15 points with a neutral verdict, since neither direction is automatically good.
+
 ## Audit and customer control
 
 Keep actor, timestamp, assessment stage, source evidence, policy version, review decisions, and changes. Later discoveries append a new assessment rather than erase earlier judgment. Show the customer a clear respectful outcome when appropriate; do not expose speculative internal labels.

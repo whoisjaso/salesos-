@@ -33,7 +33,7 @@ import {
   selectOpportunities,
 } from "@/domain/metrics";
 import { evaluate, defaultBenchmarkFor } from "@/domain/performance";
-import { buildBottleneckCards } from "@/domain/coaching";
+import { PERCEPTION_GAP_STAGE_ID, buildBottleneckCards, isPerceptionGapCard, type PerceptionGap } from "@/domain/coaching";
 import { DEFAULT_CAPACITY_POLICY, estimateLoad, type CapacityPolicy } from "@/domain/routing";
 import { playerState } from "@/domain/game";
 import { formatAsOf, formatMoneyMinor, formatRelativeTime } from "@/lib/format";
@@ -485,7 +485,13 @@ export const STAGE_LABEL: Record<string, string> = {
   perceived_qualified: "Perceived qualified",
   won: "Won",
   net_collected_cash: "Net collected cash",
+  [PERCEPTION_GAP_STAGE_ID]: "Perception gap",
 };
+
+/** The two rates behind a perception gap card, passed through untouched; undefined for every other card. */
+export function perceptionGapOf(card: BottleneckCard): PerceptionGap | undefined {
+  return isPerceptionGapCard(card) ? card.perception : undefined;
+}
 
 export const OWNER_FUNCTION_LABEL: Record<BottleneckCard["responsibleFunction"], string> = {
   rep: "Rep",

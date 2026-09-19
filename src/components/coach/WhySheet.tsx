@@ -4,9 +4,10 @@ import type { ComponentType } from "react";
 import { Barbell, CalendarCheck, Calculator, Eye, GitBranch, MagnifyingGlass } from "@phosphor-icons/react";
 import type { IconProps } from "@phosphor-icons/react";
 import type { CoachingRecommendation } from "@/domain/types";
+import { isPerceptionGapRecommendation } from "@/domain/coaching";
 import { Sheet } from "@/components/ui/Sheet";
 import { StateChip } from "@/components/ui/StateChip";
-import { formatAsOf, formatCount, formatMoney } from "@/lib/format";
+import { formatAsOf, formatCount, formatFraction, formatMoney, formatPercent } from "@/lib/format";
 
 export interface WhySheetProps {
   open: boolean;
@@ -23,6 +24,7 @@ interface Step {
 /** The SOS-16 six-part sequence as a vertical stepper. Opens from the "Why" button. */
 export function WhySheet({ open, onClose, rec }: WhySheetProps) {
   const s = rec.scenario;
+  const perception = isPerceptionGapRecommendation(rec) ? rec.perception : undefined;
   const steps: Step[] = [
     {
       icon: Eye,
@@ -30,6 +32,18 @@ export function WhySheet({ open, onClose, rec }: WhySheetProps) {
       body: (
         <div>
           <p className="text-[13.5px] text-fg">{rec.observed}</p>
+          {perception ? (
+            <dl className="tabular mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-[12.5px]">
+              <dt className="text-fg-subtle">Verified fit</dt>
+              <dd className="text-fg">
+                {formatPercent(perception.verified.value, { digits: 0 })}, {formatFraction(perception.verified.numerator, perception.verified.denominator)} attended
+              </dd>
+              <dt className="text-fg-subtle">Perceived fit</dt>
+              <dd className="text-fg">
+                {formatPercent(perception.perceived.value, { digits: 0 })}, {formatFraction(perception.perceived.numerator, perception.perceived.denominator)} attended
+              </dd>
+            </dl>
+          ) : null}
           {rec.suppressed ? <p className="mt-1 text-[12.5px] leading-snug text-fg-muted">{rec.suppressed.reason}</p> : null}
         </div>
       ),

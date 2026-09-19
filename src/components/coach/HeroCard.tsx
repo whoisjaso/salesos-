@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Wrench } from "@phosphor-icons/react";
 import type { CoachingRecommendation, MetricPayload } from "@/domain/types";
+import { isPerceptionGapRecommendation } from "@/domain/coaching";
 import { Button } from "@/components/ui/Button";
 import { StateChip } from "@/components/ui/StateChip";
 import { Surface } from "@/components/ui/Surface";
@@ -19,7 +20,14 @@ export interface HeroCardProps {
   onState: (next: RecommendationUiState) => void;
 }
 
-function bigNumber(m: MetricPayload): { value: string; detail: string } {
+function bigNumber(m: MetricPayload, rec?: CoachingRecommendation): { value: string; unit?: string; detail: string } {
+  // Perception gap: the number is the gap in points, not either rate. Direction lives in the title and the Why sheet.
+  if (rec && isPerceptionGapRecommendation(rec)) {
+    const pts = rec.perception.gapPoints;
+    if (pts === null) return { value: "N/A", detail: "perceived vs verified" };
+    const abs = Math.abs(pts);
+    return { value: Number.isInteger(abs) ? String(abs) : abs.toFixed(1), unit: "pts", detail: "perceived vs verified" };
+  }
   if (m.value === null) return { value: "N/A", detail: `${formatCount(m.numerator)} of ${formatCount(m.denominator)}` };
   if (m.unit === "ratio") {
     return {
@@ -39,7 +47,7 @@ export function HeroCard({ rec, metric, state, onState }: HeroCardProps) {
   const [premise, setPremise] = useState(false);
   const { session } = useSession();
   const suppressed = Boolean(rec.suppressed);
-  const num = bigNumber(metric);
+  const num = bigNumber(metric, rec);
   const next = nextState(state);
   const surfaceState = suppressed ? "data_state" : state === "evaluated" ? "strong" : undefined;
 
@@ -68,6 +76,7 @@ export function HeroCard({ rec, metric, state, onState }: HeroCardProps) {
 
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <span className="tabular text-[24px] font-semibold leading-none tracking-tight text-fg">{num.value}</span>
+          {num.unit ? <span className="text-[13px] font-medium text-fg-muted">{num.unit}</span> : null}
           <span className="tabular text-[12px] text-fg-subtle">{num.detail}</span>
           {metric.dataState !== "complete" ? <StateChip state={metric.dataState} className="self-center" /> : null}
         </div>

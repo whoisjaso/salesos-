@@ -18,7 +18,17 @@ import type {
   Money,
   PerformanceVerdict,
 } from "./types";
-import { type CohortFilter, type Dataset, computeMetric, ledgerFor, netCollected, selectOpportunities, wonOpportunities } from "./metrics";
+import {
+  type CohortFilter,
+  type Dataset,
+  attendedOpportunityIds,
+  computeMetric,
+  latestAssessmentByOpportunity,
+  ledgerFor,
+  netCollected,
+  selectOpportunities,
+  wonOpportunities,
+} from "./metrics";
 import { defaultBenchmarkFor, evaluate } from "./performance";
 import { formatMoney, formatPercent, money, scale } from "./money";
 
@@ -27,6 +37,8 @@ export const COACHING_ENGINE_VERSION = "rules-1.0";
 // ---------- Stage-to-action library (SOS-16) ----------
 
 export interface StageAction {
+  /** Stable key for entries that are not looked up by metric alone (e.g. "perception_gap"). */
+  key?: string;
   issue: string;
   metricId: MetricId;
   investigate: string[];
@@ -83,6 +95,20 @@ export const STAGE_ACTION_LIBRARY: StageAction[] = [
     guardrails: ["Perceived fit is not verified fit", "Unknown is not No"],
   },
   {
+    key: "perception_gap",
+    issue: "Perception gap",
+    metricId: "M10",
+    investigate: ["Lead mix", "Assessment coverage", "Inconsistent criteria", "Product knowledge", "Small sample"],
+    action: "Review five attended cases where the rating and the verified criteria disagree; ask one clarification question per case, or add the product lesson that covers the criterion the rating missed.",
+    owner: "rep",
+    effort: "Evidence review of 5 attended cases, 30 min",
+    guardrails: [
+      "Perceived fit is not verified fit; the gap is coaching data, not a diagnosis of the rep's outlook",
+      "Neither direction is automatically good or bad",
+      "Unknown is not No",
+    ],
+  },
+  {
     issue: "Low qualified-to-win",
     metricId: "M11",
     investigate: ["Fit definition", "Unresolved stakeholders", "Offer limitations", "Price changes"],
@@ -131,6 +157,213 @@ export const STAGE_ACTION_LIBRARY: StageAction[] = [
 
 export function libraryEntry(metricId: MetricId): StageAction | undefined {
   return STAGE_ACTION_LIBRARY.find((s) => s.metricId === metricId);
+}
+
+export function libraryEntryByKey(key: string): StageAction | undefined {
+  return STAGE_ACTION_LIBRARY.find((s) => s.key === key);
+}
+
+// ---------- Perception gap (perceived fit vs verified fit) ----------
+
+/** Perceived minus verified within this many points counts as aligned. */
+export const PERCEPTION_GAP_ALIGNED_POINTS = 10;
+/** Attended cases needed before a direction is named at all. */
+export const PERCEPTION_GAP_MIN_ATTENDED = 10;
+/** Team-level owner card threshold, in points. */
+export const PERCEPTION_GAP_CARD_POINTS = 15;
+export const PERCEPTION_GAP_STAGE_ID = "perception_gap";
+
+export type PerceptionGapBand = "aligned" | "under_perceiving" | "over_perceiving" | "insufficient";
+
+export interface PerceptionGap {
+  /** M10 verified-fit rate over attended. */
+  verified: MetricPayload;
+  /** M09 perceived qualified-show rate over attended. */
+  perceived: MetricPayload;
+  /**
+   * Perceived minus verified, in percentage points (one decimal). null when
+   * either denominator is zero or either data state is not complete.
+   */
+  gapPoints: number | null;
+  coverage: { assessed: number; attended: number };
+  band: PerceptionGapBand;
+  /** Alternative explanations, always listed; the gap is never a diagnosis. */
+  alternatives: string[];
+  /** A clarification question or product lesson. Never a request to rate differently. */
+  action: string;
+}
+
+function points(ratio: number): number {
+  return Math.round(ratio * 1000) / 10;
+}
+
+function formatPoints(p: number): string {
+  return Number.isInteger(p) ? String(p) : p.toFixed(1);
+}
+
+function humanKey(key: string): string {
+  return key.replace(/_/g, " ");
+}
+
+/** The objective criterion most often not met on attended cases where the rating and verification disagree. */
+function weakestCriterion(dataset: Dataset, filter: CohortFilter, now: ISODateTime, band: PerceptionGapBand): string | undefined {
+  const opps = selectOpportunities(dataset, filter, now);
+  const attended = attendedOpportunityIds(dataset, new Set(opps.map((o) => o.opportunityId)));
+  const latest = latestAssessmentByOpportunity(dataset);
+  const counts = new Map<string, number>();
+  for (const opp of opps) {
+    if (!attended.has(opp.opportunityId)) continue;
+    const a = latest.get(opp.opportunityId);
+    if (!a) continue;
+    const disagree = band === "over_perceiving"
+      ? a.repPerceivedFit === "likely" && opp.fitState !== "verified"
+      : a.repPerceivedFit === "unlikely" && opp.fitState === "verified";
+    if (!disagree) continue;
+    for (const [key, entry] of Object.entries(a.objective)) {
+      if (entry.value !== "yes") counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  let best: string | undefined;
+  let bestCount = 0;
+  for (const [key, count] of [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    if (count > bestCount) {
+      best = key;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+function perceptionAlternatives(coverage: { assessed: number; attended: number }): string[] {
+  return [
+    "Lead mix: the attended cases may differ in source or lead tier from the pool, so the same criteria meet a different population.",
+    `Assessment coverage: ${coverage.assessed} of ${coverage.attended} attended cases carry a definite rating; unrated or unsure cases sit outside both rates.`,
+    "Inconsistent criteria: the fit policy may be applied differently across reps or over time, which moves either rate without any change in judgment.",
+    "Product knowledge: an unfamiliar offer criterion can move a rating in either direction.",
+    `Small sample: ${coverage.attended} attended cases; a few cases move the gap by several points.`,
+  ];
+}
+
+function perceptionAction(band: PerceptionGapBand, criterion: string | undefined): string {
+  const lesson = criterion ? `; where ${humanKey(criterion)} was the criterion in doubt, add the product lesson that covers it` : "";
+  switch (band) {
+    case "over_perceiving":
+      return `On the next five attended cases rated likely, ask one clarification question against the fit criterion that most often went unverified${lesson}.`;
+    case "under_perceiving":
+      return `On the next five attended cases rated unlikely or unsure, ask one clarification question against the criterion the verification met and note which fact the rating did not have${lesson}.`;
+    case "aligned":
+      return "No change asked for. Keep attaching evidence to each rating so the two rates stay comparable.";
+    default:
+      return "Collect evidence on more attended cases before comparing the two rates. No rating change is asked for.";
+  }
+}
+
+/**
+ * Perceived qualified-show rate (M09) beside verified-fit rate (M10) on the
+ * same attended denominator. The gap is perceived minus verified in points.
+ * Aligned within PERCEPTION_GAP_ALIGNED_POINTS; insufficient under
+ * PERCEPTION_GAP_MIN_ATTENDED attended or when either rate is not computable
+ * on complete data. Never "be more positive": the action is a clarification
+ * question or a product lesson, and alternatives are always listed.
+ */
+export function perceptionGap(dataset: Dataset, filter: CohortFilter, now: ISODateTime): PerceptionGap {
+  const perceived = computeMetric("M09", dataset, filter, now);
+  const verified = computeMetric("M10", dataset, filter, now);
+  const attended = perceived.denominator;
+  const coverage = { assessed: Math.max(0, attended - perceived.unknownCount), attended };
+  const computable =
+    perceived.value !== null &&
+    verified.value !== null &&
+    perceived.denominator > 0 &&
+    verified.denominator > 0 &&
+    perceived.dataState === "complete" &&
+    verified.dataState === "complete";
+  const gapPoints = computable ? Math.round((points(perceived.value as number) - points(verified.value as number)) * 10) / 10 : null;
+  let band: PerceptionGapBand;
+  if (gapPoints === null || attended < PERCEPTION_GAP_MIN_ATTENDED) band = "insufficient";
+  else if (Math.abs(gapPoints) <= PERCEPTION_GAP_ALIGNED_POINTS) band = "aligned";
+  else band = gapPoints < 0 ? "under_perceiving" : "over_perceiving";
+  const criterion = band === "over_perceiving" || band === "under_perceiving" ? weakestCriterion(dataset, filter, now, band) : undefined;
+  return {
+    verified,
+    perceived,
+    gapPoints,
+    coverage,
+    band,
+    alternatives: perceptionAlternatives(coverage),
+    action: perceptionAction(band, criterion),
+  };
+}
+
+/** "Verified fit 76%, perceived 48%, gap 28 points under". */
+export function perceptionGapObserved(gap: PerceptionGap): string {
+  const v = formatPercent(gap.verified.value, 0);
+  const p = formatPercent(gap.perceived.value, 0);
+  if (gap.gapPoints === null) return `Verified fit ${v}, perceived ${p}, gap not computable`;
+  const direction = gap.gapPoints < 0 ? "under" : gap.gapPoints > 0 ? "over" : "even";
+  return `Verified fit ${v}, perceived ${p}, gap ${formatPoints(Math.abs(gap.gapPoints))} points ${direction}`;
+}
+
+/** A recommendation built from the perception gap carries the two rates for the coach screens. */
+export interface PerceptionGapRecommendation extends CoachingRecommendation {
+  perception: PerceptionGap;
+}
+
+export function isPerceptionGapRecommendation(rec: CoachingRecommendation): rec is PerceptionGapRecommendation {
+  return "perception" in rec && rec.metricIds.includes("M09") && rec.metricIds.includes("M10");
+}
+
+/** The owner card for the team gap carries the two rates so the view can show them as labels. */
+export interface PerceptionGapBottleneckCard extends BottleneckCard {
+  perception: PerceptionGap;
+}
+
+export function isPerceptionGapCard(card: BottleneckCard): card is PerceptionGapBottleneckCard {
+  return card.stageId === PERCEPTION_GAP_STAGE_ID && "perception" in card;
+}
+
+/** The same cohort without the person: the team pooled comparator (sum over sum). */
+function teamFilter(filter: CohortFilter): CohortFilter {
+  const rest: CohortFilter = { ...filter };
+  delete rest.userId;
+  delete rest.role;
+  return rest;
+}
+
+function perceptionGapRecommendation(dataset: Dataset, filter: CohortFilter, userId: Id, now: ISODateTime): Candidate | undefined {
+  const gap = perceptionGap(dataset, filter, now);
+  if (gap.band !== "under_perceiving" && gap.band !== "over_perceiving" || gap.gapPoints === null) return undefined;
+  const entry = libraryEntryByKey("perception_gap");
+  if (!entry) return undefined;
+  const team = perceptionGap(dataset, teamFilter(filter), now);
+  const comparator = team.gapPoints === null
+    ? "Team pooled: gap not computable on complete data; descriptive only"
+    : `Team pooled: ${perceptionGapObserved(team).charAt(0).toLowerCase()}${perceptionGapObserved(team).slice(1)} (sum over sum, not a mean)`;
+  const rec: PerceptionGapRecommendation = {
+    tenantId: dataset.tenant.tenantId,
+    recommendationId: `rec_perception_gap_${userId}_${Date.parse(now)}`,
+    ownerRole: "rep",
+    ownerUserId: userId,
+    title: entry.issue,
+    issue: `${entry.issue}: ${perceptionGapObserved(gap)} on ${gap.coverage.attended} attended cases. ${gap.band === "under_perceiving" ? "Ratings run below what the criteria verified." : "Ratings run above what the criteria verified."}`,
+    metricIds: ["M09", "M10"],
+    cohortId: gap.perceived.cohortId,
+    dataState: gap.perceived.dataState,
+    observed: perceptionGapObserved(gap),
+    comparator,
+    alternativeExplanations: gap.alternatives,
+    evidenceRefs: [gap.perceived.evidenceQueryId, gap.verified.evidenceQueryId],
+    action: gap.action,
+    playbookVersion: "playbook-1.0-pilot",
+    effort: entry.effort,
+    guardrails: [...entry.guardrails, "Correlation is not cause; a rep can challenge this premise."],
+    reviewAt: reviewDate(now),
+    state: "proposed",
+    provenance: { engine: "rules", version: COACHING_ENGINE_VERSION },
+    perception: gap,
+  };
+  const severity = Math.abs(gap.gapPoints) > 2 * PERCEPTION_GAP_ALIGNED_POINTS ? 3 : 2;
+  return { rec, priority: severity * 10 + 2 * 3 };
 }
 
 // ---------- Scenario modeling (SOS-16 worked example) ----------
@@ -348,6 +581,11 @@ export const RulesCoachingEngine: CoachingEngine = {
       const candidate = buildRecommendation(dataset, metric, verdict, entry, filter, userId, now);
       if (candidate) candidates.push(candidate);
     }
+    // Perception gap for a rep: emitted only when a direction can be named; suppressed on small samples.
+    if (userId) {
+      const gap = perceptionGapRecommendation(dataset, filter, userId, now);
+      if (gap) candidates.push(gap);
+    }
     // One primary task plus a small number of optional lessons.
     return candidates.sort((a, b) => b.priority - a.priority).slice(0, 3).map((c) => c.rec);
   },
@@ -436,6 +674,36 @@ export function buildBottleneckCards(dataset: Dataset, now: ISODateTime, filter:
       scenario,
       verdict,
     });
+  }
+
+  // Team perception gap: shown above PERCEPTION_GAP_CARD_POINTS in either direction. Neutral: neither direction is good by itself.
+  const gap = perceptionGap(dataset, filter, now);
+  if (gap.gapPoints !== null && gap.band !== "insufficient" && Math.abs(gap.gapPoints) > PERCEPTION_GAP_CARD_POINTS) {
+    const entry = libraryEntryByKey("perception_gap");
+    const verdict = evaluate(gap.verified, {
+      benchmarkId: "pilot_perception_gap",
+      metricId: "M10",
+      favorableDirection: "contextual",
+      target: 0,
+      attentionBand: PERCEPTION_GAP_ALIGNED_POINTS / 100,
+      minDenominator: PERCEPTION_GAP_MIN_ATTENDED,
+      label: "Perception gap (perceived minus verified fit)",
+      origin: "pilot_hypothesis",
+    });
+    const card: PerceptionGapBottleneckCard = {
+      cardId: `bn_perception_gap_${gap.perceived.cohortId}`,
+      stageId: PERCEPTION_GAP_STAGE_ID,
+      cohortId: gap.perceived.cohortId,
+      observed: `${perceptionGapObserved(gap)} (${gap.verified.numerator} verified and ${gap.perceived.numerator} perceived of ${gap.coverage.attended} attended).`,
+      comparator: `Aligned within ${PERCEPTION_GAP_ALIGNED_POINTS} points; owner card above ${PERCEPTION_GAP_CARD_POINTS}. Neither direction is automatically good.`,
+      dataState: gap.perceived.dataState,
+      responsibleFunction: "sales_ops",
+      candidateExplanations: gap.alternatives.map((a) => `${a} (hypothesis, not established cause)`),
+      proposedInvestigation: `${gap.action} Compare criteria across reps on a matched sample selected by a declared sampling method.${entry ? ` ${entry.guardrails[0]}.` : ""}`,
+      verdict,
+      perception: gap,
+    };
+    cards.push(card);
   }
 
   const order: Record<string, number> = { data_state: 0, material_issue: 1, attention: 2 };

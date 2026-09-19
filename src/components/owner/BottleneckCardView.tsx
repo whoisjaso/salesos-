@@ -8,8 +8,8 @@ import { Sheet } from "@/components/ui/Sheet";
 import { Surface } from "@/components/ui/Surface";
 import { StateChip } from "@/components/ui/StateChip";
 import { cn } from "@/lib/cn";
-import { formatMoney } from "@/lib/format";
-import { OWNER_FUNCTION_LABEL, STAGE_LABEL } from "@/lib/owner-model";
+import { formatMoney, formatPercent } from "@/lib/format";
+import { OWNER_FUNCTION_LABEL, STAGE_LABEL, perceptionGapOf } from "@/lib/owner-model";
 
 const OWNER_OPTIONS = Object.keys(OWNER_FUNCTION_LABEL) as CoachingOwner[];
 const VISIBLE_EXPLANATIONS = 3;
@@ -54,13 +54,28 @@ function OwnerSelect({ owner, onAssign }: { owner: CoachingOwner; onAssign: (own
 export function BottleneckCardView({ card, owner, onAssign, detail = false, pairTag, className }: BottleneckCardViewProps) {
   const [why, setWhy] = useState(false);
   const title = STAGE_LABEL[card.stageId] ?? card.stageId;
+  const perception = perceptionGapOf(card);
 
   const header = (
-    <div className="flex flex-wrap items-center gap-2">
-      <h3 className="mr-auto text-[15px] font-semibold text-fg">{title}</h3>
-      <StateChip state={card.verdict.state} label={card.verdict.label} />
-      {card.verdict.state !== "data_state" && card.dataState !== "complete" ? <StateChip state={card.dataState} /> : null}
-      {pairTag ? <span className="tag text-fg-muted">{pairTag}</span> : null}
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="mr-auto text-[15px] font-semibold text-fg">{title}</h3>
+        <StateChip state={card.verdict.state} label={card.verdict.label} />
+        {card.verdict.state !== "data_state" && card.dataState !== "complete" ? <StateChip state={card.dataState} /> : null}
+        {pairTag ? <span className="tag text-fg-muted">{pairTag}</span> : null}
+      </div>
+      {perception ? (
+        <dl className="tabular flex flex-col text-[12px] leading-snug text-fg-muted" aria-label="Verified and perceived fit rates">
+          <div className="flex gap-1.5">
+            <dt>Verified</dt>
+            <dd className="font-medium text-fg">{formatPercent(perception.verified.value, { digits: 0 })}</dd>
+          </div>
+          <div className="flex gap-1.5">
+            <dt>Perceived</dt>
+            <dd className="font-medium text-fg">{formatPercent(perception.perceived.value, { digits: 0 })}</dd>
+          </div>
+        </dl>
+      ) : null}
     </div>
   );
 
