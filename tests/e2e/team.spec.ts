@@ -82,8 +82,9 @@ test.describe("Team and Me: Renata", () => {
 
     const pairs = page.getByRole("list", { name: "Pairs" });
     const cards = pairs.getByRole("listitem");
-    expect(await cards.count()).toBeGreaterThanOrEqual(1);
     const first = cards.first();
+    await expect(first).toBeVisible();
+    expect(await cards.count()).toBeGreaterThanOrEqual(1);
     await expect(first.getByText(/^(Owner|Closer|Setter) picked$/)).toBeVisible();
     await expect(first.getByText("Net collected cash")).toBeVisible();
     await expect(first.getByRole("img", { name: /^Pair bar: / })).toBeAttached();

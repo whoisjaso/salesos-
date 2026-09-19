@@ -17,6 +17,7 @@ import { buildPairView, OWNER_LABEL, pairForRep, type PairView, type Recommendat
 import { DEFAULT_LEADERBOARD_POLICY } from "@/domain/leaderboard";
 import { PairSheet } from "@/components/pairs/PairSheet";
 import { PartnerCard } from "@/components/pairs/PartnerCard";
+import { EditProfileButton, ProfileRow } from "@/components/profile";
 import { Sheet } from "@/components/ui/Sheet";
 import { StateChip } from "@/components/ui/StateChip";
 import { Surface } from "@/components/ui/Surface";
@@ -32,10 +33,6 @@ import { WhySheet } from "@/components/coach/WhySheet";
 import { PlaybooksView } from "@/components/playbooks/PlaybooksView";
 
 const dataset = obaviaDataset;
-
-// TODO(profile): mount `ProfileRow` and `EditProfileButton` from "@/components/profile"
-// at the top of this screen once that module lands (another agent is creating it).
-// Not imported yet because src/components/profile does not exist in this tree.
 
 /** Hypothetical per-role rates for the pair sheet's commission lines (D06). */
 const PAIR_RATES = {
@@ -66,8 +63,10 @@ export function MeScreen({ data, sops, boundaries }: MeScreenProps) {
 
   return (
     <div className="mx-auto flex w-full max-w-[720px] flex-col gap-3 sm:gap-4">
+      <ProfileRow />
       {session.role === "owner" ? <OwnerMe /> : <RepMe key={session.userId} userId={session.userId} role={session.role} data={data} />}
       <PlaybookRow sops={sops} boundaries={boundaries} />
+      <EditProfileButton />
       {session.role === "owner" ? (
         <>
           <Link href="/connect" className="surface flex h-14 w-full items-center gap-3 px-4 text-left transition-colors hover:bg-hover motion-reduce:transition-none">

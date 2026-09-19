@@ -72,27 +72,28 @@ export function LeaderboardRow({
   return (
     <motion.li
       layout={!reduce}
-      className="border-b border-line last:border-b-0"
+      className="relative border-b border-line last:border-b-0"
     >
-      <div className="flex min-h-16 w-full items-center gap-3">
-        {row.rank !== null ? (
-          <span className="tabular w-5 shrink-0 text-right text-[13px] font-medium text-fg-subtle">
-            {row.rank}
-          </span>
-        ) : null}
-        <Avatar
-          userId={row.userId}
-          size={40}
-          onOpenCard={openCard}
-          className={cn(isMe && "ring-2 ring-accent ring-offset-2 ring-offset-raised")}
-        />
+      {/* The avatar is its own control (opens the card), so it sits beside the row button, not inside it. */}
+      <Avatar
+        userId={row.userId}
+        size={40}
+        onOpenCard={openCard}
+        className={cn("absolute top-3 z-[1]", row.rank !== null ? "left-8" : "left-0", isMe && "ring-2 ring-accent ring-offset-2 ring-offset-raised")}
+      />
       <button
         type="button"
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
-        className="flex min-h-16 min-w-0 flex-1 items-center gap-3 py-2.5 text-left hover:bg-hover"
+        className="flex min-h-16 w-full items-center gap-3 py-2.5 text-left hover:bg-hover"
       >
+        {row.rank !== null ? (
+          <span className="tabular w-5 shrink-0 text-right text-[13px] font-medium text-fg-subtle">
+            {row.rank}
+          </span>
+        ) : null}
+        <span aria-hidden className="h-10 w-10 shrink-0" />
         <span className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
           <span className="truncate text-[15px] font-medium leading-tight text-fg">
             {row.displayName}
@@ -161,7 +162,6 @@ export function LeaderboardRow({
           ) : null}
         </span>
       </button>
-      </div>
 
       <AnimatePresence initial={false}>
         {open ? (

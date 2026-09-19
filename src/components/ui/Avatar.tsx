@@ -120,7 +120,7 @@ export function Avatar({ userId, name, size = 40, accent, photoUrl, ring, ringLa
           e.stopPropagation();
           onOpenCard(userId);
         }}
-        aria-label={`Open ${displayName}'s card`}
+        aria-label={profile ? `@${profile.handle}, open card` : "Open card"}
         data-avatar={userId}
         className={cn("relative inline-block shrink-0 rounded-full transition-transform duration-150 hover:scale-[1.04] active:scale-[0.97] motion-reduce:transition-none motion-reduce:hover:scale-100", className)}
         style={style}

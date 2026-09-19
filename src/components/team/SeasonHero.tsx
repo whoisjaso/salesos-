@@ -55,7 +55,7 @@ export function SeasonHero({ title, daysLeft, level, streakDays, pausedReasons =
           <span className="tabular text-[12px] text-fg-subtle">{daysLeft} days left</span>
         </div>
         <div className="tabular mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-fg-muted">
-          {!team && myRow ? <span className="font-medium text-fg">Level {level.level}</span> : null}
+          {!team && myRow ? <span className="font-semibold text-fg">L{level.level}</span> : null}
           <span>
             {team ? "Team, " : ""}
             {formatCount(level.xp)} XP
