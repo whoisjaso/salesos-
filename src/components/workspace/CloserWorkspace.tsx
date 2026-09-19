@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
+  CalendarBlank,
   Check,
   ClipboardText,
-  Handshake,
   Hourglass,
   Lifebuoy,
   Phone,
@@ -17,11 +17,13 @@ import {
   VideoCamera,
   X,
 } from "@phosphor-icons/react";
+import { APPROACH_TENTATIVE_SENTENCE, SUGGESTED_APPROACH_KICKER } from "@/domain/buyerMode";
 import { obaviaDataset, NOW } from "@/fixtures/obavia";
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
 import { cn } from "@/lib/cn";
 import { formatMoney } from "@/lib/format";
+import { latestReviewableCallId } from "@/lib/review";
 import { formatDayIn, formatTimeIn, sameDayIn, TENANT_TZ, zoneAbbrev } from "@/lib/workspace-setter";
 import {
   buildCloserBrief,
@@ -30,14 +32,18 @@ import {
   copilotItems,
   NO_SALE_REASONS,
   upcomingAppointments,
+  type CloserBrief,
   type CloserQueueItem,
   type UpcomingAppointment,
 } from "@/lib/workspace-closer";
 import { computeGame } from "@/lib/workspace-game";
 import { useTenantData } from "@/lib/onboarding";
 import { CloserEmptyToday } from "@/components/onboarding/CloserEmptyToday";
+import { buildTodayFocus } from "@/components/home/today-focus";
+import { TodayFocus } from "@/components/home/TodayFocus";
 import { BriefSheet } from "./BriefSheet";
 import { CloserQueue } from "./CloserQueue";
+import { Fields, type Field } from "./Fields";
 import { FinancialLadder } from "./FinancialLadder";
 import { GateLine } from "./GateLine";
 import { initials } from "./NextUp";
@@ -79,6 +85,9 @@ export function CloserWorkspace({ userId }: { userId: string }) {
   const [briefOpen, setBriefOpen] = useState(false);
   const [segment, setSegment] = useState<Segment>("now");
   const [createdTasks, setCreatedTasks] = useState<CloserQueueItem[]>([]);
+  // Calls finished in this session: one conversation each, and a call that has been read.
+  const [heldCalls, setHeldCalls] = useState(0);
+  const [reviewedCallId, setReviewedCallId] = useState<string | undefined>(undefined);
 
   const upcoming = useMemo(() => upcomingAppointments(dataset, userId, NOW).filter((u) => !completed.has(u.instance.instanceId)), [userId, completed]);
   const active: UpcomingAppointment | undefined = upcoming.find((u) => u.instance.instanceId === activeId) ?? upcoming.find((u) => !u.unresolved) ?? upcoming[0];
@@ -86,6 +95,13 @@ export function CloserWorkspace({ userId }: { userId: string }) {
   const queue = useMemo(() => [...createdTasks, ...buildCloserQueue(dataset, userId, NOW)], [userId, createdTasks]);
   const game = useMemo(() => computeGame(dataset, userId, NOW), [userId]);
   const todays = useMemo(() => upcomingAppointments(dataset, userId, NOW).filter((u) => sameDayIn(u.instance.scheduledStart, NOW, TENANT_TZ)), [userId]);
+
+  // Today connects to improvement: verified progress during the day, the next improvement
+  // with its cited moment once a call has been reviewed. The rule lives in today-focus.ts.
+  const focus = useMemo(
+    () => buildTodayFocus(dataset, userId, "closer", NOW, { reviewedCallId, session: { calls: heldCalls, conversations: heldCalls } }),
+    [userId, reviewedCallId, heldCalls],
+  );
 
   useEffect(() => {
     if (phase !== "live" || recover === "dropped" || recover === "reconnecting") return;
@@ -138,6 +154,14 @@ export function CloserWorkspace({ userId }: { userId: string }) {
     setPhase("result");
   };
 
+  /** The call is over and has been read, so Today can lead with the improvement it showed. */
+  const endCall = () => {
+    setPhase("outcome");
+    setHeldCalls((n) => n + 1);
+    const reviewable = active ? latestReviewableCallId(active.opportunity.opportunityId) : undefined;
+    if (reviewable) setReviewedCallId(reviewable);
+  };
+
   const finish = () => {
     if (!active) return;
     const next = upcoming.find((u) => u.instance.instanceId !== active.instance.instanceId && !u.unresolved) ?? upcoming.find((u) => u.instance.instanceId !== active.instance.instanceId);
@@ -153,7 +177,7 @@ export function CloserWorkspace({ userId }: { userId: string }) {
       case "idle":
         return video ? { label: "Join", onClick: () => setPhase("live"), icon: VideoCamera } : { label: "Call", onClick: () => setPhase("live"), icon: Phone };
       case "live":
-        return { label: "End call", onClick: () => setPhase("outcome"), icon: PhoneDisconnect, disabled: recover === "reconnecting" };
+        return { label: "End call", onClick: endCall, icon: PhoneDisconnect, disabled: recover === "reconnecting" };
       case "outcome": {
         const valid = outcome === "verbal_yes" || (outcome === "no_sale" && !!noSaleReason) || (outcome === "conditional" && conditional.trim().length > 0);
         return { label: "Save outcome", onClick: saveOutcome, disabled: !valid, icon: Check };
@@ -173,8 +197,15 @@ export function CloserWorkspace({ userId }: { userId: string }) {
 
   return (
     <>
-      <div className="mx-auto flex max-w-[640px] flex-col gap-4">
-        <Surface padding="md" className="flex flex-col">
+      {/*
+        Phone: one column, in this order. Desktop: the same elements, no second design.
+        The two wrappers are display:contents until lg, so the phone layout is untouched;
+        at lg the first becomes the call column and the second a standing rail that holds
+        the customer beside the call, so opening anything never costs the rep their context.
+      */}
+      <div className="mx-auto flex max-w-[640px] flex-col gap-4 lg:grid lg:max-w-[1180px] lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-5">
+        <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-4">
+        <Surface padding="md" className="order-1 flex flex-col">
           <div className="min-h-[96px]">
             <AnimatePresence mode="wait" initial={false}>
               {active && brief ? (
@@ -188,10 +219,15 @@ export function CloserWorkspace({ userId }: { userId: string }) {
                   {phase === "idle" ? (
                     <HeroIdle item={active} onBrief={() => setBriefOpen(true)} />
                   ) : phase === "live" ? (
-                    <div className="flex flex-col gap-3">
-                      <LiveHead item={active} seconds={seconds} recover={recover} />
+                    /*
+                      Live call. Phone: one column, same order as before. Desktop: two columns,
+                      the plan on the left and the material on the right, so the whole working
+                      surface and the End call control sit on one screen with no scrolling.
+                    */
+                    <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-5 lg:gap-y-3">
+                      <LiveHead item={active} seconds={seconds} recover={recover} className="lg:col-span-2" />
                       {!identityOk ? (
-                        <div className="rounded-md border border-[color:var(--perf-attention-line)] p-3 text-[13px]">
+                        <div className="rounded-md border border-[color:var(--perf-attention-line)] p-3 text-[13px] lg:col-span-2">
                           <div className="font-medium text-fg">Unknown participant joined</div>
                           <div className="mt-0.5 text-fg-muted">Confirm identity before linking history</div>
                           <div className="mt-2 flex gap-2">
@@ -205,13 +241,15 @@ export function CloserWorkspace({ userId }: { userId: string }) {
                         </div>
                       ) : null}
                       {recover === "dropped" ? (
-                        <div className="flex items-center justify-between rounded-md border border-[color:var(--perf-issue-line)] p-3 text-[13px]">
+                        <div className="flex items-center justify-between rounded-md border border-[color:var(--perf-issue-line)] p-3 text-[13px] lg:col-span-2">
                           <span className="font-medium text-fg">Call dropped</span>
                           <Button size="sm" variant="secondary" onClick={() => setRecover("reconnecting")}>
                             Reconnect
                           </Button>
                         </div>
                       ) : null}
+                      {/* Left on a desktop: the plan for this call, and the live hint. */}
+                      <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-3">
                       {copilot ? (
                         <div className="flex items-center gap-2 rounded-md border border-dashed border-line-strong px-3 py-2 text-[13px]">
                           <Robot size={14} aria-hidden className="shrink-0 text-accent" />
@@ -245,6 +283,9 @@ export function CloserWorkspace({ userId }: { userId: string }) {
                           );
                         })}
                       </ol>
+                      </div>
+                      {/* Right on a desktop: the approved material, the question to ask, what was promised. */}
+                      <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-3">
                       {offer ? (
                         <div className="rounded-md border border-line bg-sunken p-3 text-[13px]">
                           <div className="flex items-center justify-between">
@@ -297,7 +338,8 @@ export function CloserWorkspace({ userId }: { userId: string }) {
                           </Button>
                         </form>
                       </div>
-                      <div className="flex items-center justify-between">
+                      </div>
+                      <div className="flex items-center justify-between lg:col-span-2">
                         <button type="button" role="switch" aria-checked={copilotOn} onClick={() => setCopilotOn((v) => !v)} className="inline-flex h-8 items-center gap-1.5 rounded-sm px-2 text-[12px] font-medium text-fg-muted hover:bg-hover">
                           <Robot size={13} aria-hidden />
                           Copilot {copilotOn ? "on" : "off"}
@@ -378,7 +420,7 @@ export function CloserWorkspace({ userId }: { userId: string }) {
                 </motion.div>
               ) : (
                 <motion.div key="empty" initial={false} className="flex h-[96px] flex-col items-center justify-center gap-2 text-center">
-                  <Handshake size={28} aria-hidden className="text-fg-subtle" />
+                  <CalendarBlank size={28} aria-hidden className="text-fg-subtle" />
                   <span className="text-[15px] font-medium text-fg">No upcoming appointment</span>
                 </motion.div>
               )}
@@ -391,9 +433,19 @@ export function CloserWorkspace({ userId }: { userId: string }) {
           </div>
         </Surface>
 
-        <GateLine game={game} />
+        <div className="order-2 empty:hidden">
+          <GateLine game={game} />
+        </div>
+
+        {/* Today connects to improvement: verified progress, or the next improvement with its moment. */}
+        <TodayFocus focus={focus} className="order-6" />
+        </div>
+
+        <div className="contents lg:sticky lg:top-[72px] lg:flex lg:flex-col lg:gap-4">
+        {active && brief ? <CallContext item={active} brief={brief} /> : null}
 
         <Segmented<Segment>
+          className="order-4"
           items={[
             { id: "now", label: "Now" },
             { id: "queue", label: `Queue ${queue.length}` },
@@ -403,7 +455,7 @@ export function CloserWorkspace({ userId }: { userId: string }) {
         />
 
         {segment === "now" ? (
-          <Surface padding="none" as="section" aria-label="Today">
+          <Surface padding="none" as="section" aria-label="Today" className="order-5">
             <ul className="divide-y divide-line">
               {todays.map((u) => (
                 <li key={u.instance.instanceId}>
@@ -422,11 +474,60 @@ export function CloserWorkspace({ userId }: { userId: string }) {
           </Surface>
         ) : null}
 
-        {segment === "queue" ? <CloserQueue items={queue} /> : null}
+        {segment === "queue" ? <CloserQueue items={queue} className="order-5" /> : null}
+        </div>
       </div>
 
       {active && brief ? <BriefSheet key={active.instance.instanceId} open={briefOpen} onClose={() => setBriefOpen(false)} item={active} brief={brief} /> : null}
     </>
+  );
+}
+
+/** The facts behind the brief, as short label and value pairs. Provenance stays in the brief. */
+function contextFields(brief: CloserBrief): Field[] {
+  const fields: Field[] = brief.rows.map((r) => ({ label: r.label, value: r.text }));
+  if (brief.fit.length > 0) {
+    fields.push({
+      label: "Verified fit",
+      value: (
+        <span className="flex flex-col gap-0.5">
+          {brief.fit.map((f) => (
+            <span key={f.key}>
+              {f.key}: <span className="font-medium">{f.value}</span>
+            </span>
+          ))}
+        </span>
+      ),
+    });
+  }
+  if (brief.unknowns.length > 0) fields.push({ label: "Not known yet", value: brief.unknowns.join(", ") });
+  return fields;
+}
+
+/**
+ * The customer, standing beside the call on a desktop: who this is, the suggested approach
+ * with the line that says it is tentative, and the facts the brief carries. The phone keeps
+ * the brief behind its one tap; this is the same content, not a second design, so the rep
+ * never loses the person to open the guidance.
+ */
+function CallContext({ item, brief }: { item: UpcomingAppointment; brief: CloserBrief }) {
+  const approach = brief.buyerMode.approach[0];
+  return (
+    <Surface padding="md" className="order-3 hidden lg:flex lg:flex-col lg:gap-3" aria-label="Who this is">
+      <div className="flex flex-col gap-0.5">
+        <span className="section-label">Who this is</span>
+        <span className="text-[15px] font-medium leading-tight text-fg">{item.contact.displayName}</span>
+        {item.contact.organizationName ? <span className="text-[12.5px] leading-snug text-fg-muted">{item.contact.organizationName}</span> : null}
+      </div>
+      {approach ? (
+        <div className="flex flex-col gap-0.5">
+          <span className="section-label">{SUGGESTED_APPROACH_KICKER}</span>
+          <span className="text-[15px] font-semibold leading-tight text-fg">{approach}</span>
+          <span className="text-[11.5px] leading-snug text-fg-subtle">{APPROACH_TENTATIVE_SENTENCE}</span>
+        </div>
+      ) : null}
+      <Fields items={contextFields(brief)} />
+    </Surface>
   );
 }
 
@@ -452,11 +553,11 @@ function HeroIdle({ item, onBrief }: { item: UpcomingAppointment; onBrief: () =>
   );
 }
 
-function LiveHead({ item, seconds, recover, ended }: { item: UpcomingAppointment; seconds: number; recover: Recover; ended?: boolean }) {
+function LiveHead({ item, seconds, recover, ended, className }: { item: UpcomingAppointment; seconds: number; recover: Recover; ended?: boolean; className?: string }) {
   const label = ended ? "Ended" : recover === "dropped" ? "Dropped" : recover === "reconnecting" ? "Reconnecting" : "Connected";
   const live = !ended && recover === "none";
   return (
-    <div className="flex flex-col gap-2">
+    <div className={cn("flex flex-col gap-2", className)}>
       <div className="flex items-center gap-2">
         <span className="inline-grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sunken text-[11px] font-semibold text-fg">{initials(item.contact.displayName)}</span>
         <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-fg">{item.contact.displayName}</span>

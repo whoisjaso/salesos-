@@ -25,33 +25,42 @@ test.describe("Team and Me: Renata", () => {
     expect(await tabLabels(page)).toEqual(["Today", "Team", "Me"]);
   });
 
-  test("board rows are avatar, name, one number; ranks are paused until data is fixed", async ({ page }) => {
+  test("the board says whether it is a roster or a ranking, and a zero never looks like a missing figure", async ({ page }) => {
     await page.goto("/team");
     await expect(page.getByRole("radio", { name: "Board" })).toHaveAttribute("aria-checked", "true");
     await expect(page.getByRole("radio", { name: "Closers" })).toHaveAttribute("aria-checked", "true");
 
-    const board = page.getByRole("list", { name: "Board" });
-    const me = board.getByRole("listitem").filter({ hasText: "Renata Solís" });
+    // A roster says so, states its order, and carries no position number anywhere.
+    await expect(page.getByTestId("standings-kind")).toHaveText("Roster, not a ranking");
+    await expect(page.getByTestId("standings-order")).toContainText("alphabetical order");
+    const roster = page.getByRole("list", { name: "Roster" });
+    const me = roster.getByRole("listitem").filter({ hasText: "Renata Solís" });
     await expect(me).toHaveCount(1);
-    await expect(me.getByText(/^\$[\d,]+\.\d{2}$|^N\/A$/)).toBeVisible();
-    // No chip, no T1 badge, no hourglass on the row: the basis label appears once above the list.
-    await expect(me).not.toContainText("Net collected cash");
     await expect(me).not.toContainText(/T\d/);
-    await expect(board.getByLabel("Provisional")).toHaveCount(0);
-    await expect(page.getByText("Net collected cash, per lead")).toBeVisible();
+    await expect(roster.locator("li span.tabular.w-5")).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Season" })).toContainText("days left");
 
-    // Paused: one line under the hero, no numeric rank on the rows, and no fix link for a rep.
-    const pausedRow = page.getByTestId("ranks-paused");
-    await expect(pausedRow).toContainText("Ranks paused");
-    await expect(page.getByText(/^Ranking paused: /)).toHaveCount(0);
-    const rankCells = board.locator("li span.tabular.w-5");
-    await expect(rankCells).toHaveCount(0);
+    // Three money states, three different sentences, none of them a bare number.
+    await expect(me.getByText(/^\$[\d,]+\.\d{2}$/)).toBeVisible();
+    await expect(me.getByText("Provisional")).toBeVisible();
+    const zeroRow = roster.getByRole("listitem").filter({ hasText: "Marcus Ellery" });
+    await expect(zeroRow.getByText("Payment data not available")).toBeVisible();
+
+    // The hold is scoped: what ranking waits on, and who owns it. No fix link for a rep.
+    const heldRow = page.getByTestId("ranks-paused");
+    await expect(heldRow).toContainText("Ranking on hold");
+    await expect(heldRow).toContainText("Ranking waits until");
+    await expect(heldRow).toContainText("Finance owns that.");
+    await expect(page.getByText("Ranks paused")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Fix in Business" })).toHaveCount(0);
 
-    // The ranks sheet names the data reason and holds the descriptive override.
-    await pausedRow.click();
+    // The standings sheet names the incident, its owner, and holds the descriptive override.
+    await heldRow.click();
     const sheet = page.getByRole("dialog");
-    await expect(sheet.getByText(/^Ranking paused: /)).toContainText("unlinked payment");
+    await expect(sheet.getByRole("heading", { level: 2, name: "Ranking on hold" })).toBeVisible();
+    await expect(sheet).toContainText("unlinked payment");
+    await expect(sheet.getByText("Waits until", { exact: true })).toBeVisible();
+    await expect(sheet.getByText("Owner", { exact: true })).toBeVisible();
     await expect(sheet.getByRole("link", { name: "Fix in Business" })).toHaveCount(0);
     const toggle = sheet.getByRole("switch", { name: "Show ranks anyway" });
     await expect(toggle).toHaveAttribute("aria-checked", "false");
@@ -59,14 +68,23 @@ test.describe("Team and Me: Renata", () => {
     await expect(toggle).toHaveAttribute("aria-checked", "true");
     await closeSheet(page);
 
-    // Descriptive ranks: numbered rows, the line says so, and my season sheet carries my rank.
+    // Ranked: positions appear, the header says the ranks are descriptive only, and a
+    // verified zero reads as money, not as an absence.
+    await expect(page.getByTestId("standings-kind")).toHaveText("Ranked, descriptive only");
+    const board = page.getByRole("list", { name: "Board" });
+    const rankCells = board.locator("li span.tabular.w-5");
     await expect(rankCells.first()).toBeVisible();
     await expect(rankCells.first()).toHaveText(/^\d+$/);
     expect(await rankCells.count()).toBe(await board.getByRole("listitem").filter({ has: page.locator("[data-avatar]") }).count());
-    await expect(pausedRow).toContainText("Shown anyway");
+    const zeroRanked = board.getByRole("listitem").filter({ hasText: "Marcus Ellery" });
+    await expect(zeroRanked.getByText("$0", { exact: true })).toBeVisible();
+    await expect(zeroRanked.getByText("collected", { exact: true })).toBeVisible();
+    await expect(zeroRanked.getByText("Payment data not available")).toHaveCount(0);
+    await expect(heldRow).toContainText("Shown anyway");
     await expect(page.getByRole("region", { name: "Season" })).toContainText(/#\d+/);
     await page.getByRole("region", { name: "Season" }).getByRole("button", { name: /open details$/ }).click();
     await expect(page.getByRole("dialog")).toContainText(/#\d+, descriptive/);
+    await expect(page.getByRole("dialog")).toContainText(/Rank \d+ of \d+/);
     await closeSheet(page);
 
     // The source-sheet comparison is one row at the end of the list.
@@ -76,7 +94,7 @@ test.describe("Team and Me: Renata", () => {
     await closeSheet(page);
   });
 
-  test("owner sees the same paused board with a Fix in Business link in the ranks sheet", async ({ browser }) => {
+  test("owner sees the same roster with a Fix in Business link in the standings sheet", async ({ browser }) => {
     const ctx = await browser.newContext();
     await ctx.addInitScript((s) => window.localStorage.setItem("sos-session", JSON.stringify(s)), PEOPLE.owner);
     const page = await ctx.newPage();
@@ -85,22 +103,30 @@ test.describe("Team and Me: Renata", () => {
     await expect(season.getByRole("progressbar", { name: /^Team level \d+/ })).toBeVisible();
     await expect(season.getByRole("button", { name: "Invite" })).toBeVisible();
     await expect(page.getByRole("radio", { name: "Missions" })).toHaveCount(0);
+    await expect(page.getByTestId("standings-kind")).toHaveText("Roster, not a ranking");
     await page.getByTestId("ranks-paused").click();
     const sheet = page.getByRole("dialog");
-    await expect(sheet.getByText(/^Ranking paused: /)).toContainText("unlinked payment");
+    await expect(sheet.getByRole("heading", { level: 2, name: "Ranking on hold" })).toBeVisible();
+    await expect(sheet).toContainText("unlinked payment");
+    await expect(sheet).toContainText("Finance");
     await expect(sheet.getByRole("link", { name: "Fix in Business" })).toHaveAttribute("href", "/");
     await ctx.close();
   });
 
-  test("a row opens a sheet with its funnel and a correction request", async ({ page }) => {
+  test("a row opens a sheet with its funnel, what is held, and a correction request", async ({ page }) => {
     await page.goto("/team");
-    const row = page.getByRole("list", { name: "Board" }).getByRole("listitem").filter({ hasText: "Renata Solís" });
+    const row = page.getByRole("list", { name: "Roster" }).getByRole("listitem").filter({ hasText: "Renata Solís" });
     await expect(row.getByText("Matured", { exact: true })).toHaveCount(0);
     await row.getByRole("button", { name: /Renata Solís/ }).click();
     const sheet = page.getByRole("dialog");
     await expect(sheet.getByRole("heading", { level: 2, name: "Renata Solís" })).toBeVisible();
     await expect(sheet.getByText("Matured", { exact: true })).toBeVisible();
     await expect(sheet.getByText(/^\d+ of \d+$/)).toBeVisible();
+    // Attendance with unresolved outcomes is a bound, never a false exact.
+    await expect(sheet.getByText(/^At least \d+ attended, \d+ outcomes? unresolved$/)).toBeVisible();
+    // No rank on a roster, and the row says what is held and who owns it.
+    await expect(sheet.getByText("Not ranked", { exact: false })).toBeVisible();
+    await expect(sheet.getByText("Held", { exact: true })).toBeVisible();
     await expect(sheet.getByRole("list", { name: "Funnel with denominators" })).toBeVisible();
     await expect(sheet.getByText("Tier", { exact: true })).toBeVisible();
     await sheet.getByRole("button", { name: "Request correction" }).click();
@@ -139,7 +165,7 @@ test.describe("Team and Me: Renata", () => {
     await expect(missions.getByRole("button", { name: /^Milestone/ })).toContainText("Hidden");
   });
 
-  test("Pairs segment lists pair rows with one number; a row opens the pair sheet with the handoff", async ({ page }) => {
+  test("a pair row names the specific thing, and the sheet answers what we owe each other first", async ({ page }) => {
     await page.goto("/team");
     await page.getByRole("radio", { name: "Pairs" }).click();
     await expect(page.getByRole("radio", { name: "Pairs" })).toHaveAttribute("aria-checked", "true");
@@ -157,6 +183,11 @@ test.describe("Team and Me: Renata", () => {
     await expect(first.getByRole("img", { name: /^Pair bar: / })).toHaveCount(0);
     await expect(first.getByText(/^\$[\d,]+\.\d{2}$|^N\/A$/)).toBeVisible();
 
+    // No bare adjective anywhere: a flagged pair names the side, the stage and the gap.
+    await expect(pairs.getByText("Behind", { exact: true })).toHaveCount(0);
+    const flagged = cards.filter({ hasText: "Tomasz and Marcus" });
+    await expect(flagged).toContainText(/\d+ points under the pooled pair rate/);
+
     // Renata's own pair: she sees her commission line, never the setter's.
     const mine = cards.filter({ hasText: "Priya and Renata" });
     await expect(mine).toHaveCount(1);
@@ -164,10 +195,26 @@ test.describe("Team and Me: Renata", () => {
     const sheet = page.getByRole("dialog");
     await expect(sheet).toBeVisible();
     await expect(sheet.getByText(/(Owner|Closer|Setter) picked/)).toBeVisible();
+
+    // The two answers come first, in order, before any comparison.
+    const owed = sheet.getByRole("region", { name: "What we owe each other" });
+    const next = sheet.getByRole("region", { name: "What each of us does next" });
+    const compare = sheet.getByRole("region", { name: "How the pair compares" });
+    await expect(owed).toBeVisible();
+    await expect(owed).toContainText(/handoff is waiting on acceptance|Handoff on .* is waiting on acceptance/i);
+    await expect(owed.getByText("Handoff", { exact: true })).toBeVisible();
+    await expect(owed.getByText(/^Accepted \d+ of \d+$/)).toBeVisible();
+    await expect(next).toContainText("Renata Solís");
+    await expect(next).toContainText("Priya Raghunathan");
+    const owedBox = await owed.boundingBox();
+    const nextBox = await next.boundingBox();
+    const compareBox = await compare.boundingBox();
+    expect(owedBox!.y).toBeLessThan(nextBox!.y);
+    expect(nextBox!.y).toBeLessThan(compareBox!.y);
+
+    // The comparison and the diagnostic still follow.
     await expect(sheet.getByRole("img", { name: /^Pair bar: / })).toBeAttached();
     await expect(sheet.locator(".chip", { hasText: "Net collected cash" })).toBeVisible();
-    await expect(sheet.getByText("Handoff", { exact: true })).toBeVisible();
-    await expect(sheet.getByText(/^Accepted \d+ of \d+$/)).toBeVisible();
     await expect(sheet.getByRole("region", { name: "Setter side" })).toBeVisible();
     await expect(sheet.getByRole("region", { name: "Closer side" })).toBeVisible();
     await expect(sheet.getByText(/^Closer commission/)).toBeVisible();
@@ -188,8 +235,10 @@ test.describe("Team and Me: Renata", () => {
     await expect(hero.getByText("Payable commission, not yet paid")).toBeVisible();
     await expect(hero.getByText(/^Cash tier\. Next: Stacks$/)).toBeVisible();
     await expect(hero.getByText("Tiers are display only and never change pay")).toBeVisible();
-    // Provisional says so where the figure is read, in words, with what it waits on.
-    await expect(hero.getByText(/^Provisional until .+\.$/)).toBeVisible();
+    // Provisional says so where the figure is read, in one short line. The statement,
+    // the waiting-on clause and the owner are one tap away, never on the default view.
+    await expect(hero.getByText(/^Provisional, \d+ items? to settle$/)).toBeVisible();
+    await expect(hero.getByText(/unlinked payment/)).toHaveCount(0);
     // The action names where it goes. "Collect more" named nothing.
     await expect(hero.getByRole("link", { name: "Open today's appointments" })).toBeVisible();
     await expect(page.getByText("Collect more")).toHaveCount(0);
@@ -230,10 +279,29 @@ test.describe("Team and Me: Renata", () => {
     await expect(money.getByText("Net collected cash per assigned opportunity, September", { exact: false })).toBeVisible();
     await expect(money.getByText("Per opportunity")).toBeVisible();
     await expect(money.getByText("Cash collected", { exact: true })).toBeVisible();
+    // The whole hold lives here: the effect, what it waits on, and who owns it.
+    await expect(money.getByText("Commission is provisional")).toBeVisible();
+    await expect(money.getByText(/^Provisional until .+\.$/)).toBeVisible();
+    await expect(money.getByText(/owns that\./)).toBeVisible();
     await closeSheet(page);
 
+    // The rep's own placing is read from the board's rows: the board shows a roster this
+    // month, so Me shows no rank number and uses the board's own words.
+    const raceRow = rows.getByRole("button", { name: /^Race/ });
+    await expect(raceRow).toContainText("Roster");
+    await expect(raceRow).not.toContainText("#");
+
+    // The Coach row never says "fix the data": it names the coaching and, when that coaching
+    // waits, what it waits on and who owns it.
+    const coachRow = rows.getByRole("button", { name: /^Coach/ });
+    const coachText = (await coachRow.innerText()).replace(/\s+/g, " ").trim();
+    expect(coachText).not.toMatch(/fix the data/i);
+    expect(coachText.length).toBeGreaterThan(10);
+    // Waiting is allowed, but only when it names who owns the wait.
+    if (/Waiting on/.test(coachText)) expect(coachText).toMatch(/Waiting on (Finance|Sales ops|Marketing|The rep|The owner)/);
+
     // Coach row opens exactly one coaching card: a proposal with Why and Premise is wrong.
-    await rows.getByRole("button", { name: /^Coach/ }).click();
+    await coachRow.click();
     const coach = page.getByRole("dialog");
     await expect(coach.getByText("Proposed", { exact: true })).toHaveCount(1);
     await expect(coach.getByRole("button", { name: "Why", exact: true })).toHaveCount(1);

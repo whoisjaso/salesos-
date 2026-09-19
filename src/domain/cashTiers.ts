@@ -349,6 +349,11 @@ export interface ProvisionalNotice {
   label?: string;
   /** Who resolves it. "Finance". */
   ownerLabel?: string;
+  /**
+   * How many open items have to settle. The hero carries one short line and the
+   * whole statement lives one tap away, so a hold never takes over a default view.
+   */
+  count?: number;
 }
 
 export interface CashRaceEntry {

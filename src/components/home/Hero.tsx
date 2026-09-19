@@ -3,7 +3,6 @@
 import { Flame } from "@phosphor-icons/react";
 import { motion, useReducedMotion } from "motion/react";
 import { Avatar } from "@/components/ui/Avatar";
-import { StateChip } from "@/components/ui/StateChip";
 import { Surface } from "@/components/ui/Surface";
 import { useRepCard } from "@/components/profile/RepCardSheet";
 import { formatCount } from "@/lib/format";
@@ -11,7 +10,13 @@ import type { TodayModel } from "./today-model";
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
-/** Compact level row: avatar with level ring, name, level and XP to next, streak. Not a hero; the cash card is. */
+/**
+ * Compact level row: avatar with level ring, name, level and XP to next, streak. Not a hero;
+ * the cash card is. The level is the person's own verified progress and is always shown
+ * plainly: a data incident holds the XP kinds that rest on it and nothing else, and the track
+ * that is waiting is named where its reason can sit beside it, never as a badge here
+ * (docs/DECISIONS.md, "A held measurement never holds the person").
+ */
 export function Hero({ model }: { model: TodayModel }) {
   const reduce = useReducedMotion();
   const { openCard } = useRepCard();
@@ -54,7 +59,6 @@ export function Hero({ model }: { model: TodayModel }) {
             <Flame size={13} weight={model.streakDays > 0 ? "fill" : "regular"} aria-hidden />
             {model.streakDays > 0 ? `${model.streakDays} day streak` : "No streak"}
           </span>
-          {model.xpPaused ? <StateChip state="attention" label="XP paused" /> : null}
           </div>
         </div>
       </motion.div>

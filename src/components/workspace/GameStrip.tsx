@@ -1,6 +1,6 @@
 "use client";
 
-import { Fire, Pause, Target } from "@phosphor-icons/react";
+import { Fire, Target } from "@phosphor-icons/react";
 import { ProgressRing } from "@/components/ui/ProgressRing";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
@@ -8,27 +8,16 @@ import type { GameView } from "@/lib/workspace-game";
 
 /**
  * One line: level ring (verified stage events only), streak, active mission with progress.
- * The mission's proof rule appears on tap. When the quality gate is paused, a single calm
- * chip replaces the numbers (SOS-15).
+ * The mission's proof rule appears on tap.
+ *
+ * The level is always shown plainly. A data incident holds the XP kinds that rest on the
+ * surface it makes unreliable and nothing else, so it never replaces this line with a pause
+ * (docs/DECISIONS.md, "A held measurement never holds the person"). The one track that is
+ * waiting is named by GateLine, with its owner and what keeps accruing.
  */
 export function GameStrip({ game }: { game: GameView }) {
   const { player, mission, proofRule } = game;
   const { commercial } = player;
-
-  if (player.gate.paused) {
-    return (
-      <div className="flex h-14 items-center justify-between rounded-md border border-line bg-raised px-4">
-        <Tooltip content={player.gate.reasons.join(". ")}>
-          <button type="button" className="chip text-fg-muted">
-            <Pause size={12} weight="bold" aria-hidden />
-            Paused
-          </button>
-        </Tooltip>
-        <span className="text-[11px] text-fg-subtle">Quality gate</span>
-      </div>
-    );
-  }
-
   const streakOn = player.streakDays > 0;
 
   return (

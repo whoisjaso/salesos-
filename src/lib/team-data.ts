@@ -22,7 +22,7 @@ import {
 import type { SeasonWindow } from "@/domain/cashTiers";
 import { attendedOpportunityIds, computeMetric, perceivedQualifiedIds } from "@/domain/metrics";
 import { DEFAULT_LEADERBOARD_POLICY, type LeaderboardPolicy, type Standings } from "@/domain/leaderboard";
-import { MONEY_NOT_AVAILABLE, formatCount, formatMoneyMinor, formatUnits } from "@/lib/format";
+import { MONEY_NOT_AVAILABLE, REVENUE_BASIS_LABEL, formatCount, formatMoneyMinor, formatUnits } from "@/lib/format";
 import { COACHING_ENGINE_VERSION, STAGE_ACTION_LIBRARY, perceptionGap, sensitivityTable, type PerceptionGap, type StageAction } from "@/domain/coaching";
 import { defaultSkillPaths, missionFromRecommendation, seasonFor } from "@/domain/gamification";
 import type { StageChampion } from "@/domain/game";
@@ -94,9 +94,20 @@ export interface StandingsLines {
 export function standingsLines(standings: Standings, descriptive = false): StandingsLines {
   const held = standings.heldBy;
   const kindLabel = standings.kind === "ranked" ? (descriptive ? "Ranked, descriptive only" : "Ranked") : "Roster, not a ranking";
-  const orderLine = firstSentence(standings.orderLabel);
+  // The kind is said once, in the line above, so the order line carries the
+  // measurement and its denominator in words instead of repeating the word.
+  const basis = standings.rows[0]?.basis;
+  const measure = basis ? `${REVENUE_BASIS_LABEL[basis]} per assigned opportunity` : null;
+  const sentence = firstSentence(standings.orderLabel);
+  const alphabetical = /alphabetical/i.test(standings.orderLabel);
+  const orderLine =
+    standings.kind === "roster"
+      ? measure && alphabetical
+        ? `${measure}, in alphabetical order.`
+        : sentence
+      : sentence.replace(/^Ranked by /, "By ");
   const holdLine = held
-    ? `Ranking waits until ${held.waitingOn}. ${held.ownerLabel ?? "The owner"} owns that.`
+    ? `Waits until ${held.waitingOn}. ${held.ownerLabel ?? "The owner"} owns that.`
     : standings.kind === "roster"
       ? restAfterFirstSentence(standings.orderLabel) || null
       : null;
@@ -128,14 +139,14 @@ export function rowMoneyRead(row: LeaderboardRow): MoneyRead {
   return {
     kind: "amount",
     text: value === null ? MONEY_NOT_AVAILABLE : formatMoneyMinor(Math.round(value), currency, { cents: true }),
-    provisional: row.revenueProvisional,
+    provisional: row.revenueProvisional === true,
   };
 }
 
 /** "At least 5 attended, 2 outcomes unresolved" or "5 attended". Never a false exact. */
 export function attendedRead(row: LeaderboardRow): string {
   if (row.attendedState === "at_least") {
-    return `At least ${formatCount(row.attendedAppointments)} attended, ${formatUnits(row.unresolvedAttendanceCount, "outcome")} unresolved`;
+    return `At least ${formatCount(row.attendedAppointments)} attended, ${formatUnits(row.unresolvedAttendanceCount ?? 0, "outcome")} unresolved`;
   }
   return `${formatCount(row.attendedAppointments)} attended`;
 }

@@ -150,6 +150,12 @@ export function CashHero({
   const StatusIcon = STATUS_ICON[status.id];
   const money = (n: number) => formatMoneyMinor(Math.round(n), currency);
   const tierLine = next ? `${tier.label} tier. Next: ${next.tier.label}` : `${tier.label} tier. Top tier`;
+  /** One short line on the hero. The statement, the wait and the owner are in Details. */
+  const provisionalLine = provisional
+    ? provisional.count && provisional.count > 0
+      ? `Provisional, ${formatUnits(provisional.count, "item")} to settle`
+      : `Provisional, ${(provisional.label ?? "this figure").toLowerCase()} can still move`
+    : null;
   const progressLabel = next
     ? `${money(next.remainingMinor)} more commission reaches the ${next.tier.label} tier, a display badge that never changes pay`
     : `${tier.label} is the top tier, a display badge that never changes pay`;
@@ -235,9 +241,7 @@ export function CashHero({
             <button
               type="button"
               onClick={() => setOpen(true)}
-              aria-label={`${period} commission, ${money(total)}. ${status.label}.${
-                provisional ? ` Provisional until ${provisional.waitingOn ?? "the open data incident is resolved"}.` : ""
-              } ${tierLine}. ${TIER_DISPLAY_NOTE}. Open details`}
+              aria-label={`${period} commission, ${money(total)}. ${status.label}.${provisionalLine ? ` ${provisionalLine}.` : ""} ${tierLine}. ${TIER_DISPLAY_NOTE}. Open details`}
               className="-m-2 flex flex-col gap-3.5 rounded-md p-2 text-left transition-colors hover:bg-hover active:bg-hover motion-reduce:transition-none"
             >
               <span className="flex items-center gap-4">
@@ -260,13 +264,10 @@ export function CashHero({
                 </span>
               </span>
 
-              {provisional ? (
-                <span className="flex items-start gap-1.5 text-[12px] leading-snug text-fg-muted">
-                  <Warning size={13} weight="bold" aria-hidden className="mt-[2px] shrink-0 text-perf-attention" />
-                  <span>
-                    <span className="font-medium text-perf-attention">Provisional </span>
-                    {provisional.waitingOn ? `until ${provisional.waitingOn}.` : provisional.statement}
-                  </span>
+              {provisionalLine ? (
+                <span className="flex items-center gap-1.5 text-[12px] leading-snug text-perf-attention">
+                  <Warning size={13} weight="bold" aria-hidden className="shrink-0" />
+                  <span className="font-medium">{provisionalLine}</span>
                 </span>
               ) : null}
 

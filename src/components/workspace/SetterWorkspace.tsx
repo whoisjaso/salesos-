@@ -9,6 +9,7 @@ import {
   Clock,
   Info,
   Lock,
+  MagnifyingGlass,
   Phone,
   PhoneDisconnect,
   Prohibit,
@@ -45,8 +46,10 @@ import {
 import { computeGame } from "@/lib/workspace-game";
 import { useTenantData } from "@/lib/onboarding";
 import { SetterEmptyToday } from "@/components/onboarding/SetterEmptyToday";
-import { NEXT_STEP_WORD, OUTCOME_WORD, reviewHref, type StageView } from "@/lib/review";
+import { NEXT_STEP_WORD, OUTCOME_WORD, latestReviewableCallId, reviewHref, type StageView } from "@/lib/review";
 import { StageStrip } from "@/components/review/StageStrip";
+import { buildTodayFocus } from "@/components/home/today-focus";
+import { TodayFocus } from "@/components/home/TodayFocus";
 import { BookingSheet, type Booking } from "./BookingSheet";
 import { Fields, type Field } from "./Fields";
 import { GateLine } from "./GateLine";
@@ -103,6 +106,10 @@ export function SetterWorkspace({ userId }: { userId: string }) {
   const [replyText, setReplyText] = useState("");
   const [bookings, setBookings] = useState<Record<string, Booking[]>>({});
   const [handoffs, setHandoffs] = useState<Record<string, "send" | "clarify">>({});
+  // Calls placed in this session, with the outcome the transcript decided, so today's
+  // verified progress moves as the day is worked. A correction updates its own entry.
+  const [callLog, setCallLog] = useState<{ id: string; outcome?: CallInterpretedOutcome }[]>([]);
+  const [reviewedCallId, setReviewedCallId] = useState<string | undefined>(undefined);
   const timers = useRef<number[]>([]);
 
   const { queue: allQueue, stopped } = useMemo(() => buildSetterQueue(dataset, userId, NOW), [userId]);
@@ -110,6 +117,22 @@ export function SetterWorkspace({ userId }: { userId: string }) {
   const active: SetterQueueItem | undefined = queue.find((q) => q.id === activeId) ?? queue[0];
   const today = useMemo(() => todayStrip(dataset, userId, NOW), [userId]);
   const game = useMemo(() => computeGame(dataset, userId, NOW), [userId]);
+
+  // Today connects to improvement: verified progress during the day, the next improvement
+  // with its cited moment once a call has been reviewed. The rule lives in today-focus.ts.
+  const sessionBookings = useMemo(() => Object.values(bookings).reduce((n, list) => n + list.length, 0), [bookings]);
+  const focus = useMemo(
+    () =>
+      buildTodayFocus(dataset, userId, "setter", NOW, {
+        reviewedCallId,
+        session: {
+          calls: callLog.length,
+          conversations: callLog.filter((c) => c.outcome === "meaningful_interaction").length,
+          bookings: sessionBookings,
+        },
+      }),
+    [userId, reviewedCallId, callLog, sessionBookings],
+  );
 
   const clearTimers = useCallback(() => {
     for (const t of timers.current) window.clearTimeout(t);
@@ -150,6 +173,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
 
   const startCall = () => {
     if (!active) return;
+    setCallLog((log) => [...log, { id: `${active.id}:${log.length}` }]);
     setCall({ ...IDLE, phase: "reserving" });
     later(700, () => {
       if (providerDown) {
@@ -167,6 +191,15 @@ export function SetterWorkspace({ userId }: { userId: string }) {
     clearTimers();
     const sim = simulatedPostCall(active.opportunity.opportunityId, active.priorAttempts);
     setCall((c) => ({ ...c, phase: "summary", proposed: sim.outcome, outcome: sim.outcome, nextStep: sim.nextStep, stages: sim.stages }));
+    logOutcome(sim.outcome);
+    // The call has been read, so Today can lead with the improvement and the moment that shows it.
+    const reviewable = latestReviewableCallId(active.opportunity.opportunityId);
+    if (reviewable) setReviewedCallId(reviewable);
+  };
+
+  /** The outcome of the call in flight, on its own entry, so a correction never double counts. */
+  const logOutcome = (outcome: CallInterpretedOutcome) => {
+    setCallLog((log) => (log.length === 0 ? log : [...log.slice(0, -1), { ...log[log.length - 1], outcome }]));
   };
 
   /** A disputed or manually logged outcome recomputes the stages and the next step. */
@@ -174,6 +207,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
     if (!active) return;
     const id = active.opportunity.opportunityId;
     setCall((c) => ({ ...c, outcome, nextStep: nextStepFor(outcome), stages: simulatedStages(outcome, id) }));
+    logOutcome(outcome);
   };
 
   const logResult = () => setCall((c) => (c.outcome ? { ...c, phase: "summary" } : c));
@@ -214,7 +248,9 @@ export function SetterWorkspace({ userId }: { userId: string }) {
         if (action === "call" || action === "follow_up") return { label: "Call", onClick: startCall, icon: Phone };
         if (action === "reply") return { label: "Reply", onClick: () => setReplyOpen(true), icon: ChatText };
         if (action === "confirm_appointment") return { label: "Confirm appointment", onClick: () => finish("Appointment confirmed"), icon: CalendarCheck };
-        if (action === "review_dq") return { label: "Review", onClick: () => setCall((c) => ({ ...c, phase: "dq" })), icon: Prohibit };
+        // Review opens something to inspect, so it carries an inspection mark. The prohibition
+        // mark belongs on the action that actually disqualifies, below.
+        if (action === "review_dq") return { label: "Review", onClick: () => setCall((c) => ({ ...c, phase: "dq" })), icon: MagnifyingGlass };
         return { label: primaryLabel(action), onClick: () => finish("Done"), icon: Check };
       case "reserving":
         return { label: "Reserving", onClick: () => {}, disabled: true, icon: Clock };
@@ -227,7 +263,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
           case "book":
             return { label: "Book", onClick: () => setBookingOpen(true), icon: CalendarCheck };
           case "dq_review":
-            return { label: "Review DQ", onClick: () => setCall((c) => ({ ...c, phase: "dq" })), icon: Prohibit };
+            return { label: "Review DQ", onClick: () => setCall((c) => ({ ...c, phase: "dq" })), icon: MagnifyingGlass };
           case "callback":
             return { label: "Callback", onClick: callback, icon: Clock };
           default:
@@ -253,9 +289,16 @@ export function SetterWorkspace({ userId }: { userId: string }) {
 
   return (
     <>
-      <div className="mx-auto flex max-w-[640px] flex-col gap-4">
+      {/*
+        Phone: one column, in this order. Desktop: the same elements, no second design.
+        The two wrappers are display:contents until lg, so the phone layout is untouched;
+        at lg they become the call column and a standing rail, and the order classes keep
+        each element where the phone put it.
+      */}
+      <div className="mx-auto flex max-w-[640px] flex-col gap-4 lg:grid lg:max-w-[1180px] lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-5">
+        <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-4">
         {/* ----- Hero: a name, one muted line, one action. Everything else is behind Details. ----- */}
-        <Surface padding="md" className="flex flex-col">
+        <Surface padding="md" className="order-1 flex flex-col">
           <div className="min-h-[72px]">
             <AnimatePresence mode="wait" initial={false}>
               {active ? (
@@ -295,9 +338,27 @@ export function SetterWorkspace({ userId }: { userId: string }) {
           ) : null}
         </Surface>
 
-        <GateLine game={game} />
+        <div className="order-2 empty:hidden">
+          <GateLine game={game} />
+        </div>
+
+        {/* Today connects to improvement: verified progress, or the next improvement with its moment. */}
+        <TodayFocus focus={focus} className="order-6" />
+        </div>
+
+        <div className="contents lg:sticky lg:top-[72px] lg:flex lg:flex-col lg:gap-4">
+        {/* The facts behind Details, standing beside the call on a desktop so opening
+            anything else never costs the rep the person they are talking to. */}
+        {active ? (
+          <Surface padding="md" className="order-3 hidden lg:flex lg:flex-col lg:gap-1" aria-label="Who this is">
+            <span className="section-label">Who this is</span>
+            <span className="text-[15px] font-medium leading-tight text-fg">{active.contact.displayName}</span>
+            <Fields items={heroFields(active)} />
+          </Surface>
+        ) : null}
 
         <Segmented<Segment>
+          className="order-4"
           items={[
             { id: "now", label: "Now" },
             { id: "queue", label: `Queue ${queue.length}` },
@@ -307,7 +368,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
         />
 
         {segment === "now" ? (
-          <Surface padding="none" as="section" aria-label="Next up">
+          <Surface padding="none" as="section" aria-label="Next up" className="order-5">
             <ul className="divide-y divide-line">
               {nextUp.map((q) => (
                 <li key={q.id}>
@@ -327,7 +388,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
         ) : null}
 
         {segment === "queue" ? (
-          <Surface padding="none" as="section" aria-label="Queue">
+          <Surface padding="none" as="section" aria-label="Queue" className="order-5">
             <ul className="divide-y divide-line">
               {queue.map((q) => (
                 <li key={q.id}>
@@ -343,6 +404,7 @@ export function SetterWorkspace({ userId }: { userId: string }) {
             </ul>
           </Surface>
         ) : null}
+        </div>
       </div>
 
       <Sheet open={todayOpen} onClose={() => setTodayOpen(false)} title="Today" description="Your day so far">

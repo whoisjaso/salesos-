@@ -44,9 +44,8 @@ export function StandingsHeader({ lines, holdLabel, holdLine, descriptive, onOpe
         <div className="surface">
           <DetailsRow
             leading={<Hourglass size={16} weight="bold" aria-hidden className="text-fg-muted" />}
-            label={holdLabel}
+            label={descriptive ? `${holdLabel}, ranks shown anyway` : holdLabel}
             hint={holdLine}
-            value={descriptive ? "Shown anyway" : undefined}
             onClick={onOpen}
             data-testid="ranks-paused"
           />

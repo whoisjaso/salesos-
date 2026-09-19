@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowsLeftRight, Hourglass } from "@phosphor-icons/react";
+import type { ReactNode } from "react";
+import { ArrowsLeftRight, CalendarBlank, CalendarCheck, CheckCircle, Hourglass } from "@phosphor-icons/react";
 import type { PairSide } from "@/domain/pairs";
 import { Funnel } from "@/components/metrics/Funnel";
 import type { FunnelCardMoney } from "@/components/metrics/FunnelCard";
@@ -9,7 +10,7 @@ import { StateChip } from "@/components/ui/StateChip";
 import { Surface } from "@/components/ui/Surface";
 import type { SessionRole } from "@/lib/session";
 import { formatMoneyMinor } from "@/lib/format";
-import { CHOSEN_BY_LABEL, PAIR_OWNER_LABEL, PAIR_SIDE_LABEL, PAIR_STAGE_SHORT, pairTitle, type PairView } from "@/lib/team-data";
+import { CHOSEN_BY_LABEL, PAIR_OWNER_LABEL, PAIR_SIDE_LABEL, PAIR_STAGE_SHORT, hoursWord, pairTitle, type PairView } from "@/lib/team-data";
 import { PAIR_HUE, PairBar } from "./PairBar";
 import { PairAvatars } from "./PairCard";
 
@@ -28,9 +29,9 @@ export interface PairSheetProps {
 }
 
 function formatHours(hours: number | null): string {
-  if (hours === null) return "no acceptance yet";
-  if (hours < 1) return `avg ${Math.max(1, Math.round(hours * 60))} min to accept`;
-  return `avg ${hours.toFixed(1)}h to accept`;
+  if (hours === null) return "no acceptance recorded yet";
+  if (hours < 1) return `accepted in ${Math.max(1, Math.round(hours * 60))} min on average`;
+  return `accepted in ${hours.toFixed(1)}h on average`;
 }
 
 function sinceLabel(iso: string): string {
@@ -46,14 +47,29 @@ function SideLabel({ side }: { side: "setter" | "closer" }) {
   );
 }
 
+/** One line of the shared answer: an icon, what it is, and at most one figure. */
+function Line({ icon, label, value, hint }: { icon: ReactNode; label: ReactNode; value?: ReactNode; hint?: ReactNode }) {
+  return (
+    <div className="flex items-start gap-2.5 py-2.5 first:pt-0 last:pb-0">
+      <span className="mt-[2px] shrink-0 text-fg-muted">{icon}</span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-[13.5px] leading-snug text-fg">{label}</span>
+        {hint ? <span className="tabular text-[12px] leading-snug text-fg-subtle">{hint}</span> : null}
+      </span>
+      {value !== undefined ? <span className="tabular shrink-0 text-[13.5px] font-medium text-fg">{value}</span> : null}
+    </div>
+  );
+}
+
 /**
- * The full pair: setter side funnel, handoff row, closer side funnel, the
- * diagnostic (side and stage, never a person), and the season contribution.
- * The owner sees both commission lines; a rep sees only their own.
+ * The pair, in the order the two people need it (docs/DECISIONS.md, "A pair
+ * screen answers what we owe each other"): first what they are responsible for
+ * together, then what each of them does next, and only then the comparison and
+ * the diagnostic. The diagnostic names a side and a stage, never a person.
  */
 export function PairSheet({ open, onClose, view, viewer, rates }: PairSheetProps) {
   if (!view) return null;
-  const { pair, row, funnel, diagnostic, contribution, setterDisplayName, closerDisplayName } = view;
+  const { pair, row, funnel, diagnostic, contribution, setterDisplayName, closerDisplayName, responsibilities } = view;
   const title = pairTitle(setterDisplayName, closerDisplayName);
   const currency = contribution.currency;
   const money = (n: number) => formatMoneyMinor(n, currency);
@@ -67,6 +83,7 @@ export function PairSheet({ open, onClose, view, viewer, rates }: PairSheetProps
   const weakSide = diagnostic.weakestSide;
   const hasFinding = weakSide !== "none";
   const findingState = hasFinding ? (diagnostic.gap <= -0.15 ? "material_issue" : "attention") : undefined;
+  const { waiting, upcoming, shared, next } = responsibilities;
 
   return (
     <Sheet
@@ -77,20 +94,89 @@ export function PairSheet({ open, onClose, view, viewer, rates }: PairSheetProps
       width={520}
     >
       <div className="flex flex-col gap-5">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <PairAvatars setterDisplayName={setterDisplayName} closerDisplayName={closerDisplayName} size={40} meSide={meSide} />
-            <dl className="tabular grid min-w-0 flex-1 grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[12px] leading-snug">
-              <dt className="font-medium" style={{ color: PAIR_HUE.setter }}>
-                Sets
-              </dt>
-              <dd className="truncate text-fg">{setterDisplayName}</dd>
-              <dt className="font-medium" style={{ color: PAIR_HUE.closer }}>
-                Closes
-              </dt>
-              <dd className="truncate text-fg">{closerDisplayName}</dd>
-            </dl>
-          </div>
+        <div className="flex items-center gap-3">
+          <PairAvatars setterDisplayName={setterDisplayName} closerDisplayName={closerDisplayName} size={40} meSide={meSide} />
+          <dl className="tabular grid min-w-0 flex-1 grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[12px] leading-snug">
+            <dt className="font-medium" style={{ color: PAIR_HUE.setter }}>
+              Sets
+            </dt>
+            <dd className="truncate text-fg">{setterDisplayName}</dd>
+            <dt className="font-medium" style={{ color: PAIR_HUE.closer }}>
+              Closes
+            </dt>
+            <dd className="truncate text-fg">{closerDisplayName}</dd>
+          </dl>
+        </div>
+
+        <section aria-label="What we owe each other" className="flex flex-col gap-2">
+          <h3 className="section-label">What we owe each other</h3>
+          <Surface padding="sm" className="flex flex-col divide-y divide-line">
+            {waiting.length > 0 ? (
+              waiting.map((w) => (
+                <Line
+                  key={w.opportunityId}
+                  icon={<Hourglass size={15} weight="bold" aria-hidden />}
+                  label={`Handoff on ${w.label} is waiting on acceptance`}
+                  value={hoursWord(w.hoursWaiting)}
+                />
+              ))
+            ) : (
+              <Line icon={<CheckCircle size={15} weight="bold" aria-hidden />} label="No handoff is waiting on acceptance" />
+            )}
+            {upcoming.length > 0 ? (
+              upcoming.map((u) => (
+                <Line
+                  key={`${u.opportunityId}:${u.startsAt}`}
+                  icon={<CalendarCheck size={15} weight="bold" aria-hidden />}
+                  label={`${u.label} is booked together`}
+                  hint={u.confirmed ? "Confirmed by the customer" : "Not confirmed by the customer yet"}
+                  value={u.when}
+                />
+              ))
+            ) : (
+              <Line icon={<CalendarBlank size={15} weight="bold" aria-hidden />} label="No shared appointment is scheduled" />
+            )}
+            <div className="flex flex-col gap-1 pt-2.5">
+              <span className="text-[12px] font-medium leading-snug text-fg-subtle">Our results through the stages we both touch</span>
+              <dl className="flex flex-col divide-y divide-line">
+                {shared.map((s) => (
+                  <div key={s.label} className="flex items-baseline justify-between gap-3 py-2">
+                    <dt className="text-[13.5px] text-fg">{s.label}</dt>
+                    <dd className="tabular text-right text-[13.5px] font-medium text-fg">
+                      {s.value}
+                      {s.label === "Handoff" ? <span className="block text-[12px] font-normal text-fg-subtle">{formatHours(funnel.handoff.avgHoursToAccept)}</span> : null}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </Surface>
+        </section>
+
+        <section aria-label="What each of us does next" className="flex flex-col gap-2">
+          <h3 className="section-label">What each of us does next</h3>
+          <Surface padding="sm" className="flex flex-col divide-y divide-line">
+            {[next.setter, next.closer].map((n) => (
+              <div key={n.userId} className="flex items-start gap-2.5 py-2.5 first:pt-0 last:pb-0">
+                <span aria-hidden className="mt-[7px] inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: PAIR_HUE[n.side] }} />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="text-[13px] font-medium leading-snug text-fg">
+                    {n.displayName}
+                    <span className="text-fg-muted">
+                      {", "}
+                      {n.side === "setter" ? "sets" : "closes"}
+                      {meSide === n.side ? ", you" : ""}
+                    </span>
+                  </span>
+                  <span className="tabular text-[13.5px] leading-snug text-fg">{n.action}</span>
+                </span>
+              </div>
+            ))}
+          </Surface>
+        </section>
+
+        <section aria-label="How the pair compares" className="flex flex-col gap-3">
+          <h3 className="section-label">How we compare</h3>
           <PairBar funnel={funnel} diagnostic={diagnostic} />
           <dl className="tabular flex items-center justify-between gap-3 text-[13px]">
             <dt className="text-fg-muted">Standing</dt>
@@ -100,30 +186,17 @@ export function PairSheet({ open, onClose, view, viewer, rates }: PairSheetProps
               ) : (
                 <span className="flex items-start gap-1.5 text-right">
                   <Hourglass size={12} weight="bold" aria-hidden className="mt-1 shrink-0 text-fg-subtle" />
-                  <span>Provisional, {row?.provisionalReason ?? "no opportunities in the season yet"}</span>
+                  <span>Not ranked, {row?.provisionalReason ?? "no opportunities in the season yet"}</span>
                 </span>
               )}
             </dd>
           </dl>
-        </div>
+        </section>
 
         <section aria-label="Setter side" className="flex flex-col gap-2">
           <SideLabel side="setter" />
           <Funnel stages={funnel.setterSide} connectors={funnel.connectors} />
         </section>
-
-        <Surface as="section" aria-label="Handoff" padding="sm" className="flex items-center gap-3">
-          <span className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sunken text-fg-muted">
-            <ArrowsLeftRight size={18} weight="bold" aria-hidden />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="section-label">Handoff</div>
-            <div className="tabular mt-0.5 text-[15px] font-semibold leading-tight text-fg">
-              Accepted {funnel.handoff.accepted} of {funnel.handoff.total}
-            </div>
-            <div className="tabular text-[12px] text-fg-subtle">{formatHours(funnel.handoff.avgHoursToAccept)}</div>
-          </div>
-        </Surface>
 
         <section aria-label="Closer side" className="flex flex-col gap-2">
           <SideLabel side="closer" />

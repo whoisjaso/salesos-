@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { BookOpenText, CaretRight, GraduationCap, PlugsConnected, SignOut, Trophy, UsersThree } from "@phosphor-icons/react";
 import type { SopModule } from "@/content/sops";
 import type { CoachingRecommendation } from "@/domain/types";
-import { RulesCoachingEngine } from "@/domain/coaching";
+import { RulesCoachingEngine, coachingPlan } from "@/domain/coaching";
 import { cashRace, commissionPolicyFor, commissionSummary, recentCashDrops, tierFor, tierPolicyFor, type ProvisionalNotice } from "@/domain/cashTiers";
 import { qualityGate, type GameTrack } from "@/domain/game";
 import { computeMetric } from "@/domain/metrics";
@@ -15,8 +15,8 @@ import { useSession } from "@/lib/session";
 import { useTenantData } from "@/lib/onboarding";
 import { CoachEmpty, MeEmpty } from "@/components/onboarding/MeEmpty";
 import { formatCount, formatMonthName } from "@/lib/format";
-import { buildPairView, OWNER_LABEL, pairForRep, type PairView, type RecommendationUiState } from "@/lib/team-data";
-import { DEFAULT_LEADERBOARD_POLICY } from "@/domain/leaderboard";
+import { buildPairView, OWNER_LABEL, pairForRep, seasonPolicy, type PairView, type RecommendationUiState } from "@/lib/team-data";
+import { DEFAULT_LEADERBOARD_POLICY, buildStandings, ownStanding } from "@/domain/leaderboard";
 import { PairSheet } from "@/components/pairs/PairSheet";
 import { PartnerCard } from "@/components/pairs/PartnerCard";
 import { EditProfileButton, ProfileRow } from "@/components/profile";
@@ -170,16 +170,41 @@ function RepMe({
   const [pairOpen, setPairOpen] = useState(false);
   const close = () => setSheet(null);
 
-  const rec = useMemo(() => {
-    const recs = RulesCoachingEngine.recommend(dataset, userId, NOW);
-    return recs.find((r) => r.ownerRole === "rep" && !r.suppressed) ?? recs.find((r) => r.ownerRole === "rep") ?? recs[0];
-  }, [userId]);
+  /**
+   * Coaching that stands comes first and is what the row shows. A hold never
+   * replaces coaching with "fix the data": when nothing stands, the row names
+   * the coaching that waits, what it waits on, and who owns that.
+   */
+  const plan = useMemo(() => coachingPlan(dataset, userId, NOW), [userId]);
+  const rec = useMemo(
+    () => plan.standing.find((r) => r.ownerRole === "rep") ?? plan.standing[0] ?? plan.held.find((r) => r.ownerRole === "rep") ?? plan.held[0],
+    [plan],
+  );
+  const recHold = rec?.held;
+  /** The incidents behind a held recommendation, named as short titles a rep can act on. */
+  const holdTitles = useMemo(() => {
+    if (!recHold) return "";
+    const ids = new Set(recHold.incidentIds);
+    return plan.scope.incidents
+      .filter((i) => ids.has(i.incidentId))
+      .map((i) => i.title)
+      .join(" and ");
+  }, [recHold, plan]);
   const metric = useMemo(() => (rec ? computeMetric(rec.metricIds[0], dataset, { userId }, NOW) : null), [rec, userId]);
   const season = useMemo(() => ({ from: data.season.from, to: data.season.to }), [data.season.from, data.season.to]);
   // Role-correct money: the rep's own tier bracket, race, and commission rate all follow the session role.
   const tierPolicy = useMemo(() => tierPolicyFor(role), [role]);
   const summary = useMemo(() => commissionSummary(dataset, userId, season, NOW, obaviaCommissionPolicies), [userId, season]);
   const race = useMemo(() => cashRace(dataset, season, role, tierPolicy), [season, role, tierPolicy]);
+  /**
+   * The rep's own placing is read from the same standings the team board builds,
+   * with the same policy, so a rank on Me can never contradict the board. When
+   * the board produces a roster, no rank number is shown here either.
+   */
+  const standings = useMemo(() => buildStandings(dataset, "comparable_performance", seasonPolicy(NOW), NOW), []);
+  const own = useMemo(() => ownStanding(standings, userId, role), [standings, userId, role]);
+  // The board's own words, so the two screens can never read differently.
+  const raceValue = own.rank !== null ? `#${own.rank}` : own.row ? "Roster" : "Not placed";
   const gate = useMemo(() => qualityGate(dataset, userId), [userId]);
   const pairView = useMemo<PairView | null>(() => {
     const pair = pairForRep(obaviaDatasetWithPairs, obaviaPairs, userId, NOW);
@@ -210,12 +235,12 @@ function RepMe({
       waitingOn: touching.map((i) => i.waitingOn).join(", and "),
       label: "Commission",
       ownerLabel: touching[0].ownerLabel,
+      count: touching.length,
     };
   }, [provisional, gate]);
 
   const partnerId = pairView ? (userId === pairView.pair.setterUserId ? pairView.pair.closerUserId : pairView.pair.setterUserId) : null;
   const partnerName = pairView ? (userId === pairView.pair.setterUserId ? pairView.closerDisplayName : pairView.setterDisplayName) : null;
-  const mine = race.find((e) => e.userId === userId && e.role === role);
 
   return (
     <>
@@ -264,14 +289,21 @@ function RepMe({
         <DetailsRow
           label="Race"
           leading={<Trophy size={18} weight="regular" aria-hidden className="text-fg-subtle" />}
-          value={mine ? `#${mine.rank}` : "N/A"}
+          value={raceValue}
+          ariaLabel={`Race. ${own.statement}`}
           onClick={() => setSheet("race")}
         />
         {rec && metric ? (
           <DetailsRow
             label="Coach"
             leading={<GraduationCap size={18} weight="regular" aria-hidden className="text-fg-subtle" />}
-            value={<span className="block max-w-[180px] truncate">{rec.suppressed ? "Fix the data first" : rec.title}</span>}
+            hint={recHold ? holdTitles || recHold.waitingOn : undefined}
+            value={
+              <span className="block max-w-[150px] truncate">
+                {recHold ? `Waiting on ${recHold.ownerLabel}` : rec.title}
+              </span>
+            }
+            ariaLabel={recHold ? `Coach. ${rec.title}. ${recHold.statement}` : `Coach. ${rec.title}`}
             onClick={() => setSheet("coach")}
           />
         ) : null}
@@ -312,13 +344,41 @@ function RepMe({
         />
       </Sheet>
 
-      <Sheet open={sheet === "race"} onClose={close} title="Race" description={`Net collected cash in ${seasonName}, not commission`}>
-        <CashRace entries={race} meId={userId} seasonName={seasonName} currency={summary.currency} />
+      <Sheet open={sheet === "race"} onClose={close} title="Race" description={`${seasonName}, your placing and the cash behind it`}>
+        <div className="flex flex-col gap-3">
+          {/* Read from the board's own rows: when the board shows a roster, so does this. */}
+          <Surface padding="md" state={own.rank === null ? "attention" : undefined} className="flex flex-col gap-2">
+            <StateChip
+              state={own.rank === null ? "attention" : "strong"}
+              label={own.rank !== null ? `Rank ${own.rank} of ${formatCount(own.of)}` : own.row ? "Roster, not a ranking" : "Not placed"}
+              className="self-start"
+            />
+            <p className="text-[13px] text-fg">{own.statement}</p>
+            {own.rank === null ? (
+              <p className="text-[13px] text-fg-muted">
+                The team board shows the same roster, so no ranking here can disagree with it. Your own figures and everything below keep running.
+              </p>
+            ) : null}
+          </Surface>
+          <CashRace entries={race} meId={userId} seasonName={seasonName} currency={summary.currency} />
+        </div>
       </Sheet>
 
       {rec && metric ? (
         <Sheet open={sheet === "coach"} onClose={close} title="Coach" description={OWNER_LABEL[rec.ownerRole]}>
-          <HeroCard rec={rec} metric={metric} state={state} onState={setState} />
+          <div className="flex flex-col gap-3">
+            {recHold ? (
+              <Surface padding="md" state="attention" className="flex flex-col gap-2">
+                <StateChip state="attention" label={`Waiting on ${recHold.ownerLabel}`} className="self-start" />
+                <p className="text-[13px] text-fg">{recHold.statement}</p>
+                <p className="text-[13px] text-fg-muted">This recommendation waits until {recHold.waitingOn}.</p>
+                <p className="text-[13px] text-fg-muted">
+                  Nothing is asked of you here. Coaching that reads from your conversations is not held by this and appears as soon as it has evidence.
+                </p>
+              </Surface>
+            ) : null}
+            <HeroCard rec={rec} metric={metric} state={state} onState={setState} />
+          </div>
         </Sheet>
       ) : null}
 

@@ -284,6 +284,8 @@ export interface MeasurementCopy {
   name: string;
   /** What is counted and over how many, e.g. "Net collected cash over 90 assigned opportunities". */
   over: string;
+  /** The denominator alone, for a list row where the name already carries the basis. */
+  count: string;
   /** The period the figure covers. */
   period: string;
   /** null when the figure is final for the period. */
@@ -446,30 +448,35 @@ export function buildEconomics(dataset: Dataset, filter: CohortFilter, now: ISOD
     perOpportunity: {
       name: PER_OPPORTUNITY_NAME,
       over: `Net collected cash over ${assignedPhrase}`,
+      count: assignedPhrase,
       period: period.label,
       provisional: provisionalFor(dataset, perOpportunity, filter, now),
     },
     netCollected: {
       name: "Net collected cash",
       over: `Payments minus refunds and disputes, across ${assignedPhrase}`,
+      count: assignedPhrase,
       period: period.label,
       provisional: provisionalFor(dataset, netCollectedPayload, filter, now),
     },
     contracted: {
       name: "Contracted value",
       over: `Signed value, not cash, from ${contractPhrase}`,
+      count: contractPhrase,
       period: period.label,
       provisional: provisionalFor(dataset, contractedPayload, filter, now),
     },
     outstanding: {
       name: "Outstanding",
       over: `Contracted minus collected, across ${contractPhrase}`,
+      count: contractPhrase,
       period: period.label,
       provisional: provisionalFor(dataset, outstandingPayload, filter, now),
     },
     refunds: {
       name: "Refunds and disputes",
       over: `Refunds and dispute debits, ${plural(refundEntries.length, "entry", "entries")}`,
+      count: plural(refundEntries.length, "entry", "entries"),
       period: period.label,
       provisional: provisionalFor(dataset, refundsPayload, filter, now),
     },

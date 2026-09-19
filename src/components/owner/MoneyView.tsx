@@ -76,7 +76,14 @@ export function MoneyView({ economics }: { economics: EconomicsView }) {
               <DetailsRow
                 key={key}
                 label={m.name}
-                hint={m.provisional ? `${m.over}, ${m.period}, ${m.provisional.label.toLowerCase()}` : `${m.over}, ${m.period}`}
+                // The row's own denominator and period; the name already carries the basis,
+                // and the definition sheet one tap in carries the rest.
+                hint={
+                  <>
+                    {`${m.count}, ${m.period}`}
+                    {m.provisional ? <span className="font-medium text-fg">{`. ${m.provisional.label}.`}</span> : null}
+                  </>
+                }
                 value={whole(metric)}
                 ariaLabel={`${measurementSentence(whole(metric), m)} Open definition.`}
                 data-testid="money-row"

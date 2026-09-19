@@ -5,7 +5,7 @@
  */
 import type { Dataset } from "@/domain/metrics";
 import { computeFunnel, computeMetric, ledgerFor, netCollected } from "@/domain/metrics";
-import { deriveGameEvents, levelFor, playerState, streakDays, XP_TABLE, type GameEvent, type LevelState } from "@/domain/game";
+import { deriveGameEvents, levelFor, playerState, streakDays, XP_TABLE, type GameEvent, type GameTrack, type LevelState, type TrackHold } from "@/domain/game";
 import { seasonFor } from "@/domain/gamification";
 import type { FunnelConnector, FunnelStage, ISODateTime, Id, PerformanceState, RevenueBasis } from "@/domain/types";
 import { initialsOf } from "@/lib/format";
@@ -37,6 +37,15 @@ export interface TeamMember {
   level: number;
 }
 
+/** One XP track waiting on a measurement, with the sentence that states its limited effect. */
+export interface TodayHold {
+  track: GameTrack;
+  /** The XP kinds that wait. Everything else on the track keeps accruing. */
+  waiting: string[];
+  /** One sentence: what waits, who owns it, and what keeps running. */
+  statement: string;
+}
+
 export interface TodayModel {
   userId: Id;
   displayName: string;
@@ -45,7 +54,17 @@ export interface TodayModel {
   /** Commercial track for reps; pooled team track for the owner. */
   track: LevelState;
   streakDays: number;
-  xpPaused: boolean;
+  /**
+   * The tracks whose XP is waiting on a data incident, if any. A data incident never
+   * pauses the mechanic as a whole, so there is no global paused flag to read
+   * (docs/DECISIONS.md, "A held measurement never holds the person").
+   */
+  holds: TodayHold[];
+  /**
+   * @deprecated Never set. It read `gate.paused`, which a scoped data incident can no
+   * longer raise. Read `holds` instead; each one names its track and what it waits on.
+   */
+  xpPaused?: boolean;
   number: {
     /** Minor units per opportunity. null when nothing is assigned. */
     perOpportunityMinor: number | null;
@@ -90,6 +109,10 @@ function segmentsFrom(funnel: { stages: FunnelStage[]; connectors: FunnelConnect
   });
 }
 
+function holdsFrom(holds: TrackHold[]): TodayHold[] {
+  return holds.map((h) => ({ track: h.track, waiting: h.held.map((k) => XP_TABLE[k].label), statement: h.statement }));
+}
+
 function winsFrom(events: GameEvent[]): RecentWin[] {
   return events.slice(0, 5).map((e) => ({
     kind: e.kind,
@@ -131,7 +154,7 @@ export function buildTodayData(dataset: Dataset, now: ISODateTime): TodayData {
       role,
       track: player.commercial,
       streakDays: player.streakDays,
-      xpPaused: player.gate.paused,
+      holds: holdsFrom(player.gate.holds),
       number: {
         perOpportunityMinor: owned.length === 0 ? null : net.amountMinor / owned.length,
         currency,
@@ -158,7 +181,7 @@ export function buildTodayData(dataset: Dataset, now: ISODateTime): TodayData {
       role: "owner",
       track: levelFor(teamXp),
       streakDays: streakDays(allEvents.filter((e) => repIds.has(e.userId)), now),
-      xpPaused: false,
+      holds: [],
       number: {
         perOpportunityMinor: m16.value,
         currency: m16.currency ?? currency,

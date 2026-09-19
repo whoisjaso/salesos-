@@ -150,6 +150,7 @@ export function SourceView() {
   const teamMeasure: MeasurementCopy = {
     name: "Reported revenue per lead",
     over: `Reported revenue over ${formatCount(totals.leads)} leads`,
+    count: `${formatCount(totals.leads)} leads`,
     period: SHEET_PERIOD,
     provisional: { ...UNVERIFIED },
   };
@@ -172,6 +173,7 @@ export function SourceView() {
             const measure: MeasurementCopy = {
               name: `${shortName(c)}, reported revenue per lead`,
               over: `Reported revenue over ${formatCount(c.leads)} leads, lead tier ${c.leadTier}`,
+              count: `${formatCount(c.leads)} leads, tier ${c.leadTier}`,
               period: SHEET_PERIOD,
               provisional: { ...UNVERIFIED },
             };
@@ -179,7 +181,12 @@ export function SourceView() {
               <li key={c.repLabel}>
                 <DetailsRow
                   label={shortName(c)}
-                  hint={`${measure.over}, ${SHEET_PERIOD}, unverified`}
+                  hint={
+                    <>
+                      {`${measure.count}, ${SHEET_PERIOD}`}
+                      <span className="font-medium text-fg">{`. ${UNVERIFIED.label}.`}</span>
+                    </>
+                  }
                   value={value}
                   ariaLabel={`${measurementSentence(value, measure)} Tap for details.`}
                   data-testid="source-row"

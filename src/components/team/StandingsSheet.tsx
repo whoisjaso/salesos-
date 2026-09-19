@@ -1,12 +1,22 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { CheckCircle, Hourglass } from "@phosphor-icons/react";
 import { Sheet } from "@/components/ui/Sheet";
 import type { Standings } from "@/domain/leaderboard";
-import { incidentsForSurface } from "@/domain/incidents";
+import { SURFACE_LABEL, incidentsForSurface } from "@/domain/incidents";
 import type { StandingsLines } from "@/lib/team-data";
 import { Switch } from "./Segmented";
+
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[88px_minmax(0,1fr)] gap-3 py-2.5 first:pt-0">
+      <dt className="text-[13px] font-medium text-fg-muted">{label}</dt>
+      <dd className="tabular text-[13.5px] leading-relaxed text-fg">{children}</dd>
+    </div>
+  );
+}
 
 export interface StandingsSheetProps {
   open: boolean;
@@ -32,38 +42,37 @@ export function StandingsSheet({ open, onClose, standings, lines, descriptive, o
   return (
     <Sheet open={open} onClose={onClose} title={lines.holdLabel} description={held ? held.ownerLabel ?? "Owned elsewhere" : "Not enough matured work yet"}>
       <div className="flex flex-col gap-5">
-        <p className="flex items-start gap-2 text-[14px] leading-relaxed text-fg">
-          <Hourglass size={16} weight="bold" aria-hidden className="mt-1 shrink-0 text-fg-muted" />
-          <span className="tabular">{held ? held.statement : lines.holdLine ?? lines.orderLine}</span>
-        </p>
-
         {held ? (
           <dl className="flex flex-col divide-y divide-line">
-            <div className="grid grid-cols-[88px_minmax(0,1fr)] gap-3 py-2.5 first:pt-0">
-              <dt className="text-[13px] font-medium text-fg-muted">Waits until</dt>
-              <dd className="tabular text-[13.5px] leading-relaxed text-fg">{held.waitingOn}</dd>
-            </div>
-            <div className="grid grid-cols-[88px_minmax(0,1fr)] gap-3 py-2.5">
-              <dt className="text-[13px] font-medium text-fg-muted">Owner</dt>
-              <dd className="text-[13.5px] leading-relaxed text-fg">{held.ownerLabel ?? "The owner"}</dd>
-            </div>
-            <div className="grid grid-cols-[88px_minmax(0,1fr)] gap-3 py-2.5">
-              <dt className="text-[13px] font-medium text-fg-muted">Open now</dt>
-              <dd className="flex flex-col gap-2 text-[13.5px] leading-relaxed text-fg">
+            <Row label="What is held">
+              <span className="flex items-start gap-1.5">
+                <Hourglass size={13} weight="bold" aria-hidden className="mt-1 shrink-0 text-fg-subtle" />
+                <span>{SURFACE_LABEL[held.surface]}, so no position is produced anywhere</span>
+              </span>
+            </Row>
+            <Row label="Waits until">{held.waitingOn}</Row>
+            <Row label="Owner">{held.ownerLabel ?? "The owner"}</Row>
+            <Row label="Open now">
+              <span className="flex flex-col gap-2">
                 {incidents.map((i) => (
                   <span key={i.incidentId} className="flex flex-col gap-0.5">
                     <span className="tabular font-medium">{i.title}</span>
                     <span className="text-[12px] leading-snug text-fg-muted">{i.effect}</span>
                   </span>
                 ))}
-              </dd>
-            </div>
+              </span>
+            </Row>
           </dl>
-        ) : null}
+        ) : (
+          <p className="flex items-start gap-2 text-[14px] leading-relaxed text-fg">
+            <Hourglass size={16} weight="bold" aria-hidden className="mt-1 shrink-0 text-fg-muted" />
+            <span className="tabular">{lines.holdLine ?? lines.orderLine}</span>
+          </p>
+        )}
 
         <p className="flex items-start gap-2 text-[13px] leading-relaxed text-fg-muted">
           <CheckCircle size={15} weight="bold" aria-hidden className="mt-0.5 shrink-0" />
-          <span>Everything else keeps running: the figures below are shown as they stand, and calling, appointments, and conversation coaching are untouched.</span>
+          <span>Nothing else is held: every figure on the board is shown as it stands, and calling, appointments, and conversation coaching are untouched.</span>
         </p>
 
         <div className="surface flex items-center justify-between gap-3 px-4 py-3">

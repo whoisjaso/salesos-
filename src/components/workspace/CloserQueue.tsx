@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Surface } from "@/components/ui/Surface";
+import { cn } from "@/lib/cn";
 import { Segmented } from "./Segmented";
 import { initials } from "./NextUp";
 import { formatDateTimeIn, TENANT_TZ } from "@/lib/workspace-setter";
@@ -12,12 +13,12 @@ import { latestReviewableCallId } from "@/lib/review";
 const TYPES: CloserQueueType[] = ["commitments", "questions", "proposals", "contract", "payment", "delivery"];
 
 /** Queue by type (SOS-10). A promised callback never hides behind a probability-sorted deal list. */
-export function CloserQueue({ items, onSelect }: { items: CloserQueueItem[]; onSelect?: (item: CloserQueueItem) => void }) {
+export function CloserQueue({ items, onSelect, className }: { items: CloserQueueItem[]; onSelect?: (item: CloserQueueItem) => void; className?: string }) {
   const [type, setType] = useState<CloserQueueType>("commitments");
   const counts = useMemo(() => Object.fromEntries(TYPES.map((t) => [t, items.filter((i) => i.type === t).length])) as Record<CloserQueueType, number>, [items]);
   const visible = items.filter((i) => i.type === type);
   return (
-    <div className="flex flex-col gap-3">
+    <div className={cn("flex flex-col gap-3", className)}>
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <Segmented<CloserQueueType> items={TYPES.map((t) => ({ id: t, label: counts[t] ? `${QUEUE_TYPE_LABEL[t]} ${counts[t]}` : QUEUE_TYPE_LABEL[t] }))} value={type} onChange={setType} className="min-w-[560px]" />
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { CaretRight, Warning, WarningOctagon } from "@phosphor-icons/react";
+import { CaretRight, Hourglass, Warning, WarningOctagon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
 import { formatMoneyMinor } from "@/lib/format";
 import { initials, pairTitle, type PairView } from "@/lib/team-data";
@@ -55,18 +55,22 @@ const ISSUE_GAP = 0.15;
 
 /**
  * One pair on the board: the two avatars, the two first names, one number
- * (net collected per assigned), and one status word when the diagnostic flags a
- * side. The pair bar, chosen-by, and the full diagnostic live in the sheet.
+ * (net collected cash per assigned opportunity), and the one specific thing that
+ * is true right now: a handoff with the hours it has waited, or a stage with the
+ * gap to the pooled pair rate in words. Never a bare adjective, and nothing at
+ * all when nothing specific is true ("A pair screen answers what we owe each
+ * other", docs/DECISIONS.md). The bar, chosen-by, and the diagnostic are in the sheet.
  */
 export function PairCard({ view, onOpen, meId, className }: PairCardProps) {
-  const { pair, row, setterDisplayName, closerDisplayName, diagnostic } = view;
+  const { pair, row, setterDisplayName, closerDisplayName, diagnostic, responsibilities } = view;
   const title = pairTitle(setterDisplayName, closerDisplayName);
   const currency = row?.currency ?? view.contribution.currency;
   const value = row?.netPerAssigned.value ?? null;
   const meSide = meId === pair.setterUserId ? "setter" : meId === pair.closerUserId ? "closer" : undefined;
-  const flagged = diagnostic.weakestSide !== "none";
-  const issue = flagged && diagnostic.gap <= -ISSUE_GAP;
-  const StatusIcon = issue ? WarningOctagon : Warning;
+  const headline = responsibilities.headline;
+  const waiting = responsibilities.waiting.length > 0;
+  const issue = waiting || diagnostic.gap <= -ISSUE_GAP;
+  const StatusIcon = waiting ? Hourglass : issue ? WarningOctagon : Warning;
 
   return (
     <li className={cn("border-b border-line last:border-b-0", className)}>
@@ -74,10 +78,10 @@ export function PairCard({ view, onOpen, meId, className }: PairCardProps) {
         <PairAvatars setterDisplayName={setterDisplayName} closerDisplayName={closerDisplayName} meSide={meSide} />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="truncate text-[15px] font-medium leading-tight text-fg">{title}</span>
-          {flagged ? (
-            <span className={cn("inline-flex items-center gap-1 text-[12px] font-medium leading-tight", issue ? "text-perf-issue" : "text-perf-attention")}>
-              <StatusIcon size={12} weight="bold" aria-hidden />
-              Behind
+          {headline ? (
+            <span className={cn("flex items-start gap-1 text-[12px] font-medium leading-snug", issue ? "text-perf-issue" : "text-perf-attention")}>
+              <StatusIcon size={12} weight="bold" aria-hidden className="mt-[3px] shrink-0" />
+              <span>{headline}</span>
             </span>
           ) : null}
         </span>

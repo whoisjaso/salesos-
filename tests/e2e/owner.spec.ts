@@ -154,9 +154,11 @@ test.describe("Owner: Delphine", () => {
     await page.goto("/");
     const card = page.getByRole("region", { name: "Fix this first" }).getByRole("article");
     // The decisive sentence, in three lines that each fit rather than one line that is cut.
-    await expect(card).toContainText(/\$[\d,]+(\.\d{2})? collected, not linked to an opportunity\./);
-    await expect(card).toContainText(/^(Rep|Marketing|Sales ops|Product|Finance|Delivery) \w/m);
-    await expect(card).toContainText(/^Until then, .+\.$/m);
+    const lines = card.locator("p");
+    await expect(lines).toHaveCount(3);
+    await expect(lines.nth(0)).toHaveText(/^\$[\d,]+(\.\d{2})? collected, not linked to an opportunity\.$/);
+    await expect(lines.nth(1)).toHaveText(/^(Rep|Marketing|Sales ops|Product|Finance|Delivery) \w.*\.$/);
+    await expect(lines.nth(2)).toHaveText(/^Until then, .+\.$/);
     // Nothing inside the card is cut off at this width: no element scrolls sideways inside itself.
     const clipped = await card
       .locator("p, h3")
@@ -201,14 +203,12 @@ test.describe("Owner: Delphine", () => {
     const rows = page.getByTestId("money-row");
     await expect(rows).toHaveCount(3);
     // Every row value says what it is over and over what period, and says provisional when it is.
-    await expect(rows.nth(0)).toContainText(
-      new RegExp(String.raw`^Contracted valueSigned value, not cash, from [\d,]+ signed contracts?, ${PERIOD}(, provisional)?\$[\d,]+$`),
-    );
-    await expect(rows.nth(1)).toContainText(
-      new RegExp(String.raw`^OutstandingContracted minus collected, across [\d,]+ signed contracts?, ${PERIOD}, provisional\$[\d,]+$`),
-    );
-    await expect(rows.nth(2)).toContainText(
-      new RegExp(String.raw`^Refunds and disputesRefunds and dispute debits, [\d,]+ entr(y|ies), ${PERIOD}(, provisional)?\$[\d,]+$`),
+    await expect(rows.nth(0)).toContainText(new RegExp(String.raw`^Contracted value[\d,]+ signed contracts?, ${PERIOD}(\. Provisional\.)?\$[\d,]+$`));
+    await expect(rows.nth(1)).toContainText(new RegExp(String.raw`^Outstanding[\d,]+ signed contracts?, ${PERIOD}\. Provisional\.\$[\d,]+$`));
+    await expect(rows.nth(2)).toContainText(new RegExp(String.raw`^Refunds and disputes[\d,]+ entr(y|ies), ${PERIOD}(\. Provisional\.)?\$[\d,]+$`));
+    // The whole sentence is still the row's name for anyone who cannot see the hint.
+    await expect(rows.nth(0)).toHaveAccessibleName(
+      new RegExp(String.raw`^Contracted value, \$[\d,]+\. Signed value, not cash, from [\d,]+ signed contracts?\. ${PERIOD}\.`),
     );
     // Cash and contract are different numbers in different places.
     const cashText = (await cash.getAttribute("aria-label"))?.match(/\$[\d,]+/)?.[0];

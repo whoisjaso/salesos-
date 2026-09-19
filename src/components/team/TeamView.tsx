@@ -155,11 +155,15 @@ export function TeamView() {
           <motion.div key={segment} {...fade}>
             {segment === "board" ? (
               <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between gap-2 px-1">
-                  <span className="text-[12px] text-fg-subtle">Net collected cash, per lead</span>
-                  <Segmented options={ROLES} value={role} onChange={setRole} label="Role" />
-                </div>
-                <ol className="surface px-4" aria-label="Board">
+                <StandingsHeader
+                  lines={lines}
+                  holdLabel={baseLines.holdLabel}
+                  holdLine={baseLines.holdLine}
+                  descriptive={descriptive}
+                  onOpen={() => setRanksOpen(true)}
+                  control={<Segmented options={ROLES} value={role} onChange={setRole} label="Role" />}
+                />
+                <ol className="surface px-4" aria-label={standings.kind === "ranked" ? "Board" : "Roster"}>
                   {visible.map((r) => {
                     const key = `${r.userId}:${r.role}`;
                     return (
@@ -182,7 +186,7 @@ export function TeamView() {
             ) : segment === "pairs" ? (
               pairViews.length > 0 ? (
                 <div className="flex flex-col gap-2">
-                  <div className="px-1 text-[12px] text-fg-subtle">Net collected cash, per assigned</div>
+                  <div className="px-1 text-[12px] text-fg-subtle">Net collected cash, per assigned opportunity</div>
                   <ol className="surface px-4" aria-label="Pairs">
                     {pairViews.map((v) => (
                       <PairCard key={v.pair.pairId} view={v} meId={meId} onOpen={setOpenPair} />
@@ -215,14 +219,22 @@ export function TeamView() {
         level={level}
         streakDays={streak}
         pausedReasons={pausedReasons}
-        myRow={player ? myRow : undefined}
+        own={player ? own : null}
         team={!player}
         descriptive={descriptive}
         player={player}
         policy={basePolicy}
         guardrails={guardrails}
       />
-      <RanksSheet open={ranksOpen} onClose={() => setRanksOpen(false)} pause={pause} descriptive={descriptive} onDescriptive={setDescriptive} isOwner={isOwner} />
+      <StandingsSheet
+        open={ranksOpen}
+        onClose={() => setRanksOpen(false)}
+        standings={baseStandings}
+        lines={baseLines}
+        descriptive={descriptive}
+        onDescriptive={setDescriptive}
+        isOwner={isOwner}
+      />
       <Sheet open={sourceOpen} onClose={() => setSourceOpen(false)} title="Source sheet" description="August 2026, 12 columns as read">
         <SourceSheetList />
       </Sheet>

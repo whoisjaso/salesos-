@@ -24,7 +24,7 @@
     Measured against --bg-overlay (#1a1d23), the lightest surface text sits on, so the
     ratio only improves on --bg-raised and --bg-base. Anything that carries an
     instruction clears 4.5:1; incidental marks clear 3:1 ("Say the whole measurement",
-    docs/DECISIONS.md). fg 13.9:1, muted 8.7:1, subtle 5.6:1, faint 3.6:1.
+    docs/DECISIONS.md). fg 13.92, muted 8.70, subtle 5.55, faint 3.55.
   */
   --fg: #ece9e2;
   --fg-muted: #bdbab1;
@@ -74,8 +74,8 @@
 /*
   Light theme values.
   Measured against --bg-sunken (#ebeae6), the darkest surface text sits on:
-  fg 14.5:1, muted 6.6:1, subtle 4.8:1, faint 3.1:1. The performance hues moved only
-  as far as 4.5:1 on that same surface required; the accent did not move.
+  fg 14.45, muted 6.61, subtle 4.79, faint 3.07. The performance hues moved only as
+  far as 4.5:1 on that same surface required; the accent did not move.
 */
 :root[data-theme="light"] {
   color-scheme: light;

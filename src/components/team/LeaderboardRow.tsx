@@ -47,12 +47,12 @@ export function RowMoney({ read, size = "row" }: { read: MoneyRead; size?: "row"
   }
   if (read.kind === "verified_zero") {
     return (
-      <span className="flex shrink-0 items-center gap-1.5 text-fg">
-        <CheckCircle size={14} weight="bold" aria-hidden className="shrink-0 text-fg-muted" />
-        <span className="tabular inline-flex items-baseline gap-1">
+      <span className="flex shrink-0 flex-col items-end gap-0.5 text-fg">
+        <span className="tabular inline-flex items-center gap-1.5">
+          <CheckCircle size={13} weight="bold" aria-hidden className="shrink-0 text-fg-muted" />
           <span className={cn(figure, "font-semibold leading-none tracking-tight")}>$0</span>
-          <span className="text-[12px] text-fg-muted">collected</span>
         </span>
+        <span className="text-[11px] leading-none text-fg-muted">collected</span>
       </span>
     );
   }
