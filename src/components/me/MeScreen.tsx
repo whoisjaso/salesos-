@@ -8,6 +8,7 @@ import { SEED_CONNECTED_COUNT } from "@/components/connect/connect-model";
 import type { SopModule } from "@/content/sops";
 import type { CoachingRecommendation } from "@/domain/types";
 import { RulesCoachingEngine } from "@/domain/coaching";
+import { cashRace, commissionSummary, recentCashDrops, tierFor } from "@/domain/cashTiers";
 import { computeMetric } from "@/domain/metrics";
 import { obaviaDataset, NOW } from "@/fixtures/obavia";
 import { useSession } from "@/lib/session";
@@ -20,6 +21,9 @@ import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { Hero } from "@/components/home/Hero";
 import { OneNumber } from "@/components/home/OneNumber";
 import type { TodayData } from "@/components/home/today-model";
+import { CashHero } from "@/components/cash/CashHero";
+import { CashRace } from "@/components/cash/CashRace";
+import { RecentDrops } from "@/components/cash/RecentDrops";
 import { HeroCard } from "@/components/coach/HeroCard";
 import { WhySheet } from "@/components/coach/WhySheet";
 import { PlaybooksView } from "@/components/playbooks/PlaybooksView";
@@ -82,15 +86,26 @@ function RepMe({ userId, role, data }: { userId: string; role: "setter" | "close
   const metric = useMemo(() => (rec ? computeMetric(rec.metricIds[0], dataset, { userId }, NOW) : null), [rec, userId]);
   const m19 = useMemo(() => computeMetric("M19", dataset, { userId, role }, NOW), [userId, role]);
   const currency = m19.currency ?? "USD";
+  const season = useMemo(() => ({ from: data.season.from, to: data.season.to }), [data.season.from, data.season.to]);
+  const summary = useMemo(() => commissionSummary(dataset, userId, season, NOW), [userId, season]);
+  const race = useMemo(() => cashRace(dataset, season), [season]);
+  const drops = useMemo(() => {
+    const contacts = new Map(dataset.contacts.map((c) => [c.contactId, c]));
+    const opps = new Map(dataset.opportunities.map((o) => [o.opportunityId, o]));
+    return recentCashDrops(dataset, userId, season).map((d) => ({
+      ...d,
+      organizationName: contacts.get(opps.get(d.opportunityId)?.primaryContactId ?? "")?.organizationName,
+    }));
+  }, [userId, season]);
+  const seasonName = data.season.label.replace(/ season$/, "");
 
   return (
     <>
-      {model ? (
-        <>
-          <Hero model={model} />
-          <OneNumber model={model} seasonLabel={data.season.label} />
-        </>
-      ) : null}
+      <CashHero summary={summary} />
+      {model ? <Hero model={model} /> : null}
+      <CashRace entries={race} meId={userId} seasonName={seasonName} currency={summary.currency} />
+      <RecentDrops drops={drops} tier={tierFor(summary.totalMinor)} now={NOW} currency={summary.currency} />
+      {model ? <OneNumber model={model} seasonLabel={data.season.label} /> : null}
       {rec && metric ? <HeroCard rec={rec} metric={metric} state={state} onState={setState} /> : null}
       <Surface padding="md">
         <div className="flex items-center justify-between gap-2">

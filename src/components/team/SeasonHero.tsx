@@ -5,7 +5,10 @@ import type { LeaderboardRow } from "@/domain/types";
 import type { LevelState } from "@/domain/game";
 import { ProgressRing } from "@/components/ui/ProgressRing";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { TierBadge } from "@/components/cash/TierBadge";
+import { seasonTierFor } from "@/components/cash/tier-lookup";
 import { formatCount } from "@/lib/format";
+import { rowRole } from "@/lib/team-data";
 
 export interface SeasonHeroProps {
   title: string;
@@ -26,10 +29,16 @@ export interface SeasonHeroProps {
 export function SeasonHero({ title, daysLeft, level, streakDays, pausedReasons = [], myRow, team = false, descriptive }: SeasonHeroProps) {
   const toNext = level.xpForNextLevel === null ? null : level.xpForNextLevel - level.xp;
   const paused = pausedReasons.length > 0;
+  const tier = !team && myRow ? seasonTierFor(myRow.userId, rowRole(myRow)) : undefined;
 
   return (
     <section aria-label="Season" className="surface flex items-center gap-4 p-4 sm:gap-6 sm:p-5">
-      <ProgressRing value={level.progress} size={84} strokeWidth={6} label={`${team ? "Team level" : "Level"} ${level.level}, ${Math.round(level.progress * 100)}% to next`} centerText={`L${level.level}`} className="shrink-0 [&>span]:text-[18px] [&>span]:font-semibold" />
+      <span className="relative shrink-0">
+        <ProgressRing value={level.progress} size={84} strokeWidth={6} label={`${team ? "Team level" : "Level"} ${level.level}, ${Math.round(level.progress * 100)}% to next`} centerText={`L${level.level}`} className="[&>span]:text-[18px] [&>span]:font-semibold" />
+        {tier ? (
+          <TierBadge tier={tier} size={26} tooltip={`${tier.label} tier, by net collected cash this season. Display only.`} className="absolute -right-1 -bottom-1 ring-2 ring-raised" />
+        ) : null}
+      </span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <h2 className="text-[17px] font-semibold tracking-tight text-fg">{title}</h2>

@@ -19,7 +19,9 @@ import {
   formatMoney,
   formatMoneyMinor,
 } from "@/lib/format";
-import { initials, movementOf } from "@/lib/team-data";
+import { initials, movementOf, rowRole } from "@/lib/team-data";
+import { TierBadge } from "@/components/cash/TierBadge";
+import { seasonTierFor } from "@/components/cash/tier-lookup";
 import { MiniFunnel } from "./MiniFunnel";
 
 export interface LeaderboardRowProps {
@@ -62,6 +64,7 @@ export function LeaderboardRow({
   const panelId = `row-${row.userId}-${row.role}-detail`;
   const move = movementOf(row);
   const MoveIcon = move === "none" ? null : MOVE_ICON[move];
+  const tier = seasonTierFor(row.userId, rowRole(row));
 
   return (
     <motion.li
@@ -95,6 +98,13 @@ export function LeaderboardRow({
             {row.displayName}
           </span>
           <span className="flex items-center gap-1.5">
+            {tier ? (
+              <TierBadge
+                tier={tier}
+                size={20}
+                tooltip={`${tier.label} tier, by net collected cash this season. Display only.`}
+              />
+            ) : null}
             {row.leadTier !== undefined ? (
               <Tooltip
                 content={`Lead tier ${row.leadTier}. Compared within this tier only.`}
