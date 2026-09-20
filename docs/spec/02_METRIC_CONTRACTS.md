@@ -9,7 +9,11 @@ authority: Proposed product specification, subject to the precedence rules in AG
 
 # Canonical metric contracts and denominator rules
 
-**Read with:** [01_SOURCE_AUDIT_AND_CORRECTIONS.md](01_SOURCE_AUDIT_AND_CORRECTIONS.md), [03_DOMAIN_MODEL_AND_EVENTS.md](03_DOMAIN_MODEL_AND_EVENTS.md)
+**Read with:** [01_SOURCE_AUDIT_AND_CORRECTIONS.md](01_SOURCE_AUDIT_AND_CORRECTIONS.md), [03_DOMAIN_MODEL_AND_EVENTS.md](03_DOMAIN_MODEL_AND_EVENTS.md), [19_REVENUE_COMMISSIONS_AND_FORECASTS.md](19_REVENUE_COMMISSIONS_AND_FORECASTS.md)
+
+## Amendments
+
+**2026-09-20.** Added the net-collected-cash metric contract required by the payments specification section 7, and raised `definition_version` from `1.0` to `1.1` because the cash basis genuinely narrowed. The implementation is `DEFINITION_VERSION` at `src/domain/metrics.ts:58`. Every default in the new contract is marked PROPOSED DEFAULT, PENDING OWNER RATIFICATION and is registered as a numbered open decision in [28_TRACEABILITY_AND_OPEN_DECISIONS.md](28_TRACEABILITY_AND_OPEN_DECISIONS.md). Amending this module leaves its `sha256` in `MANIFEST.json` stale; see correction C-03 in module 28.
 
 ## In plain language
 
@@ -48,7 +52,7 @@ Assign a permanent `opportunity_id`, an initial accountability owner or team, `a
 | M13 | Lead-to-win rate | Won opportunities / assigned opportunities in the same opportunity cohort. |
 | M14 | Leads per win | Assigned opportunities / won opportunities. Zero wins yields `N/A: no wins`, never zero. |
 | M15 | Reported/booked revenue per lead | Approved contracted or imported reported amount / assigned opportunities; prominently label the basis. Not cash. |
-| M16 | Net collected revenue per lead | Cohort-attributed settled/collected eligible customer cash, adjusted by the ledger policy, / assigned opportunities. Exclude taxes and pass-throughs from the commercial revenue basis. |
+| M16 | Net collected revenue per lead | Cohort-attributed net collected cash, as defined by the net-collected-cash contract below, / assigned opportunities. Only processor-confirmed live movements enter the numerator. Exclude taxes and pass-throughs from the commercial revenue basis. |
 | M17 | Revenue per conversation | Eligible cohort revenue / verified live conversations, specifying whether repeat conversations are counted. Never label retained bookings as conversations. |
 | M18 | Contribution per lead | (Eligible net collected revenue minus defined attributable costs) / assigned opportunities. Show which costs are included and whether estimated. |
 | M19 | Commission per attended appointment | Eligible commission amount / attended appointment instances. Not an hourly rate. |
@@ -75,12 +79,57 @@ Store money as integer minor units with an ISO currency. Never combine currencie
 
 Refunds and disputes are movements of a payment ledger. Never subtract an unpaid receivable from cash that was never collected, or subtract the same disputed dollars as both a refund and a chargeback. Late adjustments restate cohort results and create visible report revisions.
 
+## Net collected cash: the written metric contract
+
+Payments specification section 7 requires a written contract approved before implementation. This is that contract. It governs M16, the owner economics tile, the cash race, tier thresholds, and the commission basis. The compensation consequences of the same contract are in [19_REVENUE_COMMISSIONS_AND_FORECASTS.md](19_REVENUE_COMMISSIONS_AND_FORECASTS.md); the two modules must not diverge.
+
+**Definition.** Net collected cash for a period and a scope is the sum of monetary movements that are all of:
+
+1. `processor_confirmed` in evidence class,
+2. in the `live` environment,
+3. denominated in one currency, summed with movements of that same currency only,
+4. of a cash-moving ledger kind: `payment_collected` and `dispute_credit` add, `refund` and `dispute_debit` subtract,
+5. counted exactly once per economic movement identity, not once per delivery.
+
+Implementation: `netCollected` at `src/domain/metrics.ts:290`, backed by `countsAsNetCollectedCash` at `src/domain/events.ts:154` and `ledgerSign` at `src/domain/events.ts:117`. `DEFINITION_VERSION` is `"1.1"`.
+
+**What is never net collected cash.** A discussed price. A contracted value. An authorization. A payment still processing. A success redirect. An invoice marked paid outside the processor. A zero-balance or complimentary invoice. A wire, check or cash recorded by a person. A spreadsheet or CRM import. A test-environment movement. A provider-reported view of a movement whose processor record is the authority. Each of these remains a genuine record, is stored with its evidence class, and is reported on its own terms. None is silently summed into a sales metric.
+
+### The seven required answers
+
+Every row is a PROPOSED DEFAULT, PENDING OWNER RATIFICATION. The code holds each one as a single named field on `NET_COLLECTED_CASH_POLICY` at `src/domain/types.ts:529`, marked `ratified: false`, so ratifying a different answer is one edit rather than a search through call sites.
+
+| # | Question from specification section 7 | Proposed default | Alternatives the owner may choose instead | Open decision |
+|---|---|---|---|---|
+| 1 | Is tax excluded from the sales-performance base? | Yes. Tax and other pass-through amounts stay out of the commercial basis. `passThroughExcluded: true`. | Include tax and disclose it as a separate line; or exclude tax only where the provider itemizes it and mark the rest provisional. | Answered in this module at version 1.0. Reaffirmed, no open decision. |
+| 2 | How are discounts represented? | A discount reduces the order's `contractedValue`. It never appears as a negative cash movement and never reduces collected cash. `discountsReduceContractedValue: true`. | Record the discount as its own ledger line against the order so gross contracted value stays visible; or carry both, with the discount line as the audit record and the reduced contracted value as the reported figure. | D18 |
+| 3 | Are processing fees excluded from this metric or shown separately? | Both. Fees are excluded from net collected cash and reported separately by `processingFees` at `src/domain/metrics.ts:303`. Collected cash is the customer's gross payment; the fee is a cost, not a smaller collection. | Report net-of-fee cash as the headline and gross as the secondary figure; or keep fees out of this metric entirely and handle them only in contribution analysis (M18). | D19 |
+| 4 | Which confirmed refunds and lost disputes reduce it? | A `processor_confirmed` refund reduces cash on its occurrence date. A lost dispute reduces cash exactly once, through a `dispute_debit`, never additionally as a refund. | Reduce on the settlement date rather than the occurrence date; or hold refunds in a reserve until a maturity horizon passes. | Single subtraction answered in this module at version 1.0. The timing choice rides with D22. |
+| 5 | How do open disputes appear as at-risk funds without double subtraction? | An opened dispute produces an at-risk figure only. `dispute_opened` has sign `0` and creates no debit; `disputeAtRisk` at `src/domain/metrics.ts:308` reports the exposure beside the cash figure with its own text label. A lost dispute then debits once; a won dispute clears the risk and mints nothing. | Subtract open disputes immediately and credit them back on a win, accepting a figure that moves twice for one event; or hide the at-risk figure from reps and show it to the owner only. | D20 |
+| 6 | How are currency conversion and reporting dates handled? | Refuse. Movements are kept in their original currency and exact minor units. Summing two currencies throws `CurrencyMismatchError` (`src/domain/money.ts:8`) rather than guessing a rate. A multi-currency workspace reports one figure per currency until a conversion policy with a named rate source, conversion date, and reporting currency is ratified. `crossCurrencySum: "refuse"`. | Convert at the movement's occurrence date using a named daily rate source and store both original and converted amounts; or convert at period close using a single period rate, disclosed on the metric. | D21 |
+| 7 | How is a refund after a closed leaderboard period reflected? | Restate and disclose. The adjustment restates the period the original movement belongs to, the restatement is visible as a report revision, and the closed period's standings carry a revision note. It is never applied silently to the open period. `lateAdjustment: "restate_the_period_and_disclose"`. | Apply the adjustment to the open period and disclose the origin period, which keeps closed standings frozen but makes the open period wrong; or freeze the closed period entirely and record the adjustment only in an audit view. | D22 |
+
+### Counting once
+
+Net collected cash is counted once per economic movement, not once per delivery and not once per view of a sale.
+
+- A checkout event, a payment-intent event and an invoice event describing one payment post one ledger row. The movement key is `buildEconomicMovementKey` at `src/domain/events.ts:74`; the key returns `undefined` rather than guess when the movement cannot be named, and an unnamed movement is never posted as a duplicate-safe fact.
+- A historical import and a webhook carrying the same movement post one row, because both paths use the same key.
+- Setter, closer and pair reports may each display the same money, because those are role-attributed views. They are not additive. Company net collected cash counts it once. A view that mixes role attribution with a company total is a defect, not a presentation choice.
+- Where a commerce platform and its underlying processor both expose one collection, one source is authoritative and the other is supporting evidence. Cross-provider similarity of amount, date or name is never sufficient to merge. An unresolved overlap is isolated from additive totals, with the limitation stated at the affected metric and nowhere else.
+
+### Coverage and honesty of the figure
+
+A net collected cash figure states the coverage it actually has. A verified zero and an unavailable figure are different words in different weights: "$0 collected" is a measurement, "payment data not available" is an absence. Where a historical import covered less than the requested window, the figure discloses the actual coverage rather than presenting a partial history as complete. Where movements are unattributed, the cash stays in the correct workspace's unallocated records, attribution-dependent outputs are marked provisional, and unrelated selling continues.
+
+Collected cash is an operating metric. It is not accounting revenue recognition, and it is not profit.
+
 ## Required metric payload
 
 ```json
 {
   "metric_id": "M08",
-  "definition_version": "1.0",
+  "definition_version": "1.1",
   "value": 0.8,
   "numerator": 40,
   "denominator": 50,
@@ -100,7 +149,7 @@ A bare `61%` without a denominator or definition is not a valid analytics API re
 
 ## Acceptance criteria
 
-Zero-denominator calculations show N/A. Duplicate webhook delivery changes no totals. DQ never improves RPL by removing assigned leads. Reschedules follow lineage rules. Lead and revenue cohorts align. Unresolved attendance is visible. Imported reported revenue cannot appear in a collected-cash tile. Each displayed number opens a reconciliation view with its included records.
+Zero-denominator calculations show N/A. Duplicate webhook delivery changes no totals. Three event types describing one payment change totals once. DQ never improves RPL by removing assigned leads. Reschedules follow lineage rules. Lead and revenue cohorts align. Unresolved attendance is visible. Imported reported revenue cannot appear in a collected-cash tile. An invoice marked paid outside the processor cannot appear in a collected-cash tile. A test-environment movement changes no live figure. An opened dispute shows as at-risk and subtracts nothing. Two currencies are never summed. Each displayed number opens a reconciliation view with its included records.
 
 ## Agent task prompt
 

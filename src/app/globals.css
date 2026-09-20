@@ -1,26 +1,349 @@
 @import "tailwindcss";
 
+/*
+  Sales OS design tokens.
+  Dark is the default theme. Light is reached through data-theme="light"
+  or the OS preference when no explicit theme is set.
+  Performance hues are deliberately low saturation and only ever used as a
+  1px outline plus a faint inner tint. Meaning is always carried by a label
+  and an icon as well (SOS-20).
+*/
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
+
+  /* Surfaces */
+  --bg-base: #0c0d10;
+  --bg-raised: #131519;
+  --bg-overlay: #1a1d23;
+  --bg-sunken: #090a0c;
+  --bg-hover: rgba(255, 255, 255, 0.04);
+
+  /*
+    Text, warm off-white ramp.
+    Measured against --bg-overlay (#1a1d23), the lightest surface text sits on, so the
+    ratio only improves on --bg-raised and --bg-base. Anything that carries an
+    instruction clears 4.5:1; incidental marks clear 3:1 ("Say the whole measurement",
+    docs/DECISIONS.md). fg 13.92, muted 8.70, subtle 5.55, faint 3.55.
+  */
+  --fg: #ece9e2;
+  --fg-muted: #bdbab1;
+  --fg-subtle: #96948b;
+  --fg-faint: #757369;
+
+  /* Lines */
+  --line: rgba(236, 233, 226, 0.08);
+  --line-strong: rgba(236, 233, 226, 0.16);
+  --line-focus: #7ba4f0;
+
+  /* The one accent */
+  --accent: #7ba4f0;
+  --accent-strong: #98b8f4;
+  --accent-fg: #0c0d10;
+  --accent-soft: rgba(123, 164, 240, 0.12);
+
+  /* Performance hues, low saturation */
+  --perf-strong-line: rgba(96, 176, 128, 0.6);
+  --perf-strong-tint: rgba(96, 176, 128, 0.07);
+  --perf-strong-fg: #86c7a2;
+  --perf-attention-line: rgba(214, 170, 92, 0.62);
+  --perf-attention-tint: rgba(214, 170, 92, 0.07);
+  --perf-attention-fg: #d9b878;
+  --perf-issue-line: rgba(212, 108, 100, 0.55);
+  --perf-issue-tint: rgba(212, 108, 100, 0.06);
+  --perf-issue-fg: #d98b84;
+  --perf-neutral-line: rgba(236, 233, 226, 0.18);
+  --perf-neutral-fg: var(--fg-muted);
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  /* Shadows, subtle and tinted to the base */
+  --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.42), 0 2px 6px rgba(0, 0, 0, 0.25);
+
+  /* Layout */
+  --rail-width: 216px;
+  --topbar-height: 56px;
+  --tabbar-height: 60px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/*
+  Light theme values.
+  Measured against --bg-sunken (#ebeae6), the darkest surface text sits on:
+  fg 14.45, muted 6.61, subtle 4.79, faint 3.07. The performance hues moved only as
+  far as 4.5:1 on that same surface required; the accent did not move.
+*/
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-base: #f4f3f0;
+  --bg-raised: #ffffff;
+  --bg-overlay: #ffffff;
+  --bg-sunken: #ebeae6;
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --fg: #1b1a18;
+  --fg-muted: #52514b;
+  --fg-subtle: #67665f;
+  --fg-faint: #87857d;
+  --line: rgba(27, 26, 24, 0.09);
+  --line-strong: rgba(27, 26, 24, 0.18);
+  --line-focus: #2e63c9;
+  --accent: #2e63c9;
+  --accent-strong: #244fa3;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(46, 99, 201, 0.1);
+  --perf-strong-line: rgba(52, 140, 92, 0.6);
+  --perf-strong-tint: rgba(52, 140, 92, 0.06);
+  --perf-strong-fg: #2b7550;
+  --perf-attention-line: rgba(176, 128, 38, 0.62);
+  --perf-attention-tint: rgba(176, 128, 38, 0.07);
+  --perf-attention-fg: #856116;
+  --perf-issue-line: rgba(178, 70, 62, 0.55);
+  --perf-issue-tint: rgba(178, 70, 62, 0.05);
+  --perf-issue-fg: #a8433b;
+  --perf-neutral-line: rgba(27, 26, 24, 0.2);
+  --shadow-sm: 0 1px 0 rgba(27, 26, 24, 0.04), 0 1px 2px rgba(27, 26, 24, 0.06);
+  --shadow-md: 0 4px 12px rgba(27, 26, 24, 0.08), 0 1px 2px rgba(27, 26, 24, 0.06);
+  --shadow-lg: 0 16px 40px rgba(27, 26, 24, 0.14), 0 2px 6px rgba(27, 26, 24, 0.08);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg-base: #f4f3f0;
+    --bg-raised: #ffffff;
+    --bg-overlay: #ffffff;
+    --bg-sunken: #ebeae6;
+    --bg-hover: rgba(0, 0, 0, 0.04);
+    --fg: #1b1a18;
+    --fg-muted: #52514b;
+    --fg-subtle: #67665f;
+    --fg-faint: #87857d;
+    --line: rgba(27, 26, 24, 0.09);
+    --line-strong: rgba(27, 26, 24, 0.18);
+    --line-focus: #2e63c9;
+    --accent: #2e63c9;
+    --accent-strong: #244fa3;
+    --accent-fg: #ffffff;
+    --accent-soft: rgba(46, 99, 201, 0.1);
+    --perf-strong-line: rgba(52, 140, 92, 0.6);
+    --perf-strong-tint: rgba(52, 140, 92, 0.06);
+    --perf-strong-fg: #2b7550;
+    --perf-attention-line: rgba(176, 128, 38, 0.62);
+    --perf-attention-tint: rgba(176, 128, 38, 0.07);
+    --perf-attention-fg: #856116;
+    --perf-issue-line: rgba(178, 70, 62, 0.55);
+    --perf-issue-tint: rgba(178, 70, 62, 0.05);
+    --perf-issue-fg: #a8433b;
+    --perf-neutral-line: rgba(27, 26, 24, 0.2);
+    --shadow-sm: 0 1px 0 rgba(27, 26, 24, 0.04), 0 1px 2px rgba(27, 26, 24, 0.06);
+    --shadow-md: 0 4px 12px rgba(27, 26, 24, 0.08), 0 1px 2px rgba(27, 26, 24, 0.06);
+    --shadow-lg: 0 16px 40px rgba(27, 26, 24, 0.14), 0 2px 6px rgba(27, 26, 24, 0.08);
   }
 }
 
+@theme inline {
+  --color-base: var(--bg-base);
+  --color-raised: var(--bg-raised);
+  --color-overlay: var(--bg-overlay);
+  --color-sunken: var(--bg-sunken);
+  --color-hover: var(--bg-hover);
+
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-faint: var(--fg-faint);
+
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-line-focus: var(--line-focus);
+
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-perf-strong: var(--perf-strong-fg);
+  --color-perf-attention: var(--perf-attention-fg);
+  --color-perf-issue: var(--perf-issue-fg);
+  --color-perf-neutral: var(--perf-neutral-fg);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+
+  --spacing: 4px;
+
+  --ease-out-quart: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  height: 100%;
+}
+
+body {
+  background: var(--bg-base);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  /* Every number in the product is tabular, without remembering a class. */
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "ss01", "cv11", "tnum" 1, "lnum" 1;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--line-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Explicit tabular numerals, kept for elements that reset font features. */
+@utility tabular {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+/* ---- Chips and tags: one height and one radius per size ---- */
+
+/* Chip: 24px, pill, 12px text, 12px icon. */
+@utility chip {
+  display: inline-flex;
+  height: 24px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  border-radius: 9999px;
+  border: 1px solid var(--line-strong);
+  padding-inline: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Tag: 20px, pill, 10.5px text, 10px icon. For provenance and tiny badges. */
+@utility tag {
+  display: inline-flex;
+  height: 20px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  border-radius: 9999px;
+  border: 1px solid var(--line-strong);
+  padding-inline: 7px;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Section label: the one style for small headings inside cards and sheets. */
+@utility section-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+
+/* ---- Performance outline treatment (SOS-20) ---- */
+
+.surface {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.surface[data-state="strong"] {
+  border-color: var(--perf-strong-line);
+  box-shadow: inset 0 0 0 1px var(--perf-strong-tint), inset 0 0 40px var(--perf-strong-tint), var(--shadow-sm);
+}
+
+.surface[data-state="attention"] {
+  border-color: var(--perf-attention-line);
+  box-shadow: inset 0 0 0 1px var(--perf-attention-tint), inset 0 0 40px var(--perf-attention-tint), var(--shadow-sm);
+}
+
+.surface[data-state="material_issue"] {
+  border-color: var(--perf-issue-line);
+  box-shadow: inset 0 0 0 1px var(--perf-issue-tint), inset 0 0 40px var(--perf-issue-tint), var(--shadow-sm);
+}
+
+.surface[data-state="neutral_no_benchmark"] {
+  border-color: var(--perf-neutral-line);
+}
+
+.surface[data-state="provisional_small_sample"] {
+  border-style: dashed;
+  border-color: var(--perf-neutral-line);
+}
+
+.surface[data-state="data_state"] {
+  border-color: var(--line-strong);
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 10px,
+    var(--line) 10px 11px
+  );
+}
+
+/* ---- Skeleton ---- */
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  animation: skeleton-breathe 1.8s ease-in-out infinite;
+}
+
+@keyframes skeleton-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ---- Reduced motion ---- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .skeleton {
+    animation: none;
+    opacity: 0.8;
+  }
+}
+
+/* ---- Scrollbars, quiet ---- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
 }
