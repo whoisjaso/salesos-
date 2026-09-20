@@ -192,13 +192,16 @@ test.describe("Closer: Marcus", () => {
     await expect(page.getByText("Follow-up task created, not revenue")).toBeVisible();
     const ladder = page.getByRole("list", { name: "Financial state" });
     await expect(ladder).toBeVisible();
-    await expect(ladder.getByRole("listitem")).toHaveCount(6);
+    // Seven steps since H4: "Processing" is its own position between authorized and
+    // collected, so a payment in flight is not shown as cash that arrived.
+    // Pinned in src/lib/__tests__/workspace-closer.test.ts too.
+    await expect(ladder.getByRole("listitem")).toHaveCount(7);
     await expect(ladder.getByText("Now", { exact: true })).toHaveCount(1);
     const current = ladder.getByRole("listitem").filter({ hasText: "Now" });
     await expect(current).toHaveCount(1);
     await expect(current).toContainText("Verbal yes");
     const steps = await ladder.getByRole("listitem").allInnerTexts();
-    expect(steps.map((s) => s.split("\n")[0])).toEqual(["Verbal yes", "Proposal sent", "Signed", "Payment authorized", "Collected", "Delivery accepted"]);
+    expect(steps.map((s) => s.split("\n")[0])).toEqual(["Verbal yes", "Proposal sent", "Signed", "Payment authorized", "Processing", "Collected", "Delivery accepted"]);
 
     // Signed-unpaid rule: Collected shows "$0 collected" once signed with no ledger entry,
     // and never a positive amount without a payment_collected entry. Before signing it shows no amount at all.

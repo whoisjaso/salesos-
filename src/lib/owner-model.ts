@@ -397,7 +397,7 @@ export function buildEconomics(dataset: Dataset, filter: CohortFilter, now: ISOD
     currency,
     basis: "net_collected_cash",
     cohortId,
-    timeBasis: "ledger entries attributed by opportunity; refunds and disputes subtracted",
+    timeBasis: "ledger entries attributed by opportunity; confirmed refunds and lost disputes subtracted",
     asOf: now,
     dataState: unlinked > 0 ? "partial" : "complete",
     unknownCount: unlinked,
@@ -431,13 +431,13 @@ export function buildEconomics(dataset: Dataset, filter: CohortFilter, now: ISOD
   });
   const refundsPayload = moneyPayload({
     metricId: "M16",
-    label: "Refunds and disputes",
+    label: "Refunds and lost disputes",
     amountMinor: refundMinor,
     denominator: refundEntries.length,
     currency,
     basis: "net_collected_cash",
     cohortId,
-    timeBasis: "refund and dispute debit entries; restate the original cohort",
+    timeBasis: "confirmed refund and lost-dispute entries; restate the original cohort",
     asOf: now,
     evidenceQueryId: `query_refunds_${cohortId}`,
   });
@@ -454,7 +454,7 @@ export function buildEconomics(dataset: Dataset, filter: CohortFilter, now: ISOD
     },
     netCollected: {
       name: "Net collected cash",
-      over: `Payments minus refunds and disputes, across ${assignedPhrase}`,
+      over: `Payments minus refunds and lost disputes, across ${assignedPhrase}`,
       count: assignedPhrase,
       period: period.label,
       provisional: provisionalFor(dataset, netCollectedPayload, filter, now),
@@ -474,8 +474,8 @@ export function buildEconomics(dataset: Dataset, filter: CohortFilter, now: ISOD
       provisional: provisionalFor(dataset, outstandingPayload, filter, now),
     },
     refunds: {
-      name: "Refunds and disputes",
-      over: `Refunds and dispute debits, ${plural(refundEntries.length, "entry", "entries")}`,
+      name: "Refunds and lost disputes",
+      over: `Confirmed refunds and lost disputes, ${plural(refundEntries.length, "entry", "entries")}`,
       count: plural(refundEntries.length, "entry", "entries"),
       period: period.label,
       provisional: provisionalFor(dataset, refundsPayload, filter, now),

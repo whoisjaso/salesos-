@@ -21,6 +21,11 @@ test.describe("Team and Me: Renata", () => {
     await expect(sheet.getByText("Provisional", { exact: false })).toBeVisible();
     await expect(sheet.getByText("Rules", { exact: true })).toBeVisible();
     await expect(sheet.getByText("Guardrails", { exact: true })).toBeVisible();
+    // H8: a track hold is not a pause. The domain pauses XP only when every track
+    // is held at once, so a scoped hold reads as running with named parts waiting.
+    await expect(sheet.getByText("XP state", { exact: true })).toBeVisible();
+    await expect(sheet.getByText(/^Running, parts on hold/)).toBeVisible();
+    await expect(sheet.getByText(/^Paused/)).toHaveCount(0);
     await closeSheet(page);
     expect(await tabLabels(page)).toEqual(["Today", "Team", "Me"]);
   });
@@ -280,10 +285,21 @@ test.describe("Team and Me: Renata", () => {
     await expect(money.getByText("Net collected cash per assigned opportunity, September", { exact: false })).toBeVisible();
     await expect(money.getByText("Per opportunity")).toBeVisible();
     await expect(money.getByText("Cash collected", { exact: true })).toBeVisible();
+    // H5: the feed says its basis, and says it is synthetic. Refunds are not listed
+    // here as a positive amount, and the net figure is computed on the same basis.
+    await expect(money.getByText(/processor-confirmed payments only/)).toBeVisible();
+    await expect(money.getByText(/Synthetic fixture ledger\. No payment provider is connected in this build\./)).toBeVisible();
+    // This rep has collected payments, so the list renders. It is a held feed, so it
+    // says it may be incomplete rather than presenting itself as the whole truth.
+    await expect(money.getByText(/This list may be incomplete/)).toBeVisible();
+    await expect(money.getByText("This is a verified zero.")).toHaveCount(0);
     // The whole hold lives here: the effect, what it waits on, and who owns it.
     await expect(money.getByText("Commission is provisional")).toBeVisible();
     await expect(money.getByText(/^Provisional until .+\.$/)).toBeVisible();
-    await expect(money.getByText(/owns that\./)).toBeVisible();
+    // Two places name the owner now, and both are correct: the hold statement on the
+    // hero, and the held note under the drops list. Scope to the hold statement so the
+    // assertion keeps meaning what it says rather than matching whichever came first.
+    await expect(money.getByText(/^Finance owns that\./)).toBeVisible();
     await closeSheet(page);
 
     // The rep's own placing is read from the board's rows: the board shows a roster this
@@ -381,6 +397,28 @@ test.describe("Me: a closer's conversation coaches too", () => {
     await coachRow.click();
     const coach = page.getByRole("dialog");
     await expect(coach.getByText("Ask what that person needs to see, and offer to bring it to the next call.")).toBeVisible();
+    await closeSheet(page);
+  });
+
+  /**
+   * H5: the guard that separates an unread feed from a real zero is wired. This
+   * closer has collected nothing and an unlinked payment holds his revenue
+   * attribution, so the feed is not read and the screen must not call it a
+   * verified zero (docs/DECISIONS.md, "A verified zero and a missing figure never
+   * look alike").
+   */
+  test("an empty payment feed under a hold reads as missing, never as a verified zero", async ({ page }) => {
+    await page.goto("/me");
+    const hero = page.getByRole("region", { name: /^Commission/ });
+    await hero.getByRole("button", { name: /Open details$/ }).click();
+    const money = page.getByRole("dialog");
+    const drops = money.getByRole("region", { name: "Cash collected" });
+    await expect(drops).toBeVisible();
+    await expect(drops.getByText("Payment data not available", { exact: false })).toBeVisible();
+    await expect(drops.getByText("This is a verified zero.")).toHaveCount(0);
+    await expect(drops.getByText("$0 collected", { exact: false })).toHaveCount(0);
+    // It names what the figure waits on and who owns it, rather than going quiet.
+    await expect(drops).toContainText(/owns that\./);
     await closeSheet(page);
   });
 });

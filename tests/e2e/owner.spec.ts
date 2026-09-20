@@ -197,16 +197,16 @@ test.describe("Owner: Delphine", () => {
     const cash = page.getByTestId("money-hero");
     await expect(cash).toHaveAccessibleName(
       new RegExp(
-        String.raw`^Net collected cash, \$[\d,]+\. Payments minus refunds and disputes, across [\d,]+ assigned opportunities\. ${PERIOD}\.( Provisional: .+\.)? Open definition\.$`,
+        String.raw`^Net collected cash, \$[\d,]+\. Payments minus refunds and lost disputes, across [\d,]+ assigned opportunities\. ${PERIOD}\.( Provisional: .+\.)? Open definition\.$`,
       ),
     );
-    await expect(cash).toContainText(/Payments minus refunds and disputes, across [\d,]+ assigned opportunities/);
+    await expect(cash).toContainText(/Payments minus refunds and lost disputes, across [\d,]+ assigned opportunities/);
     const rows = page.getByTestId("money-row");
     await expect(rows).toHaveCount(3);
     // Every row value says what it is over and over what period, and says provisional when it is.
     await expect(rows.nth(0)).toContainText(new RegExp(String.raw`^Contracted value[\d,]+ signed contracts?, ${PERIOD}(\. Provisional\.)?\$[\d,]+$`));
     await expect(rows.nth(1)).toContainText(new RegExp(String.raw`^Outstanding[\d,]+ signed contracts?, ${PERIOD}\. Provisional\.\$[\d,]+$`));
-    await expect(rows.nth(2)).toContainText(new RegExp(String.raw`^Refunds and disputes[\d,]+ entr(y|ies), ${PERIOD}(\. Provisional\.)?\$[\d,]+$`));
+    await expect(rows.nth(2)).toContainText(new RegExp(String.raw`^Refunds and lost disputes[\d,]+ entr(y|ies), ${PERIOD}(\. Provisional\.)?\$[\d,]+$`));
     // The whole sentence is still the row's name for anyone who cannot see the hint.
     await expect(rows.nth(0)).toHaveAccessibleName(
       new RegExp(String.raw`^Contracted value, \$[\d,]+\. Signed value, not cash, from [\d,]+ signed contracts?\. ${PERIOD}\.`),
@@ -227,7 +227,94 @@ test.describe("Owner: Delphine", () => {
     await closeSheet(page);
 
     await cash.click();
-    await expect(page.getByRole("dialog")).toContainText("Payments collected minus refunds");
+    await expect(page.getByRole("dialog")).toContainText("Processor-confirmed payments in the live environment");
+    await closeSheet(page);
+  });
+
+  /**
+   * H4 and H8: the owner's money definitions state the basis the reducer actually
+   * applies. An opened dispute is money at risk and is never a debit; a movement
+   * that is not processor-confirmed is recorded and is not cash.
+   */
+  test("the cash definition states what is counted and what is only recorded", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("radio", { name: "Money" }).click();
+    await page.getByTestId("money-hero").click();
+    const def = page.getByRole("dialog");
+    await expect(def).toContainText("Processor-confirmed payments in the live environment");
+    // Every one of these is a rule the reducer enforces, said where the number is read.
+    await expect(def).toContainText("An invoice marked paid outside the processor");
+    await expect(def).toContainText("test-mode movement");
+    await expect(def).toContainText("Processing fees are excluded and reported separately");
+    await expect(def).toContainText("An open dispute is money at risk and is never subtracted");
+    await closeSheet(page);
+
+    // The refunds row is refunds and LOST disputes. An opened dispute is not in it.
+    const refunds = page.getByTestId("money-row").nth(2);
+    await refunds.click();
+    const refundDef = page.getByRole("dialog");
+    await expect(refundDef).toContainText("Confirmed refunds and lost disputes");
+    await expect(refundDef).toContainText("never delete the sale");
+    await expect(refundDef).toContainText("An opened dispute is not in this figure");
+    await closeSheet(page);
+  });
+
+  /**
+   * H1: a simulated authorization must never render as a completed one. No provider
+   * in this build has an onboarding path, so no success state is reachable and no
+   * permission is ever headed "Granted". The real brand marks all stay.
+   */
+  test("Connect offers Request connection, never a simulated grant", async ({ page }) => {
+    await page.goto("/connect");
+    await expect(page.getByRole("heading", { level: 1, name: "Connect" })).toBeVisible();
+    await expect(page.getByText("Sandbox build. No provider has been contacted from here.")).toBeVisible();
+
+    // The mark is identity and stays; the affordance is the claim and is gated.
+    const stripe = page.getByRole("button", { name: /Stripe/ }).first();
+    await expect(stripe).toBeVisible();
+    await expect(stripe.getByRole("img", { name: "Stripe" })).toBeAttached();
+    await stripe.click();
+
+    const sheet = page.getByRole("dialog");
+    await expect(sheet).toBeVisible();
+    // No Connect button, no API key field, no timer, no reachable success screen.
+    await expect(sheet.getByRole("button", { name: /^Connect with/ })).toHaveCount(0);
+    await expect(sheet.getByRole("button", { name: /^Approving in/ })).toHaveCount(0);
+    await expect(sheet.locator('input[type="password"]')).toHaveCount(0);
+    await expect(sheet.getByText("Connection requires setup")).toBeVisible();
+    await expect(sheet).toContainText("not proven here");
+    // The one-liner that promised a reconciliation pipeline never appears.
+    await expect(sheet.getByText(/reconciled/i)).toHaveCount(0);
+
+    // The permission list is what would be requested, and says so.
+    await expect(sheet.getByRole("heading", { name: "What a connection would request" })).toBeVisible();
+    await expect(sheet.getByText("Granted", { exact: true })).toHaveCount(0);
+    await expect(sheet).toContainText("nothing has been granted");
+
+    // Pressing the only action records interest and states that nothing was sent.
+    const request = sheet.getByRole("button", { name: "Request connection" });
+    await expect(request).toBeVisible();
+    await expect(sheet).toContainText("Nothing is sent to Stripe");
+    await request.click();
+    await expect(sheet.getByText("Connection requested")).toBeVisible();
+    await expect(sheet).toContainText("no permission was requested and none was granted");
+    await expect(sheet.getByText("Granted", { exact: true })).toHaveCount(0);
+    await closeSheet(page);
+  });
+
+  /** H8: fixture counts never render as a live feed. */
+  test("a seeded source says it is a synthetic fixture, not Live", async ({ page }) => {
+    await page.goto("/connect");
+    const connected = page.getByRole("region", { name: "Connected" });
+    await expect(connected).toBeVisible();
+    await connected.getByRole("button").first().click();
+    const sheet = page.getByRole("dialog");
+    await expect(sheet.getByText("Synthetic fixture")).toBeVisible();
+    await expect(sheet.getByText("Live", { exact: true })).toHaveCount(0);
+    await expect(sheet).toContainText("This feed has never received anything");
+    // The counts carry their provenance rather than standing as received traffic.
+    await expect(sheet.getByText("24 hours, fixture")).toBeVisible();
+    await expect(sheet.getByText("Granted", { exact: true })).toHaveCount(0);
     await closeSheet(page);
   });
 

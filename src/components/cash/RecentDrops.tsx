@@ -82,7 +82,15 @@ export function RecentDrops({ drops, tier, now, currency = "USD", period = "this
           {!available ? (
             <p className="flex items-start gap-1.5 px-4 pb-4 text-[12px] text-fg-muted">
               <Question size={13} weight="bold" aria-hidden className="mt-[2px] shrink-0" />
-              <span>{heldNote ?? `This list may be incomplete. ${MONEY_NOT_AVAILABLE} for part of ${period}.`}</span>
+              {/*
+                The standing claim comes first and is never replaced: a feed
+                that was not fully read may be missing payments, whatever the
+                reason. The caller's note explains which hold it is; without it
+                the fallback still states the effect. Passing a note used to
+                suppress the "may be incomplete" lead-in entirely, so a held
+                list presented itself as complete and only mentioned a hold.
+              */}
+              <span>This list may be incomplete. {heldNote ?? `${MONEY_NOT_AVAILABLE} for part of ${period}.`}</span>
             </p>
           ) : null}
         </>

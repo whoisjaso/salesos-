@@ -3,7 +3,7 @@ import {
   ATTRIBUTION_EXCEPTION_RULES,
   AUTHORIZED_CORRECTION_ROLES,
   UNSEALED_CREDIT_FALLBACK,
-  appendCorrection,
+  appendAttributionCorrection,
   creditForEntry,
   effectiveCredit,
   identitiesAtIssue,
@@ -335,7 +335,7 @@ describe("corrections are authorized, reasoned and appended", () => {
   };
 
   it("appends rather than overwrites, and keeps a copy of what stood before", () => {
-    const outcome = appendCorrection(snapshot, request, manager);
+    const outcome = appendAttributionCorrection(snapshot, request, manager);
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
     expect(snapshot.corrections).toHaveLength(0); // the original is untouched
@@ -348,10 +348,10 @@ describe("corrections are authorized, reasoned and appended", () => {
   });
 
   it("a representative cannot change their own credited closer, by correction or by an ordinary edit", () => {
-    const self = appendCorrection(snapshot, { ...request, next: { closerUserId: "closer_a" } }, { userId: "closer_a", roles: ["closer"] });
+    const self = appendAttributionCorrection(snapshot, { ...request, next: { closerUserId: "closer_a" } }, { userId: "closer_a", roles: ["closer"] });
     expect(self).toMatchObject({ ok: false, code: "not_authorized_role" });
 
-    const managerButParty = appendCorrection(snapshot, request, { userId: "closer_b", roles: ["manager"] });
+    const managerButParty = appendAttributionCorrection(snapshot, request, { userId: "closer_b", roles: ["manager"] });
     expect(managerButParty).toMatchObject({ ok: false, code: "self_serving" });
 
     const edit = ordinaryEdit({ closerUserId: "closer_b", commissionPolicyVersion: "c99" });
@@ -362,9 +362,9 @@ describe("corrections are authorized, reasoned and appended", () => {
   });
 
   it("refuses an invented rule, a missing reason, and a correction that changes nothing", () => {
-    expect(appendCorrection(snapshot, { ...request, rule: "because_they_worked_hard" }, manager)).toMatchObject({ ok: false, code: "unknown_rule" });
-    expect(appendCorrection(snapshot, { ...request, reason: "   " }, manager)).toMatchObject({ ok: false, code: "reason_required" });
-    expect(appendCorrection(snapshot, { ...request, next: { setterUserId: "setter_a", closerUserId: "closer_a" } }, manager)).toMatchObject({
+    expect(appendAttributionCorrection(snapshot, { ...request, rule: "because_they_worked_hard" }, manager)).toMatchObject({ ok: false, code: "unknown_rule" });
+    expect(appendAttributionCorrection(snapshot, { ...request, reason: "   " }, manager)).toMatchObject({ ok: false, code: "reason_required" });
+    expect(appendAttributionCorrection(snapshot, { ...request, next: { setterUserId: "setter_a", closerUserId: "closer_a" } }, manager)).toMatchObject({
       ok: false,
       code: "no_change",
     });
@@ -374,7 +374,7 @@ describe("corrections are authorized, reasoned and appended", () => {
 
   it("a corrected snapshot moves the money to the corrected closer and nowhere else", () => {
     const data = sealedDataset();
-    const outcome = appendCorrection(data.attributionSnapshots![0], request, manager);
+    const outcome = appendAttributionCorrection(data.attributionSnapshots![0], request, manager);
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
     const corrected: DatasetWithAttribution = {

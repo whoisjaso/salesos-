@@ -469,7 +469,7 @@ export type CorrectionRefusalCode =
  * returned with the correction appended, and the correction carries a copy of
  * the values as they stood. Nothing is ever overwritten.
  */
-export function appendCorrection(
+export function appendAttributionCorrection(
   snapshot: AttributionSnapshot,
   request: CorrectionRequest,
   actor: Actor,
@@ -544,7 +544,7 @@ export interface EditRefusal {
  *
  * Whoever the actor is, and whatever they are patching, a sealed field is not
  * editable. There is one supported route and it leaves a trail:
- * `appendCorrection`. This makes the rule "a representative cannot change their
+ * `appendAttributionCorrection`. This makes the rule "a representative cannot change their
  * own credited closer or commission policy version through an ordinary edit"
  * a behaviour with a test, rather than a sentence in a document.
  */
