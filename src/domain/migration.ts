@@ -20,6 +20,12 @@
  * - Every created record is provenance-tagged ("import:<preset>", row hash).
  * - Nothing is invented: a value the file does not carry stays undefined,
  *   an unparseable value becomes an issue, never a guess.
+ * - An import reads no payment processor, so it can never produce
+ *   processor-confirmed evidence. Every ledger row it writes carries an
+ *   explicit EvidenceClass drawn from IMPORT_EVIDENCE_CLASSES, which excludes
+ *   "processor_confirmed" by construction, and therefore none of it enters net
+ *   collected cash (specification 7 and 9, scenarios 16 and 60). The records
+ *   are kept in full: they are classified, not discarded.
  */
 import type {
   Appointment,
@@ -28,6 +34,7 @@ import type {
   CommercialStatus,
   ConsentState,
   DomainEvent,
+  EvidenceClass,
   ISODateTime,
   Id,
   LeadSubmission,
@@ -36,7 +43,7 @@ import type {
   Opportunity,
   User,
 } from "./types";
-import { createEvent } from "./events";
+import { countsAsNetCollectedCash, createEvent, ledgerSign } from "./events";
 import {
   DEFAULT_OFFER_ID,
   DEFAULT_WORKFLOW_VERSION,
@@ -49,6 +56,53 @@ import {
   submissionIdFor,
   type IntakeContact,
 } from "./intake";
+
+// ---------- Evidence policy for imported money ----------
+
+/**
+ * The evidence classes an import is allowed to produce.
+ *
+ * "processor_confirmed" is absent on purpose and its absence is the whole
+ * point: an import reads a file or a CRM API, never a payment processor's
+ * authoritative state, so it can never confirm that money moved. A deal marked
+ * won in a CRM is a status. An invoice marked paid outside the processor is
+ * bookkeeping. Both are real records and both are kept; neither is cash.
+ *
+ * Changing this list is the single decision that would let imported rows reach
+ * net collected cash, which is exactly why it is one named list and not a
+ * literal at a call site.
+ */
+export const IMPORT_EVIDENCE_CLASSES = ["imported_record", "externally_recorded", "manually_marked_paid"] as const satisfies readonly EvidenceClass[];
+
+export type ImportEvidenceClass = (typeof IMPORT_EVIDENCE_CLASSES)[number];
+
+/** What a row is, absent anything more specific: a record of what the old system said. */
+export const IMPORT_EVIDENCE_DEFAULT: ImportEvidenceClass = "imported_record";
+
+/**
+ * What the import screens must say, in one place so the wording cannot drift
+ * between the preview and the receipt. No em dashes (AGENTS.md rule 6).
+ */
+export const IMPORT_MONEY_DISCLOSURE = {
+  /** Heading for the money disclosure. */
+  title: "What this money counts toward",
+  /** The one sentence that must appear wherever an imported figure is shown. */
+  statement:
+    "These figures are what the old system recorded. Nothing here was confirmed by a payment processor, so none of it counts toward net collected cash, commission, or the team race.",
+  /** Said of a wire, check or cash payment recorded by a person. */
+  externallyRecorded: "Recorded outside a processor. Needs independent confirmation before it counts as collected.",
+  /** Said of an invoice marked paid with no processor movement behind it. */
+  manuallyMarkedPaid: "Marked paid outside the processor. Real bookkeeping, no new cash.",
+  /** Said of a won deal's value. */
+  contractedValue: "A deal marked won is a status, not money that moved. Recorded as contracted value.",
+} as const;
+
+/** Human label per class, for the disclosure list. */
+export const IMPORT_EVIDENCE_LABEL: Record<ImportEvidenceClass, string> = {
+  imported_record: "Imported record",
+  externally_recorded: "Recorded outside a processor",
+  manually_marked_paid: "Marked paid outside a processor",
+};
 
 // ---------- Public types ----------
 
@@ -107,12 +161,54 @@ export interface RowIssue {
   severity: "error" | "warning";
 }
 
+/** One line of the money disclosure: how many movements are known this way, and for how much. */
+export interface EvidenceTally {
+  evidence: ImportEvidenceClass;
+  label: string;
+  count: number;
+  /** Signed, in minor units, under the same signs the ledger uses. */
+  totalMinor: number;
+}
+
+/**
+ * What the import recorded about money, and what it counts toward. Every figure
+ * here is a claim about the source file, never a claim about a processor.
+ */
+export interface ImportedMoneyDisclosure {
+  currency: string;
+  /** Recorded payment movements, grouped by how each one is known. Non-empty classes only, in IMPORT_EVIDENCE_CLASSES order. */
+  byEvidence: EvidenceTally[];
+  /**
+   * What this import adds to net collected cash. Structurally zero: no imported
+   * row is processor-confirmed, so `countsAsNetCollectedCash` refuses every one
+   * of them. Computed from the ledger rather than asserted, so that the day the
+   * rule changes, this number changes with it.
+   */
+  netCollectedCashMinor: number;
+  /** Rows whose money could not be recorded at all, each one also an issue. */
+  notRecorded: number;
+  /** The sentence the screens must show beside any of these figures. */
+  statement: string;
+}
+
 export interface DryRunReport {
   rows: number;
   contacts: { create: number; merge: number };
   opportunities: number;
   appointments: number;
+  /**
+   * Recorded payment movements only, from a payment column. Signed as the
+   * ledger signs them. This is what the old system said was paid, and it is
+   * not net collected cash; see `money`.
+   */
   payments: { count: number; totalMinor: number; currency: string };
+  /**
+   * Deal values read from won rows. A won status is not a payment, so these are
+   * recorded as contracted value and never as cash (audit H2).
+   */
+  contractedValue: { count: number; totalMinor: number; currency: string };
+  /** How the money above is known, and what it counts toward. */
+  money: ImportedMoneyDisclosure;
   notes: number;
   duplicatesMerged: number;
   issues: RowIssue[];
@@ -188,6 +284,7 @@ export const TARGET_FIELDS: TargetFieldDef[] = [
   { field: "payment.date", entity: "payment", label: "Payment date", kind: "date", synonyms: ["payment date", "paid on", "paid date", "date paid", "close date", "closed date", "closing date", "won date", "won time", "sale date"] },
   { field: "payment.providerRef", entity: "payment", label: "Payment reference", kind: "text", synonyms: ["payment id", "transaction id", "charge id", "invoice", "invoice number", "receipt", "reference", "payment reference", "stripe id"] },
   { field: "payment.kind", entity: "payment", label: "Payment kind", kind: "enum", enumValues: ["payment", "refund", "dispute", "fee"], synonyms: ["payment kind", "payment type", "transaction type", "type"] },
+  { field: "payment.method", entity: "payment", label: "How it was paid", kind: "text", synonyms: ["payment method", "method", "tender", "tender type", "paid via", "paid with", "payment mode", "collected via"] },
   { field: "note.text", entity: "note", label: "Notes", kind: "text", synonyms: ["notes", "note", "comment", "comments", "internal notes", "remarks", "tags", "memo"] },
   { field: "note.at", entity: "note", label: "Note date", kind: "date", synonyms: ["note date", "last activity", "last activity date", "last contacted", "last touch"] },
   { field: "ignore", entity: "note", label: "Ignore", kind: "text", synonyms: [] },
@@ -670,6 +767,36 @@ function parsePaymentKind(input: string | undefined): LedgerEntryKind | undefine
   return undefined;
 }
 
+/**
+ * The evidence class a "how it was paid" column implies.
+ *
+ * Only two things it can say raise the record above a plain imported row, and
+ * neither of them makes it cash:
+ *
+ * - A tender collected by a person (wire, check, cash, a bank transfer typed in
+ *   by hand) is `externally_recorded`. It is real money that this system has no
+ *   access to, so it needs independent confirmation before anyone treats it as
+ *   collected (specification 9).
+ * - An invoice closed without a movement (marked paid, written off, comped, a
+ *   credit applied) is `manually_marked_paid`. Real bookkeeping, no new cash
+ *   (scenarios 16 and 60).
+ *
+ * A column that says "stripe" or "card" returns undefined, NOT
+ * "processor_confirmed". We did not read Stripe. A processor name typed into a
+ * spreadsheet is a spreadsheet, and it stays an imported record.
+ */
+export function evidenceForPaymentMethod(input: string | undefined): ImportEvidenceClass | undefined {
+  const w = normalizeWord(input ?? "");
+  if (!w) return undefined;
+  if (/^(wire|wiretransfer|banktransfer|bankwire|check|cheque|cash|moneyorder|ach|achtransfer|zelle|venmo|cashapp|etransfer|interac)$/.test(w)) {
+    return "externally_recorded";
+  }
+  if (/^(markedpaid|manual|manuallymarkedpaid|writeoff|writtenoff|comp|comped|credit|creditapplied|offset|barter|nocharge|zerobalance)$/.test(w)) {
+    return "manually_marked_paid";
+  }
+  return undefined;
+}
+
 // ---------- Value shape detection ----------
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -915,7 +1042,7 @@ interface ParsedRow {
   dqReason?: string;
   dealAmount?: ParsedMoney;
   appointment?: { start: ISODateTime; end?: ISODateTime; outcome: AppointmentInstanceOutcome; outcomeRaw?: string; repName?: string };
-  payment?: { amount: ParsedMoney; date?: ISODateTime; providerRef?: string; kind?: LedgerEntryKind };
+  payment?: { amount: ParsedMoney; date?: ISODateTime; providerRef?: string; kind?: LedgerEntryKind; method?: string; evidence: ImportEvidenceClass };
   note?: { text: string; at?: ISODateTime };
   issues: RowIssue[];
 }
@@ -1036,16 +1163,20 @@ function parseRow(plan: MappingPlan, headers: string[], row: string[], index: nu
   const paymentDate = date("payment.date");
   const providerRef = text("payment.providerRef");
   const kindRaw = text("payment.kind");
+  const methodRaw = text("payment.method");
   if (amount) {
     if (!amount.parsed) {
       issues.push({ row: index, header: amount.cell.header, problem: "unrecognized amount", value: amount.cell.value, severity: "error" });
     } else {
       const kind = parsePaymentKind(kindRaw);
       if (kindRaw && !kind) issues.push({ row: index, header: first("payment.kind")!.header, problem: "unrecognized payment kind", value: kindRaw, severity: "warning" });
-      payment = { amount: amount.parsed, date: paymentDate, providerRef, kind };
+      // How it was paid can only narrow the class downward, never up to a
+      // processor confirmation this import never obtained.
+      const evidence = evidenceForPaymentMethod(methodRaw) ?? IMPORT_EVIDENCE_DEFAULT;
+      payment = { amount: amount.parsed, date: paymentDate, providerRef, kind, method: methodRaw, evidence };
     }
-  } else if ((providerRef || kindRaw) && !dealAmount) {
-    const cell = first("payment.providerRef") ?? first("payment.kind")!;
+  } else if ((providerRef || kindRaw || methodRaw) && !dealAmount) {
+    const cell = first("payment.providerRef") ?? first("payment.kind") ?? first("payment.method")!;
     issues.push({ row: index, header: first("payment.amount")?.header ?? cell.header, problem: "payment without an amount", value: cell.value, severity: "error" });
   }
 
@@ -1195,6 +1326,21 @@ export function runImport(plan: MappingPlan, headers: string[], rows: string[][]
   let notes = 0;
   let paymentCount = 0;
   let paymentTotal = 0;
+  let contractedCount = 0;
+  let contractedTotal = 0;
+  let moneyNotRecorded = 0;
+  /**
+   * What the import added to net collected cash, accumulated from the ledger
+   * through countsAsNetCollectedCash rather than assumed. It stays 0 while no
+   * import can produce processor-confirmed evidence, and it would stop being 0
+   * the moment that rule changed, which is the point of computing it.
+   */
+  let netCollectedCash = 0;
+  const evidenceTotals: Record<ImportEvidenceClass, { count: number; totalMinor: number }> = {
+    imported_record: { count: 0, totalMinor: 0 },
+    externally_recorded: { count: 0, totalMinor: 0 },
+    manually_marked_paid: { count: 0, totalMinor: 0 },
+  };
   const oppByGroup = new Map<Id, Opportunity>();
   const rootSubmissionByGroup = new Map<Id, Id>();
 
@@ -1304,19 +1450,57 @@ export function runImport(plan: MappingPlan, headers: string[], rows: string[][]
       appliedIds.instanceId = instanceId;
     }
 
-    // Cash: explicit payments always; a deal amount only when the deal is won (never invented cash).
-    const cash: { amount: ParsedMoney; kind: LedgerEntryKind; providerRef: string; occurredAt: ISODateTime; suffix: string }[] = [];
+    // Money. Two different facts, kept apart:
+    //
+    //   1. A payment column says the old system recorded a movement. It stays a
+    //      movement kind, classified by how it is known, and is never
+    //      processor-confirmed.
+    //   2. A won deal's value is a STATUS, not a movement. It is recorded as
+    //      contracted value. Minting payment_collected from it was audit defect
+    //      H2: it reached the owner's "Net collected cash" hero and the team
+    //      cash race with nothing downstream able to tell it from a real
+    //      payment.
+    const recorded: { amount: ParsedMoney; kind: LedgerEntryKind; evidence: ImportEvidenceClass; providerRef: string; occurredAt: ISODateTime; suffix: string }[] = [];
     if (row.payment) {
       const kind: LedgerEntryKind = row.payment.amount.negative && row.payment.kind !== "dispute_debit" && row.payment.kind !== "fee" ? "refund" : (row.payment.kind ?? "payment_collected");
-      cash.push({ amount: row.payment.amount, kind, providerRef: row.payment.providerRef ?? `import:${row.hash}`, occurredAt: row.payment.date ?? receivedAt, suffix: "payment" });
+      recorded.push({
+        amount: row.payment.amount,
+        kind,
+        evidence: row.payment.evidence,
+        providerRef: row.payment.providerRef ?? `import:${row.hash}`,
+        occurredAt: row.payment.date ?? receivedAt,
+        suffix: "payment",
+      });
     }
     if (row.dealAmount && row.status === "won" && row.dealAmount.amountMinor > 0) {
-      cash.push({ amount: row.dealAmount, kind: row.dealAmount.negative ? "refund" : "payment_collected", providerRef: `import:deal:${row.hash}`, occurredAt: row.payment?.date ?? receivedAt, suffix: "deal" });
+      if (row.dealAmount.negative) {
+        // A reduction in contracted value has no ledger kind, and turning it
+        // into a refund would invent a cash movement out of a spreadsheet cell.
+        // It is disclosed instead of guessed.
+        const col = plan.columns.find((x) => x.target === "opportunity.amount");
+        issues.push({
+          row: row.index,
+          header: col?.header ?? "",
+          problem: "negative deal amount on a won row; a reduction in contracted value has no recorded kind, not imported",
+          value: String(row.dealAmount.amountMinor),
+          severity: "warning",
+        });
+        moneyNotRecorded++;
+      } else {
+        recorded.push({
+          amount: row.dealAmount,
+          kind: "contracted_value",
+          evidence: IMPORT_EVIDENCE_DEFAULT,
+          providerRef: `import:deal:${row.hash}`,
+          occurredAt: row.payment?.date ?? receivedAt,
+          suffix: "deal",
+        });
+      }
     }
-    for (const c of cash) {
+    for (const c of recorded) {
       const entryCurrency = c.amount.currency ?? currency;
       const idempotencyKey = `${rowKey}:${c.suffix}`;
-      ledger.push({
+      const entry: LedgerEntry = {
         tenantId,
         entryId: `led_${fnv1a(idempotencyKey)}`,
         opportunityId: opportunity.opportunityId,
@@ -1327,19 +1511,37 @@ export function runImport(plan: MappingPlan, headers: string[], rows: string[][]
         occurredAt: c.occurredAt,
         receivedAt: now,
         commercialCategory: group.existing ? "other" : "new_customer",
-      });
-      paymentCount++;
+        evidence: c.evidence,
+        // No provider, no provider account, no environment and no movement id.
+        // An import contacted no processor, so it can name none of them, and a
+        // reference typed into a sheet is not a verified movement identity.
+      };
+      ledger.push(entry);
+      const contracted = c.kind === "contracted_value";
+      if (contracted) contractedCount++;
+      else paymentCount++;
       if (entryCurrency === currency) {
-        const sign = c.kind === "payment_collected" || c.kind === "dispute_credit" ? 1 : c.kind === "fee" ? 0 : -1;
-        paymentTotal += sign * c.amount.amountMinor;
+        const signed = ledgerSign(c.kind) * c.amount.amountMinor;
+        if (contracted) contractedTotal += c.amount.amountMinor;
+        else paymentTotal += signed;
+        if (countsAsNetCollectedCash(entry)) netCollectedCash += signed;
+        // The tally describes payment movements, so it lines up with
+        // report.payments. Contracted value is a separate fact with its own
+        // total and is never folded into a payments figure.
+        else if (!contracted) evidenceTotals[c.evidence] = { count: evidenceTotals[c.evidence].count + 1, totalMinor: evidenceTotals[c.evidence].totalMinor + signed };
       } else {
         const col = plan.columns.find((x) => x.target === "payment.amount" || x.target === "opportunity.amount");
         issues.push({ row: row.index, header: col?.header ?? "", problem: `currency ${entryCurrency} differs from ${currency}; not totaled`, value: String(c.amount.amountMinor), severity: "warning" });
       }
+      // The money state of an opportunity follows confirmed movements only. An
+      // imported row is a record of what the old system said, so it leaves the
+      // state alone rather than claiming this customer has paid or been
+      // refunded. The record itself is kept in the ledger either way.
+      if (!countsAsNetCollectedCash(entry)) continue;
       if (c.kind === "refund" || c.kind === "dispute_debit") opportunity.paymentState = "refunded";
       else if (c.kind === "payment_collected" && opportunity.paymentState !== "refunded") opportunity.paymentState = "collected";
     }
-    if (cash.length) appliedIds.ledgerEntryIds = ledger.slice(-cash.length).map((l) => l.entryId);
+    if (recorded.length) appliedIds.ledgerEntryIds = ledger.slice(-recorded.length).map((l) => l.entryId);
 
     if (row.note) notes++;
 
@@ -1372,6 +1574,9 @@ export function runImport(plan: MappingPlan, headers: string[], rows: string[][]
           originalSource: row.source,
           ownerName: row.ownerName,
           dealAmountMinor: row.dealAmount ? (row.dealAmount.negative ? -1 : 1) * row.dealAmount.amountMinor : undefined,
+          /** How any money on this row is known. Never processor-confirmed: an import read no processor. */
+          moneyEvidence: recorded.length ? recorded.map((c) => c.evidence) : undefined,
+          paymentMethod: row.payment?.method,
           note: row.note?.text,
           noteAt: row.note?.at,
           consent: row.consent,
@@ -1393,6 +1598,19 @@ export function runImport(plan: MappingPlan, headers: string[], rows: string[][]
     opportunities: opportunities.length,
     appointments: appointments.length,
     payments: { count: paymentCount, totalMinor: paymentTotal, currency },
+    contractedValue: { count: contractedCount, totalMinor: contractedTotal, currency },
+    money: {
+      currency,
+      byEvidence: IMPORT_EVIDENCE_CLASSES.filter((e) => evidenceTotals[e].count > 0).map((e) => ({
+        evidence: e,
+        label: IMPORT_EVIDENCE_LABEL[e],
+        count: evidenceTotals[e].count,
+        totalMinor: evidenceTotals[e].totalMinor,
+      })),
+      netCollectedCashMinor: netCollectedCash,
+      notRecorded: moneyNotRecorded,
+      statement: IMPORT_MONEY_DISCLOSURE.statement,
+    },
     notes,
     duplicatesMerged,
     issues: issues.sort((a, b) => a.row - b.row || (a.severity === b.severity ? 0 : a.severity === "error" ? -1 : 1)),

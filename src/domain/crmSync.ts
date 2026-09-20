@@ -7,11 +7,28 @@
  *
  * Real adapters exchange the OAuth code server-side and page through the provider API.
  * SimulatedCrmSync stands in until provider app credentials exist (D04).
+ *
+ * A CRM is not a payment processor. Authorizing a CRM grants a view of what
+ * that CRM recorded, and nothing it returns about money is confirmation that
+ * money moved. Every row a sync pulls goes through the same migration engine as
+ * a spreadsheet and carries the same evidence class (CRM_SYNC_EVIDENCE), so it
+ * is kept as a record and never enters net collected cash. Reading a processor
+ * is a different connection with a different authorization (specification 16).
  */
+import type { EvidenceClass, ISODateTime } from "./types";
+import { HISTORICAL_IMPORT_DEFAULT_WINDOW_DAYS } from "./types";
 import type { Authorizer, AuthorizeRequest, AuthorizeResult } from "./integrations";
 import { SimulatedAuthorizer } from "./integrations";
 import type { SourcePreset } from "./migration";
-import { parseCsv } from "./migration";
+import { IMPORT_EVIDENCE_DEFAULT, parseCsv } from "./migration";
+
+/**
+ * How a CRM-sourced money row is known. A pull over OAuth is more convenient
+ * than a CSV and is no more authoritative: it is still the old system's record.
+ * It is deliberately the same class a file import produces, so that the honesty
+ * of a figure never depends on which door the data came through.
+ */
+export const CRM_SYNC_EVIDENCE: EvidenceClass = IMPORT_EVIDENCE_DEFAULT;
 
 export type SyncObject = "contacts" | "deals" | "appointments" | "payments" | "notes";
 
@@ -26,6 +43,18 @@ export interface SyncScope {
   objects: SyncObject[];
   /** ISO date; only records updated after this. Undefined = full history. */
   since?: string;
+}
+
+/**
+ * The default historical window for a first pull, from the proposed owner
+ * policy (HISTORICAL_IMPORT_DEFAULT_WINDOW_DAYS, not yet ratified). `now` is
+ * injected: this module holds no clock.
+ *
+ * It is a default, not a limit. An owner who wants the full history passes
+ * their own `since`, or omits it.
+ */
+export function defaultHistoricalSince(now: ISODateTime, windowDays = HISTORICAL_IMPORT_DEFAULT_WINDOW_DAYS): ISODateTime {
+  return new Date(Date.parse(now) - windowDays * 24 * 60 * 60 * 1000).toISOString();
 }
 
 export interface SyncProgress {

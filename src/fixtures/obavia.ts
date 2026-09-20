@@ -10,6 +10,7 @@
 import type {
   Appointment,
   AppointmentInstance,
+  AttributionSnapshot,
   AppointmentInstanceOutcome,
   Assignment,
   Call,
@@ -25,7 +26,9 @@ import type {
   LedgerEntry,
   Offer,
   Opportunity,
+  Order,
   Pair,
+  PaymentRequest,
   QualificationAssessment,
   Task,
   TaskPriorityReason,
@@ -34,6 +37,9 @@ import type {
 } from "@/domain/types";
 import type { Dataset, TrackedWorkHours } from "@/domain/metrics";
 import { fromDollars, scale } from "@/domain/money";
+import type { AttributionRecords } from "@/domain/attribution";
+import { identitiesAtIssue } from "@/domain/attribution";
+import { buildInstallments, createOrder, issueOrderForPayment } from "@/domain/orders";
 import { type DatasetWithPairs, pairFor } from "@/domain/pairs";
 import type { DatasetWithTranscripts } from "@/domain/coaching";
 import { transcripts } from "@/fixtures/calls";
@@ -224,6 +230,9 @@ interface Build {
   commissionEntries: CommissionEntry[];
   communicationProfiles: CommunicationProfile[];
   trackedWorkHours: TrackedWorkHours[];
+  orders: Order[];
+  attributionSnapshots: AttributionSnapshot[];
+  paymentRequests: PaymentRequest[];
 }
 
 function pick<T>(rng: () => number, arr: T[]): T {
@@ -244,11 +253,12 @@ function pad(n: number): string {
   return String(n).padStart(3, "0");
 }
 
-export function generateObaviaDataset(seed = 20260918): DatasetWithPairs {
+export function generateObaviaDataset(seed = 20260918): DatasetWithPairs & AttributionRecords {
   const rng = mulberry32(seed);
   const b: Build = {
     contacts: [], submissions: [], opportunities: [], assignments: [], tasks: [], calls: [], appointments: [],
     appointmentInstances: [], assessments: [], contracts: [], ledger: [], commissionEntries: [], communicationProfiles: [], trackedWorkHours: [],
+    orders: [], attributionSnapshots: [], paymentRequests: [],
   };
   let closerCursor = 0;
   let callSeq = 0;
@@ -636,6 +646,113 @@ export function generateObaviaDataset(seed = 20260918): DatasetWithPairs {
     if (pair) opp.pairId = pair.pairId;
   }
 
+  // ---------- Orders and sealed attribution (SYNTHETIC) ----------
+  //
+  // Every signed agreement becomes an order, and issuing it for payment seals
+  // the credited setter and closer into an immutable snapshot
+  // (ATTRIBUTION_FREEZE_POLICY.sealedAt). The collected payment and its refund
+  // are bound to that order, so the money reads follow the seal and not
+  // whoever owns the contact later. These snapshots credit exactly the owners
+  // the rest of this fixture already used, so every existing screen shows the
+  // same figures it showed before orders existed.
+  let orderSeq = 0;
+  for (const contract of b.contracts) {
+    const opp = b.opportunities.find((o) => o.opportunityId === contract.opportunityId);
+    if (!opp) continue;
+    orderSeq += 1;
+    const orderId = `ord_${pad(orderSeq)}`;
+    const snapshotId = `atr_${pad(orderSeq)}`;
+    const issuedAt = contract.signedAt ?? iso(NOW_MS);
+    const drafted = createOrder({
+      tenantId: TENANT_ID,
+      orderId,
+      opportunityId: opp.opportunityId,
+      offerId: OFFER_ID,
+      offerVersion: offer.version,
+      contractId: contract.contractId,
+      contractedValue: contract.value,
+      installments: buildInstallments({ orderId, total: contract.value, count: 1, firstDueAt: issuedAt, intervalDays: 30 }),
+      createdAt: issuedAt,
+      createdByUserId: opp.currentOwner.closer ?? CLOSERS[0],
+      state: "approved",
+    });
+    const issued = issueOrderForPayment(drafted, {
+      snapshotId,
+      issuedAt,
+      frozenAt: issuedAt,
+      commissionPolicyVersion: closerCommissionPolicy.policyVersion,
+      ...identitiesAtIssue(opp),
+    });
+    b.orders.push(issued.order);
+    b.attributionSnapshots.push(issued.snapshot);
+    for (const entry of b.ledger) {
+      if (entry.contractId !== contract.contractId) continue;
+      entry.orderId = orderId;
+      entry.attributionSnapshotId = snapshotId;
+    }
+  }
+
+  // A later upsell sold by a DIFFERENT closer: a second order on the same
+  // opportunity, with its own snapshot. The original closer's credit is not
+  // extended by it, and nothing has been collected on it, so it adds no cash
+  // anywhere. It exists so the two-orders-one-contact behaviour is visible in
+  // the running product and not only in a test.
+  const upsellBase = b.orders[0];
+  const upsellOpp = upsellBase ? b.opportunities.find((o) => o.opportunityId === upsellBase.opportunityId) : undefined;
+  if (upsellBase && upsellOpp) {
+    const originalCloser = upsellOpp.currentOwner.closer;
+    const upsellCloser = CLOSERS.find((id) => id !== originalCloser) ?? CLOSERS[0];
+    const upsellOrderId = "ord_upsell_01";
+    const upsellSnapshotId = "atr_upsell_01";
+    const upsellValue = offer.approvedOptions[0].delta; // second rooftop licence
+    const createdAt = iso(NOW_MS - 2 * DAY);
+    const drafted = createOrder({
+      tenantId: TENANT_ID,
+      orderId: upsellOrderId,
+      opportunityId: upsellOpp.opportunityId,
+      offerId: OFFER_ID,
+      offerVersion: offer.version,
+      contractedValue: upsellValue,
+      installments: buildInstallments({ orderId: upsellOrderId, total: upsellValue, count: 3, firstDueAt: iso(NOW_MS + DAY), intervalDays: 30 }),
+      createdAt,
+      createdByUserId: upsellCloser,
+      state: "approved",
+    });
+    const issued = issueOrderForPayment(drafted, {
+      snapshotId: upsellSnapshotId,
+      issuedAt: createdAt,
+      frozenAt: createdAt,
+      commissionPolicyVersion: closerCommissionPolicy.policyVersion,
+      // Credit comes from who sold the upsell, not from the first order's closer.
+      setterUserId: upsellOpp.currentOwner.setter,
+      closerUserId: upsellCloser,
+      pairId: undefined,
+    });
+    b.orders.push(issued.order);
+    b.attributionSnapshots.push(issued.snapshot);
+
+    // The owner sends the first installment's invoice on the closer's behalf.
+    // Sending it grants her no closer credit: the snapshot above already
+    // decided that, and requestedByUserId is never read by attribution.
+    b.paymentRequests.push({
+      tenantId: TENANT_ID,
+      paymentRequestId: "preq_upsell_01",
+      orderId: upsellOrderId,
+      opportunityId: upsellOpp.opportunityId,
+      installmentId: issued.order.installments[0].installmentId,
+      attributionSnapshotId: upsellSnapshotId,
+      amount: issued.order.installments[0].amount,
+      provider: "card_processor",
+      providerAccountId: "acct_main",
+      environment: "test",
+      idempotencyKey: `${TENANT_ID}:preq_upsell_01`,
+      state: "sent",
+      requestedByUserId: "usr_owner_delphine",
+      requestedAt: createdAt,
+      sentAt: createdAt,
+    });
+  }
+
   // One unlinked payment: exception queue.
   ledgerSeq += 1;
   b.ledger.push({
@@ -779,11 +896,14 @@ export function generateObaviaDataset(seed = 20260918): DatasetWithPairs {
     synthetic: true,
     pairs: obaviaPairs,
     commissionPolicies: obaviaCommissionPolicies,
+    orders: b.orders,
+    attributionSnapshots: b.attributionSnapshots,
+    paymentRequests: b.paymentRequests,
   };
 }
 
 /** The dataset with pairs and role policies attached (same object as obaviaDataset). */
-export const obaviaDatasetWithPairs: DatasetWithPairs = generateObaviaDataset();
+export const obaviaDatasetWithPairs: DatasetWithPairs & AttributionRecords = generateObaviaDataset();
 /**
  * The pilot dataset carries its own conversations. Coaching reads a rep's
  * transcripts to produce a recommendation that no data incident can hold, so a
@@ -791,7 +911,7 @@ export const obaviaDatasetWithPairs: DatasetWithPairs = generateObaviaDataset();
  * waiting rows (docs/DECISIONS.md, "A held measurement never holds the person").
  * Attaching them here makes the honest behaviour the default everywhere.
  */
-export const obaviaDataset: Dataset & DatasetWithTranscripts = { ...obaviaDatasetWithPairs, transcripts };
+export const obaviaDataset: Dataset & DatasetWithTranscripts & AttributionRecords = { ...obaviaDatasetWithPairs, transcripts };
 
 /** The opted-out contact and its opportunity, for routing and consent tests. */
 export const OPTED_OUT_CONTACT_ID = "ct_090";

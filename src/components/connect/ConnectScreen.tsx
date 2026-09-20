@@ -11,6 +11,7 @@ import { LogoTile } from "./LogoTile";
 import { ConnectSheet } from "./ConnectSheet";
 import { DetailSheet } from "./DetailSheet";
 import { isConnected, POPULAR, seedConnections, type ConnectionMap } from "./connect-model";
+import { SANDBOX_NOTE } from "./availability";
 
 const CATEGORY_ORDER = Object.keys(CATEGORY_LABEL) as IntegrationProvider["category"][];
 
@@ -70,6 +71,8 @@ function ConnectBody() {
     <div className="mx-auto flex w-full max-w-[720px] flex-col gap-6">
       <header className="px-1">
         <h1 className="text-[20px] font-semibold leading-none tracking-tight text-fg">Connect</h1>
+        {/* Said once here and again in every sheet, because a person can arrive at either. */}
+        <p className="mt-1.5 text-[12px] leading-snug text-fg-subtle">{SANDBOX_NOTE}</p>
       </header>
 
       <section aria-label="Move in your data">

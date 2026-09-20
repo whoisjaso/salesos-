@@ -35,7 +35,7 @@ import type { TranscriptSpan } from "@/domain/callIntelligence";
 import type { Dataset } from "@/domain/metrics";
 import { lensByName } from "@/content/lenses";
 import { transcriptFor } from "@/fixtures/calls";
-import { netCollected, opportunityAttributedTo } from "@/domain/metrics";
+import { disputeAtRisk, netCollected, opportunityAttributedTo, processingFees } from "@/domain/metrics";
 import type { EvidenceLabel } from "./workspace-setter";
 import { contactFor, humanizeKey, languageLabel, latestAssessment, profileFor, submissionFor } from "./workspace-setter";
 
@@ -241,29 +241,149 @@ export function copilotItems(brief: CloserBrief): CopilotItem[] {
 
 // ---------- Financial ladder ----------
 
-export type LadderStep = "verbal_yes" | "proposal_sent" | "signed" | "payment_authorized" | "collected" | "delivery_accepted";
+export type LadderStep =
+  | "verbal_yes"
+  | "proposal_sent"
+  | "signed"
+  | "payment_authorized"
+  | "payment_processing"
+  | "collected"
+  | "delivery_accepted";
 
+/**
+ * Seven separate statuses. Processing is its own step because a payment can
+ * finish checkout before it succeeds: a customer saying "I paid" while the
+ * provider is still working is Processing and never Collected (specification
+ * 5 step 5 and 17.5, scenario 2).
+ */
 export const LADDER_STEPS: { id: LadderStep; label: string }[] = [
   { id: "verbal_yes", label: "Verbal yes" },
   { id: "proposal_sent", label: "Proposal sent" },
   { id: "signed", label: "Signed" },
   { id: "payment_authorized", label: "Payment authorized" },
+  { id: "payment_processing", label: "Processing" },
   { id: "collected", label: "Collected" },
   { id: "delivery_accepted", label: "Delivery accepted" },
 ];
 
-/** Index of the current step, or -1 when nothing commercial has happened. */
+export const LADDER_INDEX: Record<LadderStep, number> = Object.fromEntries(
+  LADDER_STEPS.map((s, i) => [s.id, i]),
+) as Record<LadderStep, number>;
+
+/**
+ * Index of the current step, or -1 when nothing commercial has happened.
+ *
+ * Three rules this encodes, each one a fact the previous version lost
+ * (docs/PAYMENTS_AUDIT.md H4):
+ *
+ * - "refunded" is not "collected". Cash arrived and went back, so the
+ *   opportunity's current financial state is signed with no cash held. The step
+ *   it once reached is carried by `ladderNote`, not by the current position.
+ * - "disputed" is not "signed". Cash arrived and is contested. An opened
+ *   dispute is an at-risk figure and produces no realized debit, so the position
+ *   stays Collected and the risk is disclosed beside it.
+ * - "processing" is its own position, between authorized and collected.
+ */
 export function ladderIndex(opp: Opportunity, verbalYes: boolean): number {
-  if (opp.paymentState === "collected" || opp.paymentState === "partially_collected" || opp.paymentState === "refunded") return 4;
-  if (opp.paymentState === "authorized") return 3;
-  if (opp.contractState === "signed") return 2;
-  if (opp.contractState === "proposed") return 1;
-  return verbalYes ? 0 : -1;
+  if (opp.paymentState === "collected" || opp.paymentState === "partially_collected" || opp.paymentState === "disputed") {
+    return LADDER_INDEX.collected;
+  }
+  // Collected, then returned. The money is no longer held, so the current state
+  // is the signed contract it was collected against.
+  if (opp.paymentState === "refunded") return LADDER_INDEX.signed;
+  if (opp.paymentState === "processing") return LADDER_INDEX.payment_processing;
+  if (opp.paymentState === "authorized") return LADDER_INDEX.payment_authorized;
+  if (opp.contractState === "signed") return LADDER_INDEX.signed;
+  if (opp.contractState === "proposed") return LADDER_INDEX.proposal_sent;
+  return verbalYes ? LADDER_INDEX.verbal_yes : -1;
 }
 
-export function collectedFor(dataset: Dataset, opportunityId: Id): { entries: LedgerEntry[]; net: ReturnType<typeof netCollected> } {
+/**
+ * What the current position does not say on its own. Every state has a word and
+ * an icon name here, so nothing on the ladder is carried by colour alone.
+ */
+export interface LadderNote {
+  /** Short words for the state. */
+  label: string;
+  /** Phosphor icon name paired with the label. */
+  icon: string;
+  /** One sentence, for the accessible name and for anything that has room. */
+  statement: string;
+  /** True when the Collected step was reached and then reversed. */
+  reversed: boolean;
+  /** True when cash is held but contested. Never a debit. */
+  atRisk: boolean;
+}
+
+export function ladderNote(opp: Opportunity): LadderNote | null {
+  switch (opp.paymentState) {
+    case "refunded":
+      return {
+        label: "Refunded",
+        icon: "ArrowUDownLeft",
+        statement: "Collected, then returned. The sale is not deleted and the refund restates the period it belongs to.",
+        reversed: true,
+        atRisk: false,
+      };
+    case "disputed":
+      return {
+        label: "Dispute open",
+        icon: "Warning",
+        statement: "Cash was collected and is being disputed. An open dispute is money at risk, not a debit, so it is shown beside collected cash and never subtracted from it.",
+        reversed: false,
+        atRisk: true,
+      };
+    case "processing":
+      return {
+        label: "Processing",
+        icon: "Hourglass",
+        statement: "The provider has not confirmed this payment. Checkout finishing is not collection.",
+        reversed: false,
+        atRisk: false,
+      };
+    case "authorized":
+      return {
+        label: "Authorized",
+        icon: "CreditCard",
+        statement: "A card authorization is not collected cash.",
+        reversed: false,
+        atRisk: false,
+      };
+    case "partially_collected":
+      return {
+        label: "Part collected",
+        icon: "ChartPieSlice",
+        statement: "Part of the contracted value has been collected. The rest is still outstanding.",
+        reversed: false,
+        atRisk: false,
+      };
+    default:
+      return null;
+  }
+}
+
+/**
+ * The opportunity's own ledger slice with each figure on its own terms: cash
+ * that moved, money threatened by an open dispute, and processing fees. The
+ * three are never summed into one number (NET_COLLECTED_CASH_POLICY).
+ */
+export function collectedFor(
+  dataset: Dataset,
+  opportunityId: Id,
+): {
+  entries: LedgerEntry[];
+  net: ReturnType<typeof netCollected>;
+  atRisk: ReturnType<typeof disputeAtRisk>;
+  fees: ReturnType<typeof processingFees>;
+} {
   const entries = dataset.ledger.filter((e) => e.opportunityId === opportunityId);
-  return { entries, net: netCollected(entries, dataset.tenant.reportingCurrency) };
+  const currency = dataset.tenant.reportingCurrency;
+  return {
+    entries,
+    net: netCollected(entries, currency),
+    atRisk: disputeAtRisk(entries, currency),
+    fees: processingFees(entries, currency),
+  };
 }
 
 // ---------- Queue by type ----------
@@ -286,6 +406,21 @@ export const QUEUE_TYPE_LABEL: Record<CloserQueueType, string> = {
   contract: "Contract",
   payment: "Payment",
   delivery: "Delivery",
+};
+
+/**
+ * Payment states that put a signed opportunity in the payment queue, and the
+ * words each one reads as. A raw enum value was appearing on screen, and
+ * "signed, $0 collected" was being said about states where a payment did exist.
+ */
+const PAYMENT_QUEUE_STATES: Opportunity["paymentState"][] = ["none", "authorized", "processing", "refunded", "disputed"];
+
+const PAYMENT_QUEUE_LABEL: Partial<Record<Opportunity["paymentState"], string>> = {
+  none: "signed, $0 collected",
+  authorized: "authorized, not collected",
+  processing: "processing, not confirmed",
+  refunded: "collected, then refunded",
+  disputed: "collected, dispute open",
 };
 
 export function buildCloserQueue(dataset: Dataset, closerId: Id, now: ISODateTime): CloserQueueItem[] {
@@ -326,8 +461,8 @@ export function buildCloserQueue(dataset: Dataset, closerId: Id, now: ISODateTim
     if (opp.commercialStatus === "open" && opp.contractState === "none" && (opp.fitState === "verified" || opp.fitState === "likely")) {
       items.push({ id: `c_${opp.opportunityId}`, type: "contract", opportunity: opp, contact: c, label: "ready for proposal" });
     }
-    if (opp.contractState === "signed" && (opp.paymentState === "none" || opp.paymentState === "refunded" || opp.paymentState === "disputed") && !items.some((i) => i.opportunity === opp && i.type === "payment")) {
-      items.push({ id: `pay_${opp.opportunityId}`, type: "payment", opportunity: opp, contact: c, label: opp.paymentState === "none" ? "signed, $0 collected" : opp.paymentState });
+    if (opp.contractState === "signed" && PAYMENT_QUEUE_STATES.includes(opp.paymentState) && !items.some((i) => i.opportunity === opp && i.type === "payment")) {
+      items.push({ id: `pay_${opp.opportunityId}`, type: "payment", opportunity: opp, contact: c, label: PAYMENT_QUEUE_LABEL[opp.paymentState] ?? opp.paymentState });
     }
     if (opp.paymentState === "collected") {
       items.push({ id: `d_${opp.opportunityId}`, type: "delivery", opportunity: opp, contact: c, label: "delivery handoff" });

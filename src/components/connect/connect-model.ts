@@ -42,15 +42,27 @@ export interface Connection {
   conn: ProviderConnection;
   source?: SourceConnection;
   health?: SourceHealthRow;
+  /**
+   * True when every timestamp and count on this connection came from the
+   * labelled synthetic fixture rather than from a feed that received anything
+   * (AGENTS.md rule 9, docs/PAYMENTS_AUDIT.md H8).
+   */
+  synthetic?: boolean;
 }
 
 export type ConnectionMap = Record<string, Connection>;
 
-export type Tone = "live" | "stale" | "paused";
+/**
+ * "fixture" is not a health state, it is a provenance state, and it outranks
+ * every other: a green Live dot computed from fixture timestamps asserts a feed
+ * that has never received anything.
+ */
+export type Tone = "fixture" | "live" | "stale" | "paused";
 
 const DAY_MS = 24 * 3_600_000;
 
 export function toneOf(c: Connection, now = CONNECT_NOW): Tone {
+  if (c.synthetic) return "fixture";
   if (c.conn.status === "paused") return "paused";
   const last = c.health?.lastReceivedAt ?? c.conn.lastEventAt;
   if (!last) return "stale";
@@ -70,6 +82,7 @@ export function seedConnections(): ConnectionMap {
     if (!p) continue;
     out[providerId] = {
       source,
+      synthetic: true,
       health: health.find((h) => h.sourceId === source.sourceId),
       conn: {
         tenantId: source.tenantId,
@@ -77,7 +90,9 @@ export function seedConnections(): ConnectionMap {
         providerId,
         status: source.status === "paused" ? "paused" : "connected",
         accountLabel: source.label,
-        grantedPermissions: p.permissions,
+        // No provider granted these. A fixture source has no grant, and an empty
+        // list is the honest record of that (docs/PAYMENTS_AUDIT.md H1).
+        grantedPermissions: [],
         connectedAt: source.createdAt,
         lastEventAt: source.lastReceivedAt,
         eventCount: source.receivedCount,
@@ -128,20 +143,6 @@ export function snippetFor(p: IntegrationProvider, c?: Connection): TrackingSnip
 }
 
 export const POPULAR = PROVIDERS.filter((p) => p.popular);
-
-/** Primary action word by auth kind. */
-export function primaryLabel(p: IntegrationProvider): string {
-  switch (p.auth) {
-    case "oauth":
-      return `Connect with ${p.name}`;
-    case "api_key":
-      return "Connect";
-    case "webhook":
-      return "Done";
-    case "none":
-      return p.providerId === "csv" ? "Upload file" : "Copy link";
-  }
-}
 
 /** Near-black brand marks render on the foreground color so they read in both themes. */
 export function isNearBlack(hex: string): boolean {

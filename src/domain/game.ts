@@ -10,9 +10,16 @@
  * - A data incident holds only the XP that rests on the surface it makes unreliable.
  *   It never pauses the mechanic, the level, or the streak. See docs/DECISIONS.md,
  *   "A held measurement never holds the person" (2026-09-19).
+ * - Cash XP follows the SEALED attribution snapshot and the cash predicate, not
+ *   today's contact owner and not the bare ledger kind. A test-mode movement, an
+ *   invoice marked paid outside the processor and a spreadsheet import are real
+ *   records that award no XP, and reassigning a contact awards nobody anything.
+ *   Non-cash XP is activity credit for work that happened, and stays where the
+ *   work is recorded.
  */
-import type { Dataset } from "./metrics";
 import { type IncidentScope, type SurfaceStatus, holdFor, scopeIncidents } from "./incidents";
+import { type DatasetWithAttribution, creditedUserForEntry } from "./attribution";
+import { countsAsNetCollectedCash } from "./events";
 import type { AffectedSurface, Id, ISODateTime, ScopedIncident } from "./types";
 
 export type GameEventKind =
@@ -70,7 +77,7 @@ export function levelFor(xp: number): LevelState {
 }
 
 /** Derive verified game events from the canonical dataset. No clicks, no self-reports. */
-export function deriveGameEvents(dataset: Dataset): GameEvent[] {
+export function deriveGameEvents(dataset: DatasetWithAttribution): GameEvent[] {
   const events: GameEvent[] = [];
   const oppOwner = new Map(dataset.opportunities.map((o) => [o.opportunityId, o.currentOwner]));
 
@@ -102,10 +109,12 @@ export function deriveGameEvents(dataset: Dataset): GameEvent[] {
     }
   }
   for (const e of dataset.ledger) {
-    const owner = e.opportunityId ? oppOwner.get(e.opportunityId) : undefined;
-    if (e.kind === "payment_collected" && !e.passThrough && owner?.closer) {
-      events.push({ kind: "cash_collected", userId: owner.closer, opportunityId: e.opportunityId, occurredAt: e.occurredAt, evidenceRef: e.entryId });
-    }
+    if (e.kind !== "payment_collected" || !countsAsNetCollectedCash(e) || !e.opportunityId) continue;
+    // Credited closer, from the seal where one exists. Never the current owner
+    // of the contact, so a reassignment moves no XP either.
+    const closer = creditedUserForEntry(dataset, e, "closer");
+    if (!closer) continue;
+    events.push({ kind: "cash_collected", userId: closer, opportunityId: e.opportunityId, occurredAt: e.occurredAt, evidenceRef: e.entryId });
   }
   return events.sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
 }
@@ -192,7 +201,7 @@ export function trackHolds(scope: IncidentScope): TrackHold[] {
  * makes unreliable and nothing else: levels, streaks, and every unrelated verified
  * event keep running. `paused` stays false unless every track is held at once.
  */
-export function qualityGate(dataset: Dataset, userId: Id, now?: ISODateTime): QualityGate {
+export function qualityGate(dataset: DatasetWithAttribution, userId: Id, now?: ISODateTime): QualityGate {
   const scope = scopeIncidents(dataset, { userId, now });
   return gateFromScope(scope);
 }
@@ -257,7 +266,7 @@ export function streakDays(events: GameEvent[], now: ISODateTime, approvedLeaveD
 }
 
 export function playerState(
-  dataset: Dataset,
+  dataset: DatasetWithAttribution,
   userId: Id,
   now: ISODateTime,
   season: { from: ISODateTime; to: ISODateTime },

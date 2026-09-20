@@ -12,9 +12,25 @@
  *   is the pilot default.
  * - `hypothetical` passes straight through from the commission policy so the
  *   UI can label every number until a real agreement exists (D06).
+ * - Credit comes from the sealed AttributionSnapshot, never from whoever owns
+ *   the contact today. Reassigning a contact after a payment moves no money and
+ *   no standing. Where nothing is sealed the reader falls back to current
+ *   ownership under the single named constant UNSEALED_CREDIT_FALLBACK, so
+ *   records written before orders existed behave exactly as they always did.
+ * - A cash-shaped read tests `countsAsNetCollectedCash`, never
+ *   `kind === "payment_collected"` on its own: a test-mode movement, an invoice
+ *   marked paid outside the processor and a spreadsheet row are each genuine
+ *   records and none of them is collected cash.
  */
 import type { CommissionEntry, CommissionPolicy, ISODateTime, Id, LedgerEntry, MetricPayload } from "./types";
-import { type Dataset, computeM19, contractedValue, ledgerFor, netCollected } from "./metrics";
+import { computeM19, contractedValue, netCollected } from "./metrics";
+import {
+  type DatasetWithAttribution,
+  ledgerCreditedTo,
+  ledgerCreditedToAnyRole,
+  opportunitiesCreditedTo,
+} from "./attribution";
+import { countsAsNetCollectedCash } from "./events";
 import { scale } from "./money";
 
 export type TierRole = "setter" | "closer";
@@ -135,7 +151,7 @@ function inSeason(iso: ISODateTime, season: SeasonWindow): boolean {
 function latestPaymentByOpportunity(ledger: LedgerEntry[]): Map<Id, LedgerEntry> {
   const map = new Map<Id, LedgerEntry>();
   for (const e of ledger) {
-    if (e.kind !== "payment_collected" || e.passThrough || !e.opportunityId) continue;
+    if (e.kind !== "payment_collected" || !countsAsNetCollectedCash(e) || !e.opportunityId) continue;
     const prev = map.get(e.opportunityId);
     if (!prev || e.occurredAt > prev.occurredAt) map.set(e.opportunityId, e);
   }
@@ -184,7 +200,7 @@ export interface CommissionSummary {
  * regardless of season rather than silently dropped.
  */
 export function commissionSummary(
-  dataset: Dataset,
+  dataset: DatasetWithAttribution,
   userId: Id,
   season: SeasonWindow,
   now: ISODateTime = season.to,
@@ -209,8 +225,12 @@ export function commissionSummary(
     for (const role of ["setter", "closer"] as const) {
       const policy = commissionPolicyFor(policies, role);
       if (!policy) continue;
-      const owned = dataset.opportunities.filter((o) => o.currentOwner[role] === userId);
+      // Credit, not ownership: an opportunity whose snapshot names this user is
+      // theirs even after the contact is reassigned, and an opportunity sealed
+      // to somebody else is not theirs even while they own the contact today.
+      const owned = opportunitiesCreditedTo(dataset, userId, role);
       if (owned.length === 0) continue;
+      const creditedSeasonLedger = ledgerCreditedTo(dataset, userId, role, seasonLedger);
       hypothetical = usedPolicy ? hypothetical || policy.hypothetical : policy.hypothetical;
       usedPolicy = true;
       for (const opp of owned) {
@@ -218,7 +238,10 @@ export function commissionSummary(
         const base =
           policy.basis === "contracted_value"
             ? contractedValue(dataset, ids, currency)
-            : netCollected(ledgerFor({ ...dataset, ledger: seasonLedger }, ids), currency);
+            : netCollected(
+                creditedSeasonLedger.filter((e) => e.opportunityId === opp.opportunityId),
+                currency,
+              );
         if (base.amountMinor <= 0) continue;
         const entry = entryByOpp.get(opp.opportunityId);
         const bucket = entry ? commissionBucket(entry.state) : "accrued";
@@ -382,7 +405,12 @@ export interface CashRaceEntry {
  * call cashRace(dataset, season) without one; a setter's own race needs
  * cashRace(dataset, season, "setter"). Any other value throws.
  */
-export function cashRace(dataset: Dataset, season: SeasonWindow, role: TierRole = "closer", policy?: TierPolicy): CashRaceEntry[] {
+export function cashRace(
+  dataset: DatasetWithAttribution,
+  season: SeasonWindow,
+  role: TierRole = "closer",
+  policy?: TierPolicy,
+): CashRaceEntry[] {
   if (role !== "setter" && role !== "closer") {
     throw new Error(`cashRace requires a role of "setter" or "closer" (received ${JSON.stringify(role)}); setters and closers never race each other`);
   }
@@ -392,8 +420,7 @@ export function cashRace(dataset: Dataset, season: SeasonWindow, role: TierRole 
   const entries: Omit<CashRaceEntry, "rank">[] = [];
   for (const user of dataset.users) {
     if (!user.active || !user.roles.includes(role)) continue;
-    const owned = new Set(dataset.opportunities.filter((o) => o.currentOwner[role] === user.userId).map((o) => o.opportunityId));
-    const net = netCollected(ledgerFor({ ...dataset, ledger: seasonLedger }, owned), currency).amountMinor;
+    const net = netCollected(ledgerCreditedTo(dataset, user.userId, role, seasonLedger), currency).amountMinor;
     entries.push({ userId: user.userId, displayName: user.displayName, role, netCollectedMinor: net, tier: tierFor(net, tierPolicy) });
   }
   entries.sort((a, b) => b.netCollectedMinor - a.netCollectedMinor || a.displayName.localeCompare(b.displayName));
@@ -414,13 +441,16 @@ export interface CashDrop {
   opportunityId: Id;
 }
 
-/** Recent collected payments attributed to the user (current setter or closer on the opportunity), newest first, at most 8. */
-export function recentCashDrops(dataset: Dataset, userId: Id, season: SeasonWindow, limit = 8): CashDrop[] {
-  const mine = new Set(
-    dataset.opportunities.filter((o) => o.currentOwner.setter === userId || o.currentOwner.closer === userId).map((o) => o.opportunityId),
-  );
-  return dataset.ledger
-    .filter((e) => e.kind === "payment_collected" && !e.passThrough && e.opportunityId && mine.has(e.opportunityId) && inSeason(e.occurredAt, season))
+/**
+ * Recent collected payments credited to the user in either role, newest first,
+ * at most 8.
+ *
+ * Credit follows the sealed snapshot. A movement that is not processor-confirmed
+ * live cash never appears here: a drop on this feed means money moved.
+ */
+export function recentCashDrops(dataset: DatasetWithAttribution, userId: Id, season: SeasonWindow, limit = 8): CashDrop[] {
+  return ledgerCreditedToAnyRole(dataset, userId)
+    .filter((e) => e.kind === "payment_collected" && countsAsNetCollectedCash(e) && e.opportunityId && inSeason(e.occurredAt, season))
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
     .slice(0, limit)
     .map((e) => ({ at: e.occurredAt, amountMinor: e.amount.amountMinor, opportunityId: e.opportunityId as Id }));

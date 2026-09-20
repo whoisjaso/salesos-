@@ -104,7 +104,20 @@ export interface Opportunity {
   contactState: "none" | "attempted" | "voicemail" | "two_way_contact";
   fitState: "unassessed" | "clarify" | "likely" | "unlikely" | "verified";
   contractState: "none" | "proposed" | "signed";
-  paymentState: "none" | "authorized" | "partially_collected" | "collected" | "refunded" | "disputed";
+  /**
+   * Money state of the opportunity. "authorized" and "processing" are not
+   * collected: a payment can finish checkout before it succeeds, so a customer
+   * saying "I paid" while the provider is still working renders as Processing
+   * and never as Collected (SOS-V2 5 step 5, scenario 2).
+   */
+  paymentState:
+    | "none"
+    | "authorized"
+    | "processing"
+    | "partially_collected"
+    | "collected"
+    | "refunded"
+    | "disputed";
   dqReason?: string;
   /** The setter-closer pair that carried this opportunity from setter to closer. Set at handoff acceptance (SOS-06). */
   pairId?: Id;
@@ -325,13 +338,110 @@ export interface Contract {
   signedAt?: ISODateTime;
 }
 
-export type LedgerEntryKind = "payment_collected" | "refund" | "dispute_debit" | "dispute_credit" | "fee";
+/**
+ * The nine money concepts of the payments specification, section 7, kept
+ * distinct so that none can be mistaken for another. Read the list as four
+ * groups.
+ *
+ * Before any money moves:
+ *   1. price_discussed     A price came up in a conversation. Evidence of talk,
+ *                          never of cash. A transcript may produce this and
+ *                          nothing further down this list.
+ *   2. contracted_value    An approved agreement has a value. A discount reduces
+ *                          this figure; it never reduces collected cash.
+ *
+ * The payment itself:
+ *   3. payment_authorized  The buyer authorized a charge. No cash has moved.
+ *      payment_processing  The provider has the payment in flight. A checkout
+ *                          redirect, a delayed payment method, and a pending
+ *                          state all land here, never on payment_collected.
+ *   4. payment_collected   The provider's confirmed successful state. This is
+ *                          the only positive cash kind.
+ *
+ * Adjustments to a collected payment, each recorded once and never by deleting
+ * the original:
+ *      refund              Confirmed money returned to the buyer.
+ *      dispute_opened      Money at risk. No realized debit. Not a loss yet.
+ *      dispute_debit       A LOST dispute: the realized debit, exactly once.
+ *      dispute_credit      A realized debit returned to the balance.
+ *      dispute_closed_won  The risk cleared with no money movement at all.
+ *      fee                 Processing cost. Excluded from net collected cash and
+ *                          reported separately, never silently netted.
+ *
+ * Where the money sits, and what the business owes its people:
+ *   5. processor_balance_credit  Funds available in the merchant's processor
+ *                                balance. Not yet in the bank.
+ *   6. payout_to_bank            Funds actually paid out to the bank.
+ *   7. commission_accrued        Commission accrued under the employer's policy.
+ *   8. commission_payable        Commission that has become payable.
+ *   9. commission_paid           Commission actually paid to the representative.
+ *
+ * Only payment_collected, refund, dispute_debit and dispute_credit move net
+ * collected cash. Every other kind is a genuine record that is reported on its
+ * own terms. See NET_COLLECTED_CASH_POLICY and ledgerSign in events.ts.
+ */
+export type LedgerEntryKind =
+  | "price_discussed"
+  | "contracted_value"
+  | "payment_authorized"
+  | "payment_processing"
+  | "payment_collected"
+  | "refund"
+  | "dispute_opened"
+  | "dispute_debit"
+  | "dispute_credit"
+  | "dispute_closed_won"
+  | "fee"
+  | "processor_balance_credit"
+  | "payout_to_bank"
+  | "commission_accrued"
+  | "commission_payable"
+  | "commission_paid";
+
+/**
+ * How a monetary movement is known. The class travels with the movement so that
+ * a downstream reader never has to guess, and so that a cheap signal can never
+ * stand in for an expensive fact.
+ *
+ * - processor_confirmed   The payment processor confirmed the movement in its
+ *                         own authoritative state, retrieved or verified
+ *                         server-side. The only class that net collected cash
+ *                         counts.
+ * - provider_reported     A connected platform reported the movement but is not
+ *                         the processor of record (a commerce platform's view of
+ *                         an underlying charge, a restaurant check closed in a
+ *                         point-of-sale). Genuine, not processor-confirmed.
+ * - manually_marked_paid  An invoice marked paid outside the processor, a
+ *                         zero-balance invoice, a credit applied. Real bookkeeping,
+ *                         no new cash (scenarios 16 and 60).
+ * - externally_recorded   Wire, check or cash recorded by a human with its own
+ *                         independent confirmation. Real money, unverifiable here.
+ * - imported_record       A spreadsheet or CRM import. A deal marked won in a CRM
+ *                         is a status, not evidence that money moved.
+ */
+export type EvidenceClass =
+  | "processor_confirmed"
+  | "provider_reported"
+  | "manually_marked_paid"
+  | "externally_recorded"
+  | "imported_record";
+
+/**
+ * Live or test. A test-environment movement is real data about a delivery and no
+ * data at all about a customer: it changes no standing, no commission and no XP
+ * (scenarios 13 and 62).
+ */
+export type ProviderEnvironment = "live" | "test";
 
 export interface LedgerEntry {
   tenantId: Id;
   entryId: Id;
   opportunityId?: Id; // undefined -> exception queue (unlinked payment)
   contractId?: Id;
+  /** The order this movement pays down, when one was bound before payment. */
+  orderId?: Id;
+  /** The frozen credit this movement pays into. Never recomputed from today's owner. */
+  attributionSnapshotId?: Id;
   kind: LedgerEntryKind;
   amount: Money; // positive magnitude; kind determines sign
   providerRef: string;
@@ -341,6 +451,25 @@ export interface LedgerEntry {
   commercialCategory: "new_customer" | "expansion" | "recurring" | "referral" | "other";
   /** Excluded from commercial revenue basis (taxes, pass-through). */
   passThrough?: boolean;
+  /**
+   * How this movement is known. Optional only so that records written before the
+   * class existed still typecheck; every new writer must set it, the database
+   * column is NOT NULL, and an unset value resolves through the single named
+   * constant UNCLASSIFIED_EVIDENCE_FALLBACK.
+   */
+  evidence?: EvidenceClass;
+  /** The provider that reported the movement, e.g. "stripe". Part of its identity. */
+  provider?: string;
+  /** The merchant account inside that provider. An id alone is not a global namespace. */
+  providerAccountId?: string;
+  /** Live or test. Unset resolves through UNCLASSIFIED_ENVIRONMENT_FALLBACK. */
+  environment?: ProviderEnvironment;
+  /**
+   * The provider's own identifier for the ECONOMIC MOVEMENT, not for the
+   * delivery that carried it. A checkout event, a payment-intent event and an
+   * invoice event describing one payment share this value and post once.
+   */
+  providerMovementId?: string;
 }
 
 export interface CommissionPolicy {
@@ -364,6 +493,462 @@ export interface CommissionEntry {
   state: "calculated" | "accrued" | "pending_eligibility" | "payable" | "paid" | "disputed" | "adjusted";
 }
 
+// ---------- Owner policy defaults (PROPOSED, not ratified) ----------
+
+/**
+ * The payments specification leaves several decisions to the business owner.
+ * None of them is ratified. Each one is expressed here once, as a named value
+ * that is trivial to change, so that no call site hard-codes a policy the owner
+ * has not approved. Record any change in
+ * docs/spec/28_TRACEABILITY_AND_OPEN_DECISIONS.md (AGENTS.md rule 2).
+ */
+
+/** Where sale-level credit is captured, and where it is sealed. */
+export type AttributionFreezePoint =
+  /** Identities are captured here. This is the repository's existing pairId behaviour. */
+  | "handoff_accepted"
+  /** Identities are SEALED here, into an immutable snapshot. Proposed default. */
+  | "order_issued_for_payment"
+  /** An authorized, reasoned correction after the seal. Append-only, never an edit. */
+  | "authorized_correction";
+
+export const ATTRIBUTION_FREEZE_POLICY = {
+  /** Proposed default, pending owner ratification. */
+  ratified: false,
+  capturedAt: "handoff_accepted" as AttributionFreezePoint,
+  sealedAt: "order_issued_for_payment" as AttributionFreezePoint,
+  /** After the seal, credit changes only through an appended authorized correction. */
+  correctionsAreAppendOnly: true,
+} as const;
+
+/**
+ * The written net-collected-cash contract (specification section 7).
+ * Anything this policy excludes stays a genuine record and is reported on its
+ * own terms. Nothing is silently summed into a sales metric.
+ */
+export const NET_COLLECTED_CASH_POLICY = {
+  ratified: false,
+  /** Only processor-confirmed movements are cash. */
+  countedEvidence: ["processor_confirmed"] as readonly EvidenceClass[],
+  /** Test-environment movements are excluded from every live figure. */
+  countedEnvironment: "live" as ProviderEnvironment,
+  /** A discount reduces the order's contracted value. It never reduces collected cash. */
+  discountsReduceContractedValue: true,
+  /** Processing fees are excluded from the metric and reported separately. */
+  processingFeesExcludedAndReportedSeparately: true,
+  /** An opened dispute is an at-risk figure. It produces no realized debit. */
+  openDisputeIsAtRiskOnly: true,
+  /** A lost dispute debits exactly once. */
+  lostDisputeDebitsOnce: true,
+  /** Tax and other pass-through amounts stay out of the commercial basis (SOS-02). */
+  passThroughExcluded: true,
+  /** Different currencies are never summed. money.ts throws instead of guessing a rate. */
+  crossCurrencySum: "refuse" as const,
+  /**
+   * A refund that lands after a period closes restates the period it belongs to
+   * and is disclosed. It is never applied silently to the open period.
+   */
+  lateAdjustment: "restate_the_period_and_disclose" as const,
+} as const;
+
+/**
+ * Commission rates as this repository already recorded them: hypothetical,
+ * pending D06. The specification's worked example uses different numbers and is
+ * labelled "assumptions for this example only"; it must never overwrite this.
+ */
+export const COMMISSION_RATE_DEFAULTS = {
+  ratified: false,
+  hypothetical: true,
+  setterPercent: 5,
+  closerPercent: 10,
+  source: "docs/spec/28_TRACEABILITY_AND_OPEN_DECISIONS.md D06 (open)",
+  note: "The V2 worked example's 10 percent closer and 2 percent setter are example assumptions, not a decision.",
+} as const;
+
+/** Historical import window offered at connection time. Owner-overridable. */
+export const HISTORICAL_IMPORT_DEFAULT_WINDOW_DAYS = 90;
+
+/**
+ * A second workspace connecting a merchant that is already bound elsewhere is
+ * REJECTED with an explicit reason. Never resolved by matching an email address.
+ */
+export const MERCHANT_BINDING_CONFLICT_POLICY = {
+  ratified: false,
+  onAlreadyBoundMerchant: "reject_with_reason" as const,
+  resolveByEmailMatch: false,
+  reason:
+    "This merchant account is already connected to another workspace. Sharing one merchant across workspaces needs an explicit allocation policy, not an email match.",
+} as const;
+
+// ---------- Orders, attribution, and payment requests (spec 15.3) ----------
+
+export type OrderState =
+  | "draft"
+  | "approved"
+  /** The attribution seal point. From here the credited identities are immutable. */
+  | "issued_for_payment"
+  | "fulfilled"
+  | "canceled";
+
+export type InstallmentState = "scheduled" | "requested" | "collected" | "failed" | "canceled";
+
+/** One scheduled part of an order. Four installments of one agreement stay one order. */
+export interface OrderInstallment {
+  installmentId: Id;
+  /** 1-based position in the schedule. */
+  sequence: number;
+  dueAt: ISODateTime;
+  amount: Money;
+  state: InstallmentState;
+  /** The request sent for this installment, when one exists. */
+  paymentRequestId?: Id;
+}
+
+/**
+ * The specific purchased agreement. The person and company are identity records,
+ * the opportunity is the sales effort, and the order is what was bought. One
+ * contact can hold several orders; a later upsell is a new order with its own
+ * attribution snapshot, never an extension of the first closer's credit.
+ */
+export interface Order {
+  tenantId: Id;
+  orderId: Id;
+  opportunityId: Id;
+  offerId: Id;
+  offerVersion: string;
+  contractId?: Id;
+  /**
+   * The approved value of the agreement. A discount reduces this figure and
+   * nothing else: collected cash is whatever the processor confirms.
+   */
+  contractedValue: Money;
+  discount?: {
+    amount: Money;
+    reason: string;
+    /** Discount authority is the offer's, not the sender's. */
+    approvedByUserId: Id;
+  };
+  installments: OrderInstallment[];
+  state: OrderState;
+  /** Set once, when the order is issued for payment. The attribution seal point. */
+  issuedForPaymentAt?: ISODateTime;
+  /** The snapshot sealed at issue. Absent until the order is issued. */
+  attributionSnapshotId?: Id;
+  createdAt: ISODateTime;
+  createdByUserId: Id;
+}
+
+/** One appended, authorized change to a sealed snapshot. The original is never rewritten. */
+export interface AttributionCorrection {
+  correctionId: Id;
+  at: ISODateTime;
+  /** Who authorized it. A representative may never correct their own credit. */
+  authorizedByUserId: Id;
+  authorizerRole: Role;
+  /** The predetermined exception rule applied, e.g. "split_credit", "manager_reassignment". */
+  rule: string;
+  reason: string;
+  /** The values as they stood before this correction. Copied, never referenced. */
+  previous: { setterUserId?: Id; closerUserId?: Id; pairId?: Id };
+  /** The values this correction establishes. */
+  next: { setterUserId?: Id; closerUserId?: Id; pairId?: Id };
+  evidenceRefs: Id[];
+}
+
+/**
+ * Frozen sale-level credit. Money reads point here, never at
+ * Opportunity.currentOwner, so reassigning a contact tomorrow cannot move
+ * yesterday's commission. Identities come from authenticated assignments and
+ * accepted handoffs: sending the payment link is not proof of being the closer.
+ */
+export interface AttributionSnapshot {
+  tenantId: Id;
+  snapshotId: Id;
+  orderId: Id;
+  opportunityId: Id;
+  /** The credited setter at the seal point. Absent means genuinely unallocated. */
+  setterUserId?: Id;
+  /** The credited closer at the seal point. */
+  closerUserId?: Id;
+  /** The pair that carried the opportunity, captured at handoff acceptance. */
+  pairId?: Id;
+  /** The commission policy version in force when the snapshot was sealed. */
+  commissionPolicyVersion: string;
+  freezePoint: AttributionFreezePoint;
+  frozenAt: ISODateTime;
+  /**
+   * Append-only. An authorized correction is added; nothing in the sealed record
+   * above is ever edited in place.
+   */
+  corrections: AttributionCorrection[];
+  /**
+   * True when no representative could be established from evidence. The
+   * collection is still genuine; the credit stays unallocated until policy or
+   * evidence resolves it.
+   */
+  unallocated?: boolean;
+}
+
+export type PaymentRequestState =
+  | "draft"
+  | "requested"
+  | "sent"
+  | "paid"
+  | "failed"
+  | "canceled"
+  /** The outcome could not be established. Blocks retry; never assumed to be a failure. */
+  | "unresolved";
+
+/**
+ * An order-linked checkout or invoice created on the merchant's own provider
+ * account. Level B capability: creating one requires a separately granted
+ * collection permission, and it is never unlimited charging authority.
+ */
+export interface PaymentRequest {
+  tenantId: Id;
+  paymentRequestId: Id;
+  orderId: Id;
+  opportunityId: Id;
+  installmentId?: Id;
+  /** Bound before the request is sent, so credit exists before money arrives. */
+  attributionSnapshotId: Id;
+  amount: Money;
+  provider: string;
+  providerAccountId: string;
+  environment: ProviderEnvironment;
+  /** The provider's object id once it exists, e.g. a checkout session or invoice. */
+  providerObjectId?: string;
+  /**
+   * The key sent to the provider, so a retry after an uncertain timeout resolves
+   * the original request instead of issuing a second one.
+   */
+  idempotencyKey: string;
+  state: PaymentRequestState;
+  /**
+   * Who pressed send. An operations employee may send on a closer's behalf; this
+   * field never determines credit (scenario 8).
+   */
+  requestedByUserId: Id;
+  requestedAt: ISODateTime;
+  sentAt?: ISODateTime;
+  lastOutcome?: { kind: "succeeded" | "failed" | "unresolved"; reason: string; at: ISODateTime };
+}
+
+// ---------- Provider connection, links, sync, exceptions (spec 15.2, 15.3) ----------
+
+/**
+ * How a connection was authorized. These are distinct mechanisms with different
+ * token lifecycles and account boundaries; one provider's flow is never copied
+ * into another's.
+ */
+export type AuthorizationMethod =
+  | "oauth_authorization_code"
+  | "app_installation"
+  | "partner_enablement_client_credentials"
+  | "assisted_restricted_key"
+  | "none";
+
+/**
+ * The proven state of one capability. There is deliberately no "available"
+ * value: a capability is verified by evidence or it is not claimed.
+ * - verified             Proven against the actual grant in this environment.
+ * - pending_verification Requested and not yet proven. Not a promise.
+ * - not_requested        Never asked for.
+ * - not_authorized       Asked for and refused, or revoked.
+ * - requires_setup       The provider supports it but setup is incomplete.
+ * - unsupported          The provider does not offer it. Never fake a success.
+ */
+export type CapabilityState =
+  | "verified"
+  | "pending_verification"
+  | "not_requested"
+  | "not_authorized"
+  | "requires_setup"
+  | "unsupported";
+
+/** How far the integration itself has actually been built and proven. */
+export type ImplementationState =
+  | "absent"
+  | "sandbox_only"
+  | "blocked_by_provider_access"
+  | "awaiting_publication"
+  | "live";
+
+/**
+ * Persisted proof of what a connection can do, modelled on specification 15.2.
+ * Capabilities are displayed from evidence, never from the presence of a
+ * provider logo. Observation is separate from collection throughout.
+ */
+export interface CapabilityContract {
+  authorizationMethod: AuthorizationMethod;
+  /** Level A: track payments. */
+  observation: {
+    paymentReads: CapabilityState;
+    historicalImport: CapabilityState;
+    signedEventDelivery: CapabilityState;
+    refundReads: CapabilityState;
+    disputeReads: CapabilityState;
+    payoutReads: CapabilityState;
+  };
+  /** Level B: send payment requests. A separate, separately authorized level. */
+  collection: {
+    createPaymentRequest: CapabilityState;
+    updateSubscription: CapabilityState;
+    issueRefund: CapabilityState;
+  };
+  implementationState: ImplementationState;
+  /** API version this contract was proven against. A method name is not a proof. */
+  apiVersion?: string;
+  verifiedAt?: ISODateTime;
+}
+
+export type ConnectionAuthorizationState =
+  | "none"
+  | "pending"
+  | "granted"
+  | "revoked"
+  | "reconnect_required";
+
+/**
+ * The persisted Connection record of specification 15.3.
+ *
+ * Named ProviderConnectionRecord, not ProviderConnection, because
+ * src/domain/integrations.ts already exports an in-memory ProviderConnection
+ * through the same barrel. That one is a screen's connection state; this one is
+ * the durable record. Folding them together belongs to the adapter work.
+ */
+export interface ProviderConnectionRecord {
+  tenantId: Id;
+  connectionId: Id;
+  provider: string;
+  authorizationMethod: AuthorizationMethod;
+  /** The bound merchant account. Reads and writes are always scoped by it. */
+  providerAccountId: string;
+  accountLabel?: string;
+  environment: ProviderEnvironment;
+  /** Reference to a secret in the vault. Never the secret itself. */
+  secretRef?: string;
+  /** What was asked for. */
+  requestedScopes: string[];
+  /** What the provider actually granted. Recorded separately, never assumed equal. */
+  grantedScopes: string[];
+  capabilities: CapabilityContract;
+  /** The person whose authority backs this grant. A grant can be person-dependent. */
+  authorizedByUserId: Id;
+  authorizationState: ConnectionAuthorizationState;
+  grantedAt?: ISODateTime;
+  expiresAt?: ISODateTime;
+  lastVerifiedAt?: ISODateTime;
+  revokedAt?: ISODateTime;
+  /** Set when this merchant is already bound elsewhere. See MERCHANT_BINDING_CONFLICT_POLICY. */
+  bindingConflict?: { reason: string; boundTenantId?: Id };
+}
+
+export type ProviderObjectType =
+  | "payment"
+  | "refund"
+  | "dispute"
+  | "payout"
+  | "invoice"
+  | "checkout_session"
+  | "subscription"
+  | "customer"
+  | "other";
+
+/**
+ * An account-scoped and environment-scoped external object id connected to an
+ * internal identity. Prefer linking before payment over matching after payment.
+ */
+export interface ProviderObjectLink {
+  tenantId: Id;
+  linkId: Id;
+  provider: string;
+  providerAccountId: string;
+  environment: ProviderEnvironment;
+  providerObjectType: ProviderObjectType;
+  providerObjectId: string;
+  internal: {
+    kind: "order" | "opportunity" | "payment_request" | "contact" | "ledger_entry";
+    id: Id;
+  };
+  /**
+   * How the link was established, in the preferred order of specification 17.1.
+   * A candidate is never used to finalize commission-bearing attribution on its own.
+   */
+  confidence: "authoritative_reference" | "confirmed_mapping" | "candidate";
+  linkedAt: ISODateTime;
+  /** Set when a person confirmed an ambiguous match. */
+  confirmedByUserId?: Id;
+  note?: string;
+}
+
+export type SyncResource = "payments" | "refunds" | "disputes" | "payouts" | "subscriptions";
+
+/**
+ * Resumable coverage for one resource on one connection. Coverage that actually
+ * loaded is recorded, so a partial history is disclosed at the metric instead of
+ * being presented as complete (scenario 59).
+ */
+export interface SyncCheckpoint {
+  tenantId: Id;
+  checkpointId: Id;
+  connectionId: Id;
+  provider: string;
+  providerAccountId: string;
+  environment: ProviderEnvironment;
+  resource: SyncResource;
+  /** Provider pagination cursor. Opaque. */
+  cursor?: string;
+  /** The window the owner asked for. */
+  requestedWindowDays: number;
+  /** The window actually covered so far. */
+  coverageStart?: ISODateTime;
+  coverageEnd?: ISODateTime;
+  lastSuccessAt?: ISODateTime;
+  /** Most recent authenticated event for this resource, for freshness disclosure. */
+  eventFreshnessAt?: ISODateTime;
+  state: "never_run" | "importing" | "reconciling" | "current" | "limited" | "failed";
+  /** Plain words for the owner when the state is limited or failed. */
+  limitation?: string;
+}
+
+export type PaymentExceptionKind =
+  | "unlinked_payment"
+  | "ambiguous_order_match"
+  | "unbound_account"
+  | "amount_mismatch"
+  | "unresolved_payment_request"
+  | "duplicate_movement_candidate"
+  | "coverage_gap"
+  | "unclassified_evidence";
+
+/**
+ * A persisted, assignable exception. The scoped-incident model computes what a
+ * reader may do with a figure; this record is the operations work item behind
+ * it, with an owner and a resolution history. One record needing reconciliation
+ * never pauses unrelated selling.
+ */
+export interface PaymentException {
+  tenantId: Id;
+  exceptionId: Id;
+  kind: PaymentExceptionKind;
+  severity: "info" | "warning" | "critical";
+  title: string;
+  /** Only these surfaces are affected. Everything else keeps running. */
+  affectedSurfaces: AffectedSurface[];
+  subjects: IncidentSubjects;
+  /** The operations owner. Unassigned is a state, not a blank. */
+  assignedToUserId?: Id;
+  ownerRole: IncidentOwnerRole;
+  reason: string;
+  openedAt: ISODateTime;
+  state: "open" | "resolved" | "wont_fix";
+  resolution?: { at: ISODateTime; byUserId: Id; action: string; note: string };
+  /** Append-only history. Earlier entries are never rewritten. */
+  history: { at: ISODateTime; byUserId?: Id; action: string; note: string }[];
+  evidenceRefs: Id[];
+}
+
 // ---------- Domain events ----------
 
 export interface DomainEvent<TPayload = Record<string, unknown>> {
@@ -379,7 +964,15 @@ export interface DomainEvent<TPayload = Record<string, unknown>> {
   actorType: "user" | "integration" | "ai" | "policy";
   actorId: Id;
   sourceSystem?: string;
+  /**
+   * The provider account the delivery came from. Persisted on the envelope, not
+   * only inside the idempotency key: an external id alone is not a global
+   * namespace (specification 15.4).
+   */
+  sourceAccountId?: string;
   sourceEventId?: string;
+  /** Live or test. A test delivery validates delivery and nothing else. */
+  environment?: ProviderEnvironment;
   idempotencyKey: string;
   correlationId?: Id;
   causationId?: Id;

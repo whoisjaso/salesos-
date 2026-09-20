@@ -3,6 +3,10 @@ import {
   applyManualMapping,
   detectPreset,
   dryRun,
+  evidenceForPaymentMethod,
+  IMPORT_EVIDENCE_CLASSES,
+  IMPORT_EVIDENCE_LABEL,
+  IMPORT_MONEY_DISCLOSURE,
   isNegatedConsentHeader,
   parseConsent,
   parseCsv,
@@ -17,7 +21,8 @@ import {
   type ImportContext,
   type MappingPlan,
 } from "@/domain/migration";
-import { applyEvents } from "@/domain/events";
+import { applyEvents, collectedCashEntries, countsAsNetCollectedCash } from "@/domain/events";
+import { cashByEvidence, netCollected } from "@/domain/metrics";
 import type { IntakeContact } from "@/domain/intake";
 import { GOHIGHLEVEL_CSV, HUBSPOT_CSV, MESSY_CSV, MIGRATION_NOW, MIGRATION_TENANT, migrationUsers } from "@/fixtures/migration";
 
@@ -268,17 +273,48 @@ describe("dryRun", () => {
     expect(report.unmappedColumns).toEqual([]);
   });
 
-  it("records a parenthesized amount as a refund and totals in minor units", () => {
+  /**
+   * Behaviour change, audit H2. HubSpot's "Amount" is a DEAL amount, not a
+   * payment column. It used to become payment_collected (and, when
+   * parenthesized, a refund) and reach net collected cash. A won status is not
+   * a payment, so the deal values are now contracted value and the
+   * parenthesized one is disclosed rather than turned into a cash movement.
+   * The parenthesized-amount-as-refund rule itself is unchanged and is
+   * exercised below on the messy sheet, where the column really is money paid.
+   */
+  it("records won deal amounts as contracted value, never as cash", () => {
     const result = runImport(hubspot.plan, hubspot.headers, hubspot.rows, ctx());
+    expect(result.ledger.filter((l) => l.kind === "refund")).toHaveLength(0);
+    expect(result.ledger.filter((l) => l.kind === "payment_collected")).toHaveLength(0);
+    // Won deals: 4800 + 3200 + 6500. Lost and open deals carry no contracted value.
+    expect(result.report.contractedValue).toEqual({ count: 3, totalMinor: 480000 + 320000 + 650000, currency: "USD" });
+    expect(result.report.payments).toEqual({ count: 0, totalMinor: 0, currency: "USD" });
+    expect(result.report.money.netCollectedCashMinor).toBe(0);
+    for (const l of result.ledger) {
+      expect(l.kind).toBe("contracted_value");
+      expect(l.evidence).toBe("imported_record");
+    }
+    const maria = result.contacts.find((c) => c.phone === "+15125550142")!;
+    const mariaOpp = result.opportunities.find((o) => o.primaryContactId === maria.contactId)!;
+    expect(mariaOpp.commercialStatus).toBe("won");
+    // Won in the old CRM says nothing about money having moved.
+    expect(mariaOpp.paymentState).toBe("none");
+    expect(result.report.money.notRecorded).toBe(1);
+    expect(result.report.issues.some((i) => i.problem.startsWith("negative deal amount"))).toBe(true);
+  });
+
+  it("records a parenthesized amount in a payment column as a refund and totals in minor units", () => {
+    const result = runImport(messy.plan, messy.headers, messy.rows, ctx());
     const refunds = result.ledger.filter((l) => l.kind === "refund");
     expect(refunds).toHaveLength(1);
     expect(refunds[0].amount).toEqual({ amountMinor: 20000, currency: "USD" });
-    // Won deals: 4800 + 3200 + 6500 collected, minus the 200 refund. Lost and open deals are not cash.
-    expect(result.report.payments).toEqual({ count: 4, totalMinor: 480000 + 320000 + 650000 - 20000, currency: "USD" });
     const maria = result.contacts.find((c) => c.phone === "+15125550142")!;
     const mariaOpp = result.opportunities.find((o) => o.primaryContactId === maria.contactId)!;
     expect(refunds[0].opportunityId).toBe(mariaOpp.opportunityId);
-    expect(mariaOpp.paymentState).toBe("refunded");
+    // The refund is recorded, and it is a record of what the sheet said. It is
+    // not a confirmed reversal, so it does not move the opportunity's state.
+    expect(refunds[0].evidence).toBe("imported_record");
+    expect(mariaOpp.paymentState).toBe("none");
   });
 
   it("treats a GoHighLevel DND flag as revoked on every channel", () => {
@@ -455,5 +491,140 @@ describe("runImport", () => {
     }
     expect(TARGET_FIELDS.find((t) => t.field === "opportunity.status")!.enumValues).toContain("won");
     expect(TARGET_FIELDS.filter((t) => t.required).map((t) => t.field)).toEqual(["contact.fullName", "contact.phone", "contact.email"]);
+  });
+});
+
+/**
+ * Audit H2. A spreadsheet is not a payment processor, so nothing an import
+ * produces may reach net collected cash, the owner's hero figure or the team
+ * cash race. The records are kept in full and classified, never discarded.
+ */
+describe("imported money is a record, not collected cash", () => {
+  /** Synthetic. Fictional people, 555 numbers, invented amounts. */
+  const WON_DEAL_CSV = [
+    "Name,Phone,Email,Status,Deal value,Close date",
+    'Ada Reyes,(512) 555-0201,ada.reyes@example.com,Closed Won,"$3,000.00",2026-08-20',
+  ].join("\n");
+
+  /** Synthetic. One wire, one check, one invoice closed by hand, one card line. */
+  const EXTERNAL_TENDER_CSV = [
+    "Name,Phone,Email,Status,Amount paid,Payment method,Paid date",
+    'Ada Reyes,(512) 555-0201,ada.reyes@example.com,Closed Won,"$3,000.00",Wire,2026-08-20',
+    'Bo Tran,(512) 555-0202,bo.tran@example.com,Closed Won,"$1,250.00",Check,2026-08-21',
+    'Cy Okafor,(512) 555-0203,cy.okafor@example.com,Closed Won,"$800.00",Marked paid,2026-08-22',
+    'Dae Kim,(512) 555-0204,dae.kim@example.com,Closed Won,"$500.00",Stripe,2026-08-23',
+  ].join("\n");
+
+  const wonDeal = load(WON_DEAL_CSV);
+  const tenders = load(EXTERNAL_TENDER_CSV);
+
+  it("keeps an imported won deal out of net collected cash", () => {
+    const result = runImport(wonDeal.plan, wonDeal.headers, wonDeal.rows, ctx());
+    expect(result.ledger).toHaveLength(1);
+    const entry = result.ledger[0];
+    // The record survives the import in full: amount, opportunity, provenance.
+    expect(entry.amount).toEqual({ amountMinor: 300000, currency: "USD" });
+    expect(entry.providerRef).toMatch(/^import:deal:/);
+    expect(entry.opportunityId).toBe(result.opportunities[0].opportunityId);
+    // And it is a contracted value known from an import, not a payment.
+    expect(entry.kind).toBe("contracted_value");
+    expect(entry.evidence).toBe("imported_record");
+    expect(countsAsNetCollectedCash(entry)).toBe(false);
+    expect(collectedCashEntries(result.ledger)).toEqual([]);
+  });
+
+  it("leaves the owner's per-opportunity figure at zero and discloses the exclusion", () => {
+    const result = runImport(wonDeal.plan, wonDeal.headers, wonDeal.rows, ctx());
+    const opp = result.opportunities[0];
+    const mine = result.ledger.filter((l) => l.opportunityId === opp.opportunityId);
+    // The figure the owner reads.
+    expect(netCollected(mine, "USD")).toEqual({ amountMinor: 0, currency: "USD" });
+    expect(cashByEvidence(mine, "USD").processor_confirmed).toEqual({ amountMinor: 0, currency: "USD" });
+    // The exclusion is stated, not silent.
+    expect(result.report.money.netCollectedCashMinor).toBe(0);
+    expect(result.report.contractedValue).toEqual({ count: 1, totalMinor: 300000, currency: "USD" });
+    // The evidence tally describes payment movements. This file has none, so it
+    // is empty and the contracted value stands on its own line.
+    expect(result.report.payments.count).toBe(0);
+    expect(result.report.money.byEvidence).toEqual([]);
+    expect(result.report.money.statement).toBe(IMPORT_MONEY_DISCLOSURE.statement);
+    // A won status in an old CRM never claims the customer has paid.
+    expect(opp.commercialStatus).toBe("won");
+    expect(opp.paymentState).toBe("none");
+  });
+
+  it("classifies a wire or a check as externally recorded and an invoice closed by hand as manually marked paid", () => {
+    const result = runImport(tenders.plan, tenders.headers, tenders.rows, ctx());
+    const by = (email: string) => {
+      const contact = result.contacts.find((c) => c.email === email)!;
+      const opp = result.opportunities.find((o) => o.primaryContactId === contact.contactId)!;
+      return result.ledger.filter((l) => l.opportunityId === opp.opportunityId);
+    };
+    expect(by("ada.reyes@example.com")[0].evidence).toBe("externally_recorded");
+    expect(by("bo.tran@example.com")[0].evidence).toBe("externally_recorded");
+    expect(by("cy.okafor@example.com")[0].evidence).toBe("manually_marked_paid");
+    // "Stripe" typed into a sheet is a sheet. We read no processor.
+    expect(by("dae.kim@example.com")[0].evidence).toBe("imported_record");
+    // Every one of them is a genuine recorded payment, and none of them is cash.
+    expect(result.report.payments.count).toBe(4);
+    expect(result.report.payments.totalMinor).toBe(300000 + 125000 + 80000 + 50000);
+    expect(netCollected(result.ledger, "USD")).toEqual({ amountMinor: 0, currency: "USD" });
+    expect(result.report.money.netCollectedCashMinor).toBe(0);
+    expect(result.report.money.byEvidence).toEqual([
+      { evidence: "imported_record", label: IMPORT_EVIDENCE_LABEL.imported_record, count: 1, totalMinor: 50000 },
+      { evidence: "externally_recorded", label: IMPORT_EVIDENCE_LABEL.externally_recorded, count: 2, totalMinor: 425000 },
+      { evidence: "manually_marked_paid", label: IMPORT_EVIDENCE_LABEL.manually_marked_paid, count: 1, totalMinor: 80000 },
+    ]);
+    // Every class the owner reads is named in words, never by its code.
+    expect(IMPORT_EVIDENCE_LABEL.externally_recorded).toBe("Recorded outside a processor");
+    // Externally collected money needs independent confirmation before anyone
+    // treats it as collected (specification 9).
+    for (const o of result.opportunities) expect(o.paymentState).toBe("none");
+  });
+
+  it("produces one record when the same import runs twice", () => {
+    const first = runImport(tenders.plan, tenders.headers, tenders.rows, ctx());
+    const second = runImport(tenders.plan, tenders.headers, tenders.rows, ctx({ existingContacts: first.contacts, existingSubmissions: first.submissions }));
+    expect(first.ledger).toHaveLength(4);
+    expect(second.ledger).toHaveLength(0);
+    const merged = [...first.ledger, ...second.ledger];
+    expect(new Set(merged.map((l) => l.idempotencyKey)).size).toBe(4);
+    expect(new Set(merged.map((l) => l.entryId)).size).toBe(4);
+    // Re-running the import a second time against the same starting state is
+    // byte-identical, so a repeated import can never accumulate.
+    const again = runImport(tenders.plan, tenders.headers, tenders.rows, ctx());
+    expect(again.ledger).toEqual(first.ledger);
+    expect(again.report.money).toEqual(first.report.money);
+  });
+
+  it("never produces processor-confirmed evidence from any file", () => {
+    expect(IMPORT_EVIDENCE_CLASSES).not.toContain("processor_confirmed");
+    for (const loaded of [hubspot, ghl, messy, wonDeal, tenders]) {
+      const result = runImport(loaded.plan, loaded.headers, loaded.rows, ctx());
+      for (const entry of result.ledger) {
+        expect(entry.evidence).toBeDefined();
+        expect(IMPORT_EVIDENCE_CLASSES).toContain(entry.evidence!);
+        // Never inferred: an import names no provider, account, environment or
+        // movement, so it cannot collide with or stand in for a real one.
+        expect(entry.provider).toBeUndefined();
+        expect(entry.providerAccountId).toBeUndefined();
+        expect(entry.environment).toBeUndefined();
+        expect(entry.providerMovementId).toBeUndefined();
+      }
+      expect(collectedCashEntries(result.ledger)).toEqual([]);
+      expect(result.report.money.netCollectedCashMinor).toBe(0);
+    }
+  });
+
+  it("reads a tender word only from a method column, never from a processor name", () => {
+    expect(evidenceForPaymentMethod("Wire transfer")).toBe("externally_recorded");
+    expect(evidenceForPaymentMethod("check")).toBe("externally_recorded");
+    expect(evidenceForPaymentMethod("CASH")).toBe("externally_recorded");
+    expect(evidenceForPaymentMethod("Marked Paid")).toBe("manually_marked_paid");
+    expect(evidenceForPaymentMethod("written off")).toBe("manually_marked_paid");
+    expect(evidenceForPaymentMethod("stripe")).toBeUndefined();
+    expect(evidenceForPaymentMethod("card")).toBeUndefined();
+    expect(evidenceForPaymentMethod("")).toBeUndefined();
+    expect(evidenceForPaymentMethod(undefined)).toBeUndefined();
   });
 });

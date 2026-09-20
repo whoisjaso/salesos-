@@ -13,14 +13,20 @@ import { ProvisionalMark } from "./ProvisionalMark";
 
 const DESCRIPTIVE: PerformanceVerdict = { state: "neutral_no_benchmark", label: "Descriptive", explanation: "" };
 
-const DEFINITIONS: Record<"net" | "contracted" | "outstanding" | "refunds", MetricDefinitionText> = {
+const DEFINITIONS: Record<"net" | "contracted" | "outstanding" | "refunds" | "atRisk" | "fees", MetricDefinitionText> = {
+  /**
+   * The written basis, said where the figure is read (NET_COLLECTED_CASH_POLICY
+   * in src/domain/types.ts). Every clause here is a rule the reducer enforces,
+   * not a description of intent.
+   */
   net: {
-    definition: "Payments collected minus refunds and dispute debits, attributed by opportunity.",
-    numerator: "net collected minor units",
+    definition:
+      "Processor-confirmed payments in the live environment, minus confirmed refunds and lost disputes, attributed by opportunity. An invoice marked paid outside the processor, an imported spreadsheet row, a card authorization, a successful checkout redirect and a test-mode movement are recorded and are not counted here. Processing fees are excluded and reported separately. An open dispute is money at risk and is never subtracted.",
+    numerator: "processor-confirmed net collected, minor units",
     denominator: "assigned opportunities in the cohort",
   },
   contracted: {
-    definition: "Value of signed contracts. Not cash.",
+    definition: "Value of signed contracts. Not cash. A discount reduces this figure, never collected cash.",
     numerator: "signed contract value, minor units",
     denominator: "signed contracts",
   },
@@ -30,9 +36,21 @@ const DEFINITIONS: Record<"net" | "contracted" | "outstanding" | "refunds", Metr
     denominator: "signed contracts",
   },
   refunds: {
-    definition: "Refund and dispute debit entries. They restate the original cohort.",
-    numerator: "refund and dispute amount, minor units",
-    denominator: "refund and dispute entries",
+    definition:
+      "Confirmed refunds and lost disputes. They restate the period the original payment belongs to and never delete the sale. An opened dispute is not in this figure: it is at risk until it is decided.",
+    numerator: "refund and lost-dispute amount, minor units",
+    denominator: "refund and lost-dispute entries",
+  },
+  atRisk: {
+    definition:
+      "Money in disputes that are open and not yet decided. Disclosed beside collected cash and never subtracted from it. A lost dispute debits exactly once, and then leaves this figure.",
+    numerator: "open dispute amount, minor units",
+    denominator: "open disputes",
+  },
+  fees: {
+    definition: "Processor fees. A cost, not a negative sale, so they are excluded from collected cash and reported on their own.",
+    numerator: "fee amount, minor units",
+    denominator: "fee entries",
   },
 };
 
@@ -41,8 +59,23 @@ function whole(metric: MetricPayload): string {
   return formatMoneyMinor(Math.round((metric.value ?? 0) / 100) * 100, metric.currency ?? "USD");
 }
 
+export interface MoneyViewProps {
+  economics: EconomicsView;
+  /**
+   * Money in disputes that are open and not yet decided. Reported beside cash
+   * and never inside it. Rendered only when a caller supplies it: a figure this
+   * screen cannot compute is left unsaid rather than shown as zero.
+   *
+   * `src/lib/owner-model.ts` (not owned by this change) has the ledger and can
+   * fill it from `disputeAtRisk`; `OwnerDashboard` then passes it through.
+   */
+  atRisk?: MetricPayload | null;
+  /** Processing fees, excluded from cash and reported separately. Same contract as `atRisk`. */
+  fees?: MetricPayload | null;
+}
+
 /** One hero, cash. One list: contracted, outstanding, refunds. Each opens its definition. */
-export function MoneyView({ economics }: { economics: EconomicsView }) {
+export function MoneyView({ economics, atRisk = null, fees = null }: MoneyViewProps) {
   const sheet = useMetricDefinition();
   const net = economics.netCollected;
   const currency = net.currency ?? "USD";
@@ -93,6 +126,38 @@ export function MoneyView({ economics }: { economics: EconomicsView }) {
           })}
         </div>
       </Surface>
+
+      {/*
+        Reported separately, never summed into the hero. Each carries its own
+        period and its own denominator, and each says in one line why it is not
+        part of collected cash (specification 17.5).
+      */}
+      {atRisk || fees ? (
+        <Surface padding="none">
+          <div className="divide-y divide-line">
+            {atRisk ? (
+              <DetailsRow
+                label="At risk"
+                hint={`Open disputes, ${measure.period}. Not subtracted from cash.`}
+                value={whole(atRisk)}
+                ariaLabel={`At risk, ${whole(atRisk)}. Open disputes, not yet decided, ${measure.period}. Never subtracted from collected cash. Open definition.`}
+                data-testid="money-disclosure-row"
+                onClick={() => open(atRisk, DEFINITIONS.atRisk)}
+              />
+            ) : null}
+            {fees ? (
+              <DetailsRow
+                label="Processing fees"
+                hint={`${measure.period}. Excluded from collected cash.`}
+                value={whole(fees)}
+                ariaLabel={`Processing fees, ${whole(fees)}. ${measure.period}. Excluded from collected cash and reported separately. Open definition.`}
+                data-testid="money-disclosure-row"
+                onClick={() => open(fees, DEFINITIONS.fees)}
+              />
+            ) : null}
+          </div>
+        </Surface>
+      ) : null}
     </div>
   );
 }

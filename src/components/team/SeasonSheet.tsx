@@ -17,8 +17,19 @@ export interface SeasonSheetProps {
   /** My commercial track, or the pooled team track for the owner. */
   level: LevelState;
   streakDays: number;
-  /** Quality gate reasons when XP is paused. Empty means running. */
+  /**
+   * The track holds that are open, in their own words. Empty means nothing is
+   * held. A hold is NOT a pause: `src/domain/game.ts` sets `paused` only when
+   * every track is held at once, so this list on its own never reads as Paused
+   * (docs/DECISIONS.md, "A held measurement never holds the person";
+   * docs/PAYMENTS_AUDIT.md H8).
+   */
   pausedReasons?: string[];
+  /**
+   * The domain's own `QualityGate.paused`. Only this may render the word Paused.
+   * Defaults to false, which is what the gate returns unless every track is held.
+   */
+  paused?: boolean;
   /** The rep's own standing, from the same rows the board shows. Omitted for the owner. */
   own?: OwnStanding | null;
   /** Owner: the ring is the whole team's. */
@@ -50,9 +61,9 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
  * rank or provisional state, XP pauses, the three tracks, recent events, and the
  * rules and guardrails that used to sit behind the info icon (SOS-14, SOS-15).
  */
-export function SeasonSheet({ open, onClose, title, daysLeft, level, streakDays, pausedReasons = [], own, team = false, descriptive, player, policy, guardrails }: SeasonSheetProps) {
+export function SeasonSheet({ open, onClose, title, daysLeft, level, streakDays, pausedReasons = [], paused = false, own, team = false, descriptive, player, policy, guardrails }: SeasonSheetProps) {
   const toNext = level.xpForNextLevel === null ? null : level.xpForNextLevel - level.xp;
-  const paused = pausedReasons.length > 0;
+  const held = pausedReasons.length > 0;
   const rules: { title: string; body: string }[] = [
     { title: "Metric", body: `${formatBasis(policy.basis)} per assigned opportunity` },
     { title: "Eligible", body: `Active, reconciled data, ${policy.minMaturedSample}+ matured` },
@@ -111,7 +122,17 @@ export function SeasonSheet({ open, onClose, title, daysLeft, level, streakDays,
           {paused ? (
             <span className="inline-flex items-start gap-1.5 text-perf-attention">
               <PauseCircle size={13} weight="bold" aria-hidden className="mt-1 shrink-0" />
-              <span>Paused: {pausedReasons.join("; ")}</span>
+              <span>Paused, every track is held: {pausedReasons.join("; ")}</span>
+            </span>
+          ) : held ? (
+            /* Running, with named parts waiting. The level, the streak and every
+               unheld kind of XP keep counting, so this never says Paused. */
+            <span className="inline-flex items-start gap-1.5">
+              <HourglassMedium size={13} weight="bold" aria-hidden className="mt-1 shrink-0 text-fg-subtle" />
+              <span>
+                Running, parts on hold
+                <span className="text-fg-muted">: {pausedReasons.join("; ")}</span>
+              </span>
             </span>
           ) : (
             "Running"

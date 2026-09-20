@@ -4,11 +4,25 @@
  *
  * The connect flow is modeled as OAuth where the provider supports it. Real provider app credentials
  * and redirect URIs are an owner decision (D04). Until then the SimulatedAuthorizer stands in.
+ *
+ * Amended after the payments audit: "OAuth first" means OAuth first WHERE THE PROVIDER'S ONBOARDING
+ * PATH IS ACTUALLY AVAILABLE IN THIS ENVIRONMENT; otherwise Request connection. Every row carries an
+ * `availability` record, the default is `unavailable`, and `canConnect()` is the only thing a Connect
+ * affordance may be gated on. The SimulatedAuthorizer refuses every payments provider outright: a
+ * simulated grant must never stand behind a money figure (specification 12.1).
  * Logos: Simple Icons slugs (CC0), rendered from https://cdn.jsdelivr.net/npm/simple-icons@v13/icons/<slug>.svg
  */
 import type { EntryPath, Id, ISODateTime } from "./types";
+import type { ProviderAvailabilityRecord } from "./connections";
+import { canOfferConnect } from "./connections";
 
-export type AuthMethod = "oauth" | "api_key" | "webhook" | "none";
+/**
+ * How a provider would authorize. `partner` is an approval-gated backend
+ * connection (partner credentials plus the customer enabling the integration on
+ * the provider's side). It is deliberately NOT `oauth`: it has no owner-facing
+ * authorization redirect, so it must never be rendered as one.
+ */
+export type AuthMethod = "oauth" | "api_key" | "webhook" | "partner" | "none";
 export type Feed = "leads" | "bookings" | "calls" | "meetings" | "payments" | "messages" | "contracts";
 
 export type LogoMode = "mask" | "image" | "icon";
@@ -35,6 +49,13 @@ export interface IntegrationProvider {
   setup: string[];
   oneLiner: string; // max 8 words
   popular?: boolean;
+  /**
+   * Whether an onboarding path for this provider actually exists in this
+   * environment. Omitted means DEFAULT_PROVIDER_AVAILABILITY, which is
+   * `unavailable`: nothing is built until a row says otherwise and names its
+   * evidence. A Connect affordance is legal only when `canConnect(p)` is true.
+   */
+  availability?: ProviderAvailabilityRecord;
 }
 
 export const PROVIDERS: IntegrationProvider[] = [
@@ -59,7 +80,18 @@ export const PROVIDERS: IntegrationProvider[] = [
   { providerId: "twilio", name: "Twilio", category: "telephony", logoSlug: "twilio", brandColor: "#F22F46", auth: "api_key", feeds: ["calls", "messages"], entryPathDefault: "form_entry", permissions: ["Place and record calls from your number", "Send and receive texts"], setup: ["Paste account SID and token", "Pick your number"], oneLiner: "Your business number, in the dialer", popular: true },
   { providerId: "zoom", name: "Zoom", category: "meetings", logoSlug: "zoom", brandColor: "#0B5CFF", auth: "oauth", feeds: ["meetings"], entryPathDefault: "booked_entry", permissions: ["Read meeting participants and join times", "Read recordings you allow"], setup: ["Tap Connect", "Approve in Zoom"], oneLiner: "Proves who showed up" },
   { providerId: "google_meet", name: "Google Meet", category: "meetings", logoSlug: "googlemeet", brandColor: "#00897B", auth: "oauth", feeds: ["meetings"], entryPathDefault: "booked_entry", permissions: ["Read meeting attendance"], setup: ["Tap Connect", "Approve in Google"], oneLiner: "Attendance from Meet" },
-  { providerId: "stripe", name: "Stripe", category: "payments", logoSlug: "stripe", brandColor: "#635BFF", auth: "oauth", feeds: ["payments"], entryPathDefault: "form_entry", permissions: ["Read payments, refunds, and disputes"], setup: ["Tap Connect", "Approve in Stripe"], oneLiner: "Cash in, refunds out, reconciled", popular: true },
+  // Payments. Stripe is the first candidate and is unproven; Whop is second and absent; Toast is
+  // partner-gated. None of the three may present a Connect affordance. The permission strings below
+  // are Obavia's own wording for what it would ask for, never a grant a provider returned.
+  { providerId: "stripe", name: "Stripe", category: "payments", logoSlug: "stripe", brandColor: "#635BFF", auth: "oauth", feeds: ["payments"], entryPathDefault: "form_entry", permissions: ["Read payments, refunds, and disputes"], setup: ["Request connection", "An operator follows up"], oneLiner: "Payment tracking, once connected", popular: true,
+    availability: { state: "unavailable", implementationState: "blocked_by_provider_access", blockedBy: "provider_access",
+      reason: "Payment access is not proven here. Nothing in this build has read a payment, a refund or a dispute from a provider. Stripe Apps OAuth is the first candidate: no app registration, no install link and no verified permissions exist in this environment." } },
+  { providerId: "whop", logo: { mode: "image", url: "https://www.google.com/s2/favicons?domain=whop.com&sz=128" }, name: "Whop", category: "payments", logoSlug: "whop", brandColor: "#7BA4F0" /* neutral placeholder: no verified brand token on hand */, auth: "oauth", feeds: ["payments"], entryPathDefault: "form_entry", permissions: ["Read payments for one business"], setup: ["Request connection", "An operator follows up"], oneLiner: "Planned second payment adapter",
+    availability: { state: "unavailable", implementationState: "absent", blockedBy: "not_built",
+      reason: "Whop is the planned second adapter. No development application, no business-scoped grant, and no proven payment or event permissions exist here. An identity sign-in would not be merchant payment authorization." } },
+  { providerId: "toast", logo: { mode: "image", url: "https://www.google.com/s2/favicons?domain=toasttab.com&sz=128" }, name: "Toast", category: "payments", logoSlug: "toast", brandColor: "#7BA4F0" /* neutral placeholder: no verified brand token on hand */, auth: "partner", feeds: ["payments"], entryPathDefault: "form_entry", permissions: ["Read restaurant payment records"], setup: ["Request connection", "An operator follows up"], oneLiner: "Partner approval needed first",
+    availability: { state: "request_connection", implementationState: "blocked_by_provider_access", blockedBy: "provider_access",
+      reason: "Toast is a partner-gated integration. It needs approved partner credentials and restaurant location mapping before it can be enabled, and its check records are not processor-confirmed settlement." } },
   { providerId: "docusign", logo: { mode: "image", url: "https://www.google.com/s2/favicons?domain=docusign.com&sz=128" }, name: "DocuSign", category: "other", logoSlug: "docusign", brandColor: "#FFB805", auth: "oauth", feeds: ["contracts"], entryPathDefault: "form_entry", permissions: ["Read envelope status"], setup: ["Tap Connect", "Approve in DocuSign"], oneLiner: "Signed means signed" },
   { providerId: "zapier", name: "Zapier", category: "automation", logoSlug: "zapier", brandColor: "#FF4F00", auth: "webhook", feeds: ["leads", "bookings"], entryPathDefault: "form_entry", permissions: ["Send any Zap to Sales OS"], setup: ["Copy the webhook URL", "Add a Webhooks step"], oneLiner: "Anything Zapier can reach" },
   { providerId: "make", name: "Make", category: "automation", logoSlug: "make", brandColor: "#6D00CC", auth: "webhook", feeds: ["leads", "bookings"], entryPathDefault: "form_entry", permissions: ["Send any scenario to Sales OS"], setup: ["Copy the webhook URL", "Add an HTTP module"], oneLiner: "Anything Make can reach" },
@@ -68,6 +100,40 @@ export const PROVIDERS: IntegrationProvider[] = [
 ];
 
 export const providerById = Object.fromEntries(PROVIDERS.map((p) => [p.providerId, p])) as Record<string, IntegrationProvider>;
+
+/**
+ * The honest default. Nothing in this repository has a proven onboarding path:
+ * there is no provider app registration, no token exchange, and no outbound
+ * network call anywhere in src/. A row earns a different availability by naming
+ * what was proven, never by omission.
+ */
+export const DEFAULT_PROVIDER_AVAILABILITY: ProviderAvailabilityRecord = {
+  state: "unavailable",
+  implementationState: "absent",
+  blockedBy: "not_built",
+  reason: "No onboarding path for this provider is implemented in this environment.",
+};
+
+export function availabilityOf(p: IntegrationProvider): ProviderAvailabilityRecord {
+  return p.availability ?? DEFAULT_PROVIDER_AVAILABILITY;
+}
+
+/**
+ * The only gate a Connect affordance may use. A provider that is not available
+ * renders its real logo with Request connection, never a Connect button and
+ * never a simulated authorization screen (specification 12.1).
+ */
+export function canConnect(p: IntegrationProvider): boolean {
+  return canOfferConnect(availabilityOf(p));
+}
+
+/** Providers that carry money. These may never reach the simulated authorizer. */
+export function isPaymentsProvider(p: IntegrationProvider): boolean {
+  return p.category === "payments" || p.feeds.includes("payments");
+}
+
+export const SIMULATED_AUTHORIZER_PAYMENTS_REFUSAL =
+  "A payments provider cannot be authorized by the simulated authorizer. A simulated grant must never stand behind a money figure. Use Request connection until a real provider path is proven.";
 
 export function logoUrl(p: IntegrationProvider): string {
   if (p.logo?.url) return p.logo.url;
@@ -93,6 +159,14 @@ export const CATEGORY_LABEL: Record<IntegrationProvider["category"], string> = {
 
 // ---------- Connection lifecycle ----------
 
+/**
+ * The screen-level connection state for lead and booking sources. It is NOT the
+ * integration model, and it is never evidence that payment tracking works:
+ * specification 14.3 forbids a single flat value from standing for a
+ * connection. Anything that touches money derives its state from the three axes
+ * in connections.ts (`deriveConnectionStatus`) against a persisted
+ * ProviderConnectionRecord and its capability contract.
+ */
 export type ConnectionStatus = "not_connected" | "authorizing" | "connected" | "error" | "paused";
 
 export interface ProviderConnection {
@@ -101,6 +175,13 @@ export interface ProviderConnection {
   providerId: string;
   status: ConnectionStatus;
   accountLabel?: string; // e.g. "Obavia Page", "acct_1234"
+  /**
+   * What Obavia asked for. Recorded separately from what was granted and never
+   * assumed equal: the registry's `permissions` strings are Obavia's own wording
+   * for a request, not a provider response (specification 14.2 step 4).
+   */
+  requestedPermissions?: string[];
+  /** What the provider actually granted. Only a provider response belongs here. */
   grantedPermissions: string[];
   connectedAt?: ISODateTime;
   lastEventAt?: ISODateTime;
@@ -118,26 +199,60 @@ export interface AuthorizeRequest {
 export interface AuthorizeResult {
   ok: boolean;
   accountLabel?: string;
+  /** What was asked for. Kept beside the grant so a shortfall is visible. */
+  requestedPermissions?: string[];
+  /** What the provider returned. Never the request echoed back. */
   grantedPermissions?: string[];
   error?: string;
+  /**
+   * Machine-readable refusal, so a caller cannot read a refusal as a success.
+   * Only the payments refusal sets it today: the two pre-existing refusal shapes
+   * ("Unknown provider", "Invalid code") are asserted byte for byte by
+   * src/domain/__tests__/crmSync.test.ts, which this change deliberately leaves
+   * untouched rather than weakening. Widening them is a separate, visible edit.
+   */
+  refusalCode?: "payments_simulation_refused" | "unknown_provider" | "invalid_code" | "provider_unavailable";
 }
 
 /** Real implementations open the provider's consent screen and exchange the code server-side. */
 export interface Authorizer {
-  begin(req: AuthorizeRequest): { url: string };
+  /**
+   * Returns the provider's consent URL. An authorizer that refuses this request
+   * returns an empty url and a reason; a caller must check `refusedReason`
+   * before treating the url as a destination.
+   */
+  begin(req: AuthorizeRequest): { url: string; refusedReason?: string };
   complete(req: AuthorizeRequest, code: string): Promise<AuthorizeResult>;
 }
 
-/** Stand-in until provider app credentials exist (D04). Grants the catalog permissions after one simulated approval. */
+/**
+ * Stand-in until provider app credentials exist (D04). It hands back the catalog's
+ * own request strings after one simulated approval, which is fine for a lead or
+ * booking source and is a lie about money.
+ *
+ * So it REFUSES every payments provider, in `begin` and again in `complete`.
+ * Specification 12.1: a provider awaiting approval says Request connection, it
+ * does not open a simulated authorization success screen.
+ */
 export const SimulatedAuthorizer: Authorizer = {
   begin(req) {
+    const p = providerById[req.providerId];
+    if (p && isPaymentsProvider(p)) return { url: "", refusedReason: SIMULATED_AUTHORIZER_PAYMENTS_REFUSAL };
     return { url: `${req.redirectUri}?state=${encodeURIComponent(req.state)}&code=simulated_${req.providerId}` };
   },
   async complete(req, code) {
     const p = providerById[req.providerId];
     if (!p) return { ok: false, error: "Unknown provider" };
+    if (isPaymentsProvider(p)) {
+      return { ok: false, error: SIMULATED_AUTHORIZER_PAYMENTS_REFUSAL, refusalCode: "payments_simulation_refused" };
+    }
     if (!code.startsWith("simulated_")) return { ok: false, error: "Invalid code" };
-    return { ok: true, accountLabel: `${p.name} account`, grantedPermissions: p.permissions };
+    return {
+      ok: true,
+      accountLabel: `${p.name} account`,
+      requestedPermissions: p.permissions,
+      grantedPermissions: p.permissions,
+    };
   },
 };
 
@@ -150,6 +265,7 @@ export function connect(
     connectionId: `conn_${input.tenantId}_${input.providerId}`,
     providerId: input.providerId,
     status: "not_connected",
+    requestedPermissions: [],
     grantedPermissions: [],
     eventCount: 0,
   };
@@ -158,6 +274,7 @@ export function connect(
     ...base,
     status: "connected",
     accountLabel: input.result.accountLabel,
+    requestedPermissions: input.result.requestedPermissions ?? base.requestedPermissions ?? [],
     grantedPermissions: input.result.grantedPermissions ?? [],
     connectedAt: input.now,
     error: undefined,
@@ -165,5 +282,12 @@ export function connect(
 }
 
 export function disconnect(conn: ProviderConnection): ProviderConnection {
-  return { ...conn, status: "not_connected", grantedPermissions: [], accountLabel: undefined, connectedAt: undefined };
+  return {
+    ...conn,
+    status: "not_connected",
+    requestedPermissions: [],
+    grantedPermissions: [],
+    accountLabel: undefined,
+    connectedAt: undefined,
+  };
 }

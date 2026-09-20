@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { DetailsRow } from "@/components/ui/DetailsRow";
 import { Sheet } from "@/components/ui/Sheet";
 import { Surface } from "@/components/ui/Surface";
+import { MoneyDisclosure } from "./MoneyDisclosure";
 import { errorRows, IGNORE, targetLabel } from "./import-model";
 
 export interface DoneStepProps {
@@ -58,7 +59,14 @@ export function DoneStep({ fileName, plan, report, at, onAgain }: DoneStepProps)
           <Row k="People" v={formatCount(report.contacts.create + report.contacts.merge)} />
           <Row k="Deals" v={formatCount(report.opportunities)} />
           <Row k="Appointments" v={formatCount(report.appointments)} />
-          <Row k="Payments" v={formatCount(report.payments.count)} />
+          {report.payments.count + report.contractedValue.count > 0 ? (
+            <div>
+              <dt className="text-[12px] font-medium text-fg-subtle">Money</dt>
+              <dd className="mt-2">
+                <MoneyDisclosure report={report} />
+              </dd>
+            </div>
+          ) : null}
           <div>
             <dt className="text-[12px] font-medium text-fg-subtle">Mapping</dt>
             <dd className="mt-2 rounded-sm border border-line bg-sunken">

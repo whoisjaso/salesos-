@@ -13,6 +13,12 @@
  *   board, not a contracted-value one, and unresolved attendance marks the attended
  *   count as a lower bound without touching the money ranking.
  * - A verified zero and a missing figure are different facts: `revenueState`.
+ * - Cohort membership stays a statement about assigned work and keeps reading
+ *   assignment history: who was given the lead is not a money question. The
+ *   MONEY on a row is different. A movement whose credit is sealed to another
+ *   rep is removed from this rep's revenue, so reassigning a contact after a
+ *   payment cannot move a standings row. Movements with no seal are left exactly
+ *   as they were, under UNSEALED_CREDIT_FALLBACK.
  */
 import type {
   AffectedSurface,
@@ -21,6 +27,7 @@ import type {
   LeaderboardRow,
   LeaderboardView,
   MetricPayload,
+  Opportunity,
   RevenueBasis,
   Role,
   User,
@@ -37,6 +44,7 @@ import {
   type CohortFilter,
   type Dataset,
   attendedOpportunityIds,
+  cohortIdFor,
   computeM08,
   computeM15,
   computeM16,
@@ -47,6 +55,7 @@ import {
   selectOpportunities,
   wonOpportunities,
 } from "./metrics";
+import { type DatasetWithAttribution, opportunitySealVerdict, sealedElsewhere } from "./attribution";
 import { formatMinorPerUnit, zero } from "./money";
 
 export interface LeaderboardPolicy {
@@ -100,8 +109,44 @@ interface RowDraft extends LeaderboardRow {
   rankKey: number;
 }
 
+/**
+ * The dataset as this row may count it: every movement sealed to a different
+ * representative is dropped, and nothing else changes. An unsealed ledger is
+ * returned untouched, so a workspace with no orders yet reads exactly as before.
+ */
+function creditScoped(dataset: DatasetWithAttribution, userId: Id, role: "setter" | "closer"): DatasetWithAttribution {
+  const kept = dataset.ledger.filter((e) => !sealedElsewhere(dataset, e, userId, role));
+  return kept.length === dataset.ledger.length ? dataset : { ...dataset, ledger: kept };
+}
+
+/**
+ * The cohort a FINANCIAL standing is computed over.
+ *
+ * Where nothing is sealed this is exactly the existing cohort: assignment
+ * history, which is a genuine statement about who was accountable for a lead.
+ * Where a sale IS sealed, the seal decides. An opportunity sealed to another
+ * rep leaves this rep's cohort, and one sealed to this rep joins it, so
+ * reassigning a contact tomorrow moves no row on a standings board.
+ */
+function financialCohort(
+  dataset: DatasetWithAttribution,
+  filter: CohortFilter,
+  userId: Id,
+  role: "setter" | "closer",
+  now: ISODateTime,
+): Opportunity[] {
+  const mine = new Set(selectOpportunities(dataset, filter, now).map((o) => o.opportunityId));
+  const inWindow = selectOpportunities(dataset, { ...filter, userId: undefined, role: undefined }, now);
+  return inWindow.filter((o) => {
+    const verdict = opportunitySealVerdict(dataset, o.opportunityId, userId, role);
+    if (verdict === "sealed_to_user") return true;
+    if (verdict === "sealed_elsewhere") return false;
+    return mine.has(o.opportunityId);
+  });
+}
+
 function buildRow(
-  dataset: Dataset,
+  dataset: DatasetWithAttribution,
   user: User,
   role: "setter" | "closer",
   policy: LeaderboardPolicy,
@@ -110,22 +155,34 @@ function buildRow(
   attendanceHold: SurfaceStatus | null,
 ): RowDraft {
   const filter: CohortFilter = { userId: user.userId, role, from: policy.periodFrom, to: policy.periodTo };
-  const opps = selectOpportunities(dataset, filter, now);
+  const opps = financialCohort(dataset, filter, user.userId, role, now);
+  // One dataset for every figure on this row: this rep's cohort, and only the
+  // movements that are not sealed to somebody else. The cohort is already
+  // user-scoped, so the filter drops the user and keeps the same cohort id.
+  const scoped: DatasetWithAttribution = { ...creditScoped(dataset, user.userId, role), opportunities: opps };
+  const scopedFilter: CohortFilter = { ...filter, cohortId: cohortIdFor(filter), userId: undefined, role: undefined };
   const ids = new Set(opps.map((o) => o.opportunityId));
   const matured = opps.filter((o) => opportunityMatured(o, dataset.tenant, now)).length;
   const currency = dataset.tenant.reportingCurrency;
-  const rpl = rplFor(dataset, filter, policy.basis, now);
+  const rpl = rplFor(scoped, scopedFilter, policy.basis, now);
   const total =
-    policy.basis === "net_collected_cash" ? netCollected(ledgerFor(dataset, ids), currency) : contractedValue(dataset, ids, currency);
+    policy.basis === "net_collected_cash" ? netCollected(ledgerFor(scoped, ids), currency) : contractedValue(scoped, ids, currency);
   const attended = attendedOpportunityIds(dataset, ids).size;
   const wins = wonOpportunities(opps).length;
-  const refunds = ledgerFor(dataset, ids).filter((e) => e.kind === "refund" || e.kind === "dispute_debit").length;
+  const refunds = ledgerFor(scoped, ids).filter((e) => e.kind === "refund" || e.kind === "dispute_debit").length;
+  // Attendance is not a money question and keeps its own cohort rule: the show
+  // rate reads assignment history, exactly as it did before orders existed.
   const show = computeM08(dataset, filter, now);
   const leadTier = modeTier(opps.map((o) => o.leadTier));
 
   let prior: number | null | undefined;
   if (policy.priorPeriodFrom && policy.priorPeriodTo) {
-    prior = rplFor(dataset, { ...filter, from: policy.priorPeriodFrom, to: policy.priorPeriodTo }, policy.basis, now).value;
+    prior = rplFor(
+      scoped,
+      { ...scopedFilter, cohortId: cohortIdFor({ ...filter, from: policy.priorPeriodFrom, to: policy.priorPeriodTo }), from: policy.priorPeriodFrom, to: policy.priorPeriodTo },
+      policy.basis,
+      now,
+    ).value;
   }
 
   // A verified zero and a missing figure are different facts, and never render alike.
@@ -230,7 +287,7 @@ function byName(a: LeaderboardRow, b: LeaderboardRow): number {
  * returns the rows from this.
  */
 export function buildStandings(
-  dataset: Dataset,
+  dataset: DatasetWithAttribution,
   view: LeaderboardView,
   policy: LeaderboardPolicy,
   now: ISODateTime,
@@ -380,7 +437,7 @@ export function buildStandings(
 }
 
 export function buildLeaderboard(
-  dataset: Dataset,
+  dataset: DatasetWithAttribution,
   view: LeaderboardView,
   policy: LeaderboardPolicy,
   now: ISODateTime,

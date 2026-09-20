@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   connectAndPull,
+  CRM_SYNC_EVIDENCE,
+  defaultHistoricalSince,
   OAUTH_CRM_SOURCES,
   pullAll,
   simulatedCrmSync,
@@ -8,8 +10,11 @@ import {
   type SyncObject,
   type SyncProgress,
 } from "@/domain/crmSync";
+import { collectedCashEntries } from "@/domain/events";
+import { netCollected } from "@/domain/metrics";
+import { HISTORICAL_IMPORT_DEFAULT_WINDOW_DAYS } from "@/domain/types";
 import { PROVIDERS, providerById, SimulatedAuthorizer, type AuthorizeRequest } from "@/domain/integrations";
-import { detectPreset, dryRun, parseCsv, profileColumns, suggestMapping, type ImportContext } from "@/domain/migration";
+import { detectPreset, dryRun, parseCsv, profileColumns, runImport, suggestMapping, type ImportContext } from "@/domain/migration";
 import { GOHIGHLEVEL_CSV, HUBSPOT_CSV, MESSY_CSV, MIGRATION_NOW, MIGRATION_TENANT, migrationUsers } from "@/fixtures/migration";
 
 const ALL_OBJECTS: SyncObject[] = ["contacts", "deals", "appointments", "payments", "notes"];
@@ -246,5 +251,34 @@ describe("OAUTH_CRM_SOURCES", () => {
 
   it("maps each source to a preset named after its provider", () => {
     for (const src of OAUTH_CRM_SOURCES) expect(src.preset).toBe(src.providerId);
+  });
+});
+
+describe("a CRM sync is a record, not a payment confirmation", () => {
+  it("carries the same evidence class as a file import", () => {
+    expect(CRM_SYNC_EVIDENCE).toBe("imported_record");
+    expect(CRM_SYNC_EVIDENCE).not.toBe("processor_confirmed");
+  });
+
+  it("puts nothing a CRM pull reports into net collected cash", async () => {
+    const adapter = simulatedCrmSync("hubspot", HUBSPOT_CSV);
+    const sync = await pullAll(adapter, { objects: ALL_OBJECTS });
+    const profiles = profileColumns(sync.headers, sync.rows);
+    const plan = suggestMapping(profiles, sync.preset);
+    const ctx: ImportContext = { tenantId: MIGRATION_TENANT, now: MIGRATION_NOW, existingContacts: [], users: migrationUsers };
+    const result = runImport(plan, sync.headers, sync.rows, ctx);
+    expect(result.ledger.length).toBeGreaterThan(0);
+    for (const entry of result.ledger) expect(entry.evidence).toBe(CRM_SYNC_EVIDENCE);
+    expect(collectedCashEntries(result.ledger)).toEqual([]);
+    expect(netCollected(result.ledger, "USD")).toEqual({ amountMinor: 0, currency: "USD" });
+    expect(result.report.money.netCollectedCashMinor).toBe(0);
+    // Authorizing a CRM never marks a customer paid.
+    for (const o of result.opportunities) expect(o.paymentState).toBe("none");
+  });
+
+  it("offers the proposed 90 day historical window from an injected now, overridable", () => {
+    expect(HISTORICAL_IMPORT_DEFAULT_WINDOW_DAYS).toBe(90);
+    expect(defaultHistoricalSince("2026-09-19T12:00:00Z")).toBe("2026-06-21T12:00:00.000Z");
+    expect(defaultHistoricalSince("2026-09-19T12:00:00Z", 30)).toBe("2026-08-20T12:00:00.000Z");
   });
 });

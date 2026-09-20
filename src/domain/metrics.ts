@@ -40,10 +40,22 @@ import type {
   User,
   Appointment,
 } from "./types";
+import type { EvidenceClass } from "./types";
 import { add, sub, zero, formatMoney } from "./money";
+import {
+  cashByEvidenceClass,
+  disputeAtRiskFromLedger,
+  netCollectedFromLedger,
+  processingFeesFromLedger,
+} from "./events";
 import { evaluate, defaultBenchmarkFor } from "./performance";
 
-export const DEFINITION_VERSION = "1.0";
+/**
+ * 1.1 narrows the net-collected-cash basis: only processor-confirmed live
+ * movements count, processing fees are reported separately, and an open dispute
+ * is an at-risk figure rather than a debit (NET_COLLECTED_CASH_POLICY).
+ */
+export const DEFINITION_VERSION = "1.1";
 
 /** Grace after scheduled end before an instance is considered mature without an explicit flag. */
 export const INSTANCE_MATURITY_GRACE_HOURS = 24;
@@ -263,24 +275,38 @@ export function ledgerFor(dataset: Dataset, oppIds: Set<Id>): LedgerEntry[] {
   return dataset.ledger.filter((e) => e.opportunityId !== undefined && oppIds.has(e.opportunityId));
 }
 
+/**
+ * Net collected cash (M16 basis), under NET_COLLECTED_CASH_POLICY.
+ *
+ * Counts one thing only: processor-confirmed movements in the live environment.
+ * A payment still processing, an invoice marked paid outside the processor, a
+ * wire someone recorded by hand, a spreadsheet import and a test-mode event are
+ * each a genuine record, and none of them is collected cash. They are reported
+ * by their own class through `cashByEvidenceClass`, never silently summed here.
+ *
+ * Fees are excluded and reported separately by `processingFees`. An open dispute
+ * is at risk, not a debit: see `disputeAtRisk`. A lost dispute debits once.
+ */
 export function netCollected(entries: LedgerEntry[], currency: string): Money {
-  let total = zero(currency);
-  for (const e of entries) {
-    if (e.passThrough) continue;
-    switch (e.kind) {
-      case "payment_collected":
-      case "dispute_credit":
-        total = add(total, e.amount);
-        break;
-      case "refund":
-      case "dispute_debit":
-        total = sub(total, e.amount);
-        break;
-      case "fee":
-        break;
-    }
-  }
-  return total;
+  return netCollectedFromLedger(entries, currency);
+}
+
+/**
+ * What the cash figure refused, grouped by how each movement is known. Every
+ * class here is a real record; none of them is net collected cash.
+ */
+export function cashByEvidence(entries: LedgerEntry[], currency: string): Record<EvidenceClass, Money> {
+  return cashByEvidenceClass(entries, currency);
+}
+
+/** Processing fees over a ledger slice. Excluded from the metric, reported here. */
+export function processingFees(entries: LedgerEntry[], currency: string): Money {
+  return processingFeesFromLedger(entries, currency);
+}
+
+/** Money threatened by open disputes. Disclosed beside cash, never subtracted from it. */
+export function disputeAtRisk(entries: LedgerEntry[], currency: string): Money {
+  return disputeAtRiskFromLedger(entries, currency);
 }
 
 export function contractedValue(dataset: Dataset, oppIds: Set<Id>, currency: string): Money {

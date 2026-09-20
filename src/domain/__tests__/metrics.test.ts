@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFINITION_VERSION,
+  cashByEvidence,
   computeAllMetrics,
   computeFunnel,
+  disputeAtRisk,
+  netCollected,
+  processingFees,
   computeM04,
   computeM06,
   computeM07,
@@ -14,16 +19,18 @@ import {
   computeTeamRate,
   pooledRate,
 } from "@/domain/metrics";
+import { cashRace, commissionSummary, type SeasonWindow } from "@/domain/cashTiers";
 import { fromDollars } from "@/domain/money";
+import { COMMISSION_RATE_DEFAULTS, type CommissionPolicy, type LedgerEntry } from "@/domain/types";
 import { NOW, T0, emptyDataset, mkAssignment, mkInstance, mkOpp, mkUser } from "./helpers";
 import { obaviaDataset, NOW as OBAVIA_NOW } from "@/fixtures/obavia";
 
 describe("metric payload contract", () => {
-  it("every M01..M21 payload carries the required fields and definitionVersion 1.0", () => {
+  it("every M01..M21 payload carries the required fields and the current definition version", () => {
     const all = computeAllMetrics(obaviaDataset, {}, OBAVIA_NOW);
     expect(Object.keys(all)).toHaveLength(21);
     for (const p of Object.values(all)) {
-      expect(p.definitionVersion).toBe("1.0");
+      expect(p.definitionVersion).toBe(DEFINITION_VERSION);
       expect(typeof p.numerator).toBe("number");
       expect(typeof p.denominator).toBe("number");
       expect(typeof p.unknownCount).toBe("number");
@@ -207,5 +214,92 @@ describe("funnel connectors (SOS-20)", () => {
     const attended = funnel.stages.find((s) => s.stageId === "attended");
     expect(attended?.unknownCount).toBeGreaterThan(0);
     expect(attended?.dataState).toBe("partial");
+  });
+});
+
+describe("net collected cash counts processor-confirmed live movements only", () => {
+  const entry = (extra: Partial<LedgerEntry> & Pick<LedgerEntry, "entryId" | "kind" | "amount">): LedgerEntry => ({
+    tenantId: "t_test",
+    opportunityId: "o1",
+    providerRef: extra.entryId,
+    idempotencyKey: `k_${extra.entryId}`,
+    occurredAt: "2026-08-10T12:00:00Z",
+    receivedAt: "2026-08-10T12:00:01Z",
+    commercialCategory: "new_customer",
+    provider: "card_processor",
+    providerAccountId: "acct_main",
+    environment: "live",
+    evidence: "processor_confirmed",
+    ...extra,
+  });
+
+  const datasetWith = (ledger: LedgerEntry[]) =>
+    emptyDataset({
+      users: [mkUser("closer_a", ["closer"])],
+      opportunities: [mkOpp("o1", { commercialStatus: "won", currentOwner: { closer: "closer_a" } })],
+      ledger,
+    });
+
+  it("M16 counts a processor-confirmed payment and refuses an invoice marked paid outside the processor", () => {
+    const d = datasetWith([
+      entry({ entryId: "l1", kind: "payment_collected", amount: fromDollars(3_000) }),
+      entry({ entryId: "l2", kind: "payment_collected", amount: fromDollars(9_000), evidence: "manually_marked_paid" }),
+    ]);
+    expect(computeM16(d, {}, NOW).numerator).toBe(300_000);
+    expect(netCollected(d.ledger, "USD")).toEqual(fromDollars(3_000));
+    // The refused movement is still a record, reported under its own class.
+    expect(cashByEvidence(d.ledger, "USD").manually_marked_paid).toEqual(fromDollars(9_000));
+  });
+
+  it("a spreadsheet import is a genuine record and not collected cash", () => {
+    const d = datasetWith([
+      entry({ entryId: "l1", kind: "payment_collected", amount: fromDollars(12_000), evidence: "imported_record", provider: "csv_import" }),
+    ]);
+    expect(computeM16(d, {}, NOW).numerator).toBe(0);
+    expect(cashByEvidence(d.ledger, "USD").imported_record).toEqual(fromDollars(12_000));
+  });
+
+  it("a test-environment movement changes no cash figure, no standing and no commission", () => {
+    const season: SeasonWindow = { from: "2026-08-01T00:00:00Z", to: "2026-09-30T00:00:00Z" };
+    const live = datasetWith([entry({ entryId: "l1", kind: "payment_collected", amount: fromDollars(3_000) })]);
+    const withTestEvent = datasetWith([
+      entry({ entryId: "l1", kind: "payment_collected", amount: fromDollars(3_000) }),
+      entry({ entryId: "l2", kind: "payment_collected", amount: fromDollars(50_000), environment: "test" }),
+    ]);
+
+    // Cash.
+    expect(netCollected(withTestEvent.ledger, "USD")).toEqual(netCollected(live.ledger, "USD"));
+    expect(computeM16(withTestEvent, {}, NOW).numerator).toBe(computeM16(live, {}, NOW).numerator);
+    // Standing.
+    expect(cashRace(withTestEvent, season, "closer")).toEqual(cashRace(live, season, "closer"));
+    // Commission, at the recorded hypothetical closer rate.
+    const policies: CommissionPolicy[] = [
+      { tenantId: "t_test", policyVersion: "commission-hypothetical-closer-0.1", effectiveFrom: T0, basis: "net_collected_cash", ratePercent: COMMISSION_RATE_DEFAULTS.closerPercent, hypothetical: true, role: "closer" },
+    ];
+    const paid = commissionSummary(withTestEvent, "closer_a", season, NOW, policies);
+    expect(paid.totalMinor).toBe(30_000);
+    expect(paid.totalMinor).toBe(commissionSummary(live, "closer_a", season, NOW, policies).totalMinor);
+    expect(paid.hypothetical).toBe(true);
+  });
+
+  it("a fee is excluded from cash and reported separately, and an open dispute is at risk rather than a debit", () => {
+    const d = datasetWith([
+      entry({ entryId: "l1", kind: "payment_collected", amount: fromDollars(3_000) }),
+      entry({ entryId: "l2", kind: "fee", amount: fromDollars(87) }),
+      entry({ entryId: "l3", kind: "dispute_opened", amount: fromDollars(3_000) }),
+    ]);
+    expect(netCollected(d.ledger, "USD")).toEqual(fromDollars(3_000));
+    expect(processingFees(d.ledger, "USD")).toEqual(fromDollars(87));
+    expect(disputeAtRisk(d.ledger, "USD")).toEqual(fromDollars(3_000));
+
+    const lost = [...d.ledger, entry({ entryId: "l4", kind: "dispute_debit", amount: fromDollars(3_000) })];
+    expect(netCollected(lost, "USD")).toEqual(fromDollars(0));
+    expect(disputeAtRisk(lost, "USD")).toEqual(fromDollars(0));
+  });
+
+  it("a zero-amount movement creates no cash", () => {
+    const d = datasetWith([entry({ entryId: "l1", kind: "payment_collected", amount: fromDollars(0) })]);
+    expect(netCollected(d.ledger, "USD")).toEqual(fromDollars(0));
+    expect(computeM16(d, {}, NOW).numerator).toBe(0);
   });
 });

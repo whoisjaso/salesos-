@@ -254,6 +254,22 @@ function RepMe({
     };
   }, [provisional, gate]);
 
+  /**
+   * Whether this rep's payment feed was read, and what is holding it when it was
+   * not. A verified zero and a missing figure are different facts: the zero is
+   * only claimed when nothing makes collected-revenue attribution unreliable for
+   * this rep (docs/DECISIONS.md, "Never show a list that looks ranked when
+   * ranking is not established").
+   */
+  const cashFeed = useMemo<{ available: boolean; note?: string }>(() => {
+    const holding = gate.incidents.filter((i) => i.surfaces.includes("revenue_attribution"));
+    if (holding.length === 0) return { available: true };
+    return {
+      available: false,
+      note: `${holding[0].effect} ${holding[0].waitingOn} before this list is complete, and ${holding[0].ownerLabel} owns that.`,
+    };
+  }, [gate]);
+
   const partnerId = pairView ? (userId === pairView.pair.setterUserId ? pairView.pair.closerUserId : pairView.pair.setterUserId) : null;
   const partnerName = pairView ? (userId === pairView.pair.setterUserId ? pairView.closerDisplayName : pairView.setterDisplayName) : null;
 
@@ -279,6 +295,14 @@ function RepMe({
               now={NOW}
               currency={summary.currency}
               period={seasonName}
+              // The guard that separates an unread feed from a real zero, wired
+              // to the only signal that actually knows: the incidents that make
+              // collected-revenue attribution unreliable for this rep. Without
+              // this, an empty feed announced itself as a verified zero
+              // (docs/PAYMENTS_AUDIT.md H5).
+              available={cashFeed.available}
+              heldNote={cashFeed.note}
+              synthetic={dataset.synthetic ?? false}
             />
           </>
         }

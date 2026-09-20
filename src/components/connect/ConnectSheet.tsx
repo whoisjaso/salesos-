@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CheckCircle, CircleNotch, LinkSimple, UploadSimple } from "@phosphor-icons/react";
-import { connect, SimulatedAuthorizer, type AuthorizeRequest, type IntegrationProvider, type ProviderConnection } from "@/domain/integrations";
+import { ClockCounterClockwise, UploadSimple, Wrench } from "@phosphor-icons/react";
+import { connect, type IntegrationProvider, type ProviderConnection } from "@/domain/integrations";
 import { Button } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
 import { LogoTile } from "./LogoTile";
 import { CheckRows, MonoBlock, SectionLabel, StepRows, useCopy } from "./bits";
 import { CONNECT_NOW, CONNECT_TENANT, snippetFor } from "./connect-model";
+import { SANDBOX_NOTE, connectViewFor } from "./availability";
 
 export interface ConnectSheetProps {
   p: IntegrationProvider | null;
@@ -17,10 +18,13 @@ export interface ConnectSheetProps {
   onConnected: (providerId: string, conn: ProviderConnection) => void;
 }
 
-type Phase = "idle" | "approving" | "connected";
-
-const APPROVE_MS = 900;
-const APPROVE_MS_REDUCED = 40;
+/**
+ * Two reachable phases and no third.
+ * "requested" is an interest note on this device. It is not an authorization,
+ * it shows no check mark, and it lists no permission as granted (specification
+ * 12.1, docs/PAYMENTS_AUDIT.md H1).
+ */
+type Phase = "idle" | "requested";
 
 export function ConnectSheet({ p, open, onClose, onConnected }: ConnectSheetProps) {
   return (
@@ -33,41 +37,22 @@ export function ConnectSheet({ p, open, onClose, onConnected }: ConnectSheetProp
 function Body({ p, onClose, onConnected }: { p: IntegrationProvider; onClose: () => void; onConnected: ConnectSheetProps["onConnected"] }) {
   const reduce = useReducedMotion();
   const [phase, setPhase] = useState<Phase>("idle");
-  const [conn, setConn] = useState<ProviderConnection | null>(null);
-  const [apiKey, setApiKey] = useState("");
-  const [acted, setActed] = useState(false);
+  const [uploaded, setUploaded] = useState(false);
   const { copied, copy } = useCopy();
-  const timer = useRef<number | null>(null);
+  const view = useMemo(() => connectViewFor(p), [p]);
   const snippet = useMemo(() => (p.auth === "webhook" || p.auth === "none" ? snippetFor(p) : null), [p]);
 
-  useEffect(
-    () => () => {
-      if (timer.current) window.clearTimeout(timer.current);
-    },
-    [],
-  );
-
-  const authorize = () => {
-    if (phase !== "idle") return;
-    setPhase("approving");
-    const req: AuthorizeRequest = { tenantId: CONNECT_TENANT, providerId: p.providerId, redirectUri: "sos://connect", state: `st_${p.providerId}` };
-    const { url } = SimulatedAuthorizer.begin(req);
-    const code = new URL(url).searchParams.get("code") ?? "";
-    timer.current = window.setTimeout(async () => {
-      const result = await SimulatedAuthorizer.complete(req, code);
-      const next = connect(undefined, { tenantId: CONNECT_TENANT, providerId: p.providerId, result, now: CONNECT_NOW });
-      setConn(next);
-      setPhase("connected");
-      onConnected(p.providerId, next);
-    }, reduce ? APPROVE_MS_REDUCED : APPROVE_MS);
-  };
-
-  /** Webhook, share link, and file: the owner did the step, mark it connected. */
-  const finish = () => {
+  /**
+   * The spreadsheet is the one completed path: the owner picked a real file and
+   * this app read it. It is still not a provider grant, so no permission is
+   * recorded as granted and the account line names the file source, not a
+   * fabricated merchant account.
+   */
+  const finishFileImport = () => {
     const next = connect(undefined, {
       tenantId: CONNECT_TENANT,
       providerId: p.providerId,
-      result: { ok: true, accountLabel: p.auth === "webhook" ? "Webhook" : p.name, grantedPermissions: p.permissions },
+      result: { ok: true, accountLabel: "File you uploaded", grantedPermissions: [] },
       now: CONNECT_NOW,
     });
     onConnected(p.providerId, next);
@@ -78,29 +63,21 @@ function Body({ p, onClose, onConnected }: { p: IntegrationProvider; onClose: ()
 
   return (
     <AnimatePresence mode="wait" initial={false}>
-      {phase === "connected" && conn ? (
-        <motion.div key="done" {...fade} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col items-center gap-5 pt-2 text-center">
-          <motion.span
-            initial={reduce ? false : { scale: 0.6, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 420, damping: 22 }}
-            className="relative"
-          >
-            <LogoTile p={p} size={72} />
-            <span className="absolute -bottom-1.5 -right-1.5 grid place-items-center rounded-full bg-overlay p-0.5">
-              <CheckCircle size={26} weight="fill" aria-hidden className="text-perf-strong" />
-            </span>
-          </motion.span>
+      {phase === "requested" ? (
+        <motion.div key="requested" {...fade} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col items-center gap-5 pt-2 text-center">
+          {/* The real brand mark stays. What is gone is the filled check that used
+              to sit on it: the mark is identity, the check was a claim. */}
+          <LogoTile p={p} size={72} />
           <div>
             <div className="text-[17px] font-semibold text-fg">{p.name}</div>
-            <div className="mt-0.5 text-[13px] text-fg-muted">{conn.accountLabel}</div>
-          </div>
-          {conn.grantedPermissions.length ? (
-            <div className="w-full text-left">
-              <SectionLabel className="mb-2">Granted</SectionLabel>
-              <CheckRows items={conn.grantedPermissions} />
+            <div className="mt-1 inline-flex items-center gap-1.5 text-[13px] font-medium text-fg-muted">
+              <ClockCounterClockwise size={14} weight="bold" aria-hidden />
+              Connection requested
             </div>
-          ) : null}
+          </div>
+          <p className="text-[13px] leading-snug text-fg-muted">
+            Recorded on this device. Nothing was sent to {p.name}, no permission was requested and none was granted. {SANDBOX_NOTE}
+          </p>
           <Button onClick={onClose} className="mt-1 w-full">
             Done
           </Button>
@@ -111,93 +88,66 @@ function Body({ p, onClose, onConnected }: { p: IntegrationProvider; onClose: ()
             <LogoTile p={p} size={72} />
             <div>
               <div className="text-[17px] font-semibold text-fg">{p.name}</div>
-              <div className="mt-0.5 text-[13px] text-fg-muted">{p.oneLiner}</div>
+              <div className="mt-0.5 text-[13px] text-fg-muted">{view.subtitle}</div>
             </div>
+            {/* Every state has a text label and an icon, never a colour on its own. */}
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-line-strong px-2.5 py-1 text-[12px] font-medium text-fg-muted">
+              {view.canConnect ? <UploadSimple size={13} weight="bold" aria-hidden /> : <Wrench size={13} weight="bold" aria-hidden />}
+              {view.statusLabel}
+            </span>
           </div>
 
           {p.permissions.length ? (
             <div>
-              <SectionLabel className="mb-2">This lets Sales OS</SectionLabel>
+              <SectionLabel className="mb-2">{view.permissionsHeading}</SectionLabel>
               <CheckRows items={p.permissions} />
+              <p className="mt-2 text-[12px] leading-snug text-fg-subtle">{view.permissionsNote}</p>
             </div>
           ) : null}
 
           <div>
-            <SectionLabel className="mb-2">Setup</SectionLabel>
+            <SectionLabel className="mb-2">{view.setupHeading}</SectionLabel>
             <StepRows items={p.setup} />
           </div>
 
-          {p.auth === "api_key" ? (
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[12px] font-medium text-fg-subtle">API key</span>
-              <input
-                type="password"
-                autoComplete="off"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={p.providerId === "twilio" ? "Account SID and token" : "Paste key"}
-                className="h-10 rounded-sm border border-line-strong bg-sunken px-3 font-mono text-[13px] text-fg placeholder:text-fg-faint focus:border-line-focus focus:outline-none"
-              />
-            </label>
-          ) : null}
-
-          {p.auth === "webhook" && snippet ? (
+          {snippet ? (
             <div className="flex flex-col gap-3">
+              {view.snippetCaveat ? <p className="text-[12px] leading-snug text-fg-subtle">{view.snippetCaveat}</p> : null}
               <MonoBlock label="Webhook URL" text={snippet.url} copied={copied === "url"} onCopy={() => copy("url", snippet.url)} />
               {snippet.html ? <MonoBlock label="Form" text={snippet.html} copied={copied === "html"} onCopy={() => copy("html", snippet.html ?? "")} /> : null}
             </div>
           ) : null}
 
-          {p.auth === "none" && p.providerId !== "csv" && snippet ? (
-            <MonoBlock label="Your link" text={snippet.url} copied={copied === "link"} onCopy={() => copy("link", snippet.url)} />
-          ) : null}
-
           <div className="flex flex-col gap-2">
-            {p.auth === "oauth" ? (
-              <Button onClick={authorize} disabled={phase === "approving"} className="w-full" leading={phase === "approving" ? <CircleNotch size={16} weight="bold" className="animate-spin motion-reduce:animate-none" /> : undefined}>
-                {phase === "approving" ? `Approving in ${p.name}` : `Connect with ${p.name}`}
+            {view.action === "connect" ? (
+              /*
+                Reachable only when the domain says a real onboarding path exists.
+                No provider does today, so this renders for nobody. It is disabled
+                rather than wired to a stand-in, because the authorization step
+                itself is not built: a button that looks ready and is not is the
+                same lie one layer down.
+              */
+              <Button disabled className="w-full">
+                {view.actionLabel}
               </Button>
-            ) : null}
-            {p.auth === "api_key" ? (
-              <Button onClick={authorize} disabled={phase === "approving" || apiKey.trim().length === 0} className="w-full" leading={phase === "approving" ? <CircleNotch size={16} weight="bold" className="animate-spin motion-reduce:animate-none" /> : undefined}>
-                {phase === "approving" ? `Checking with ${p.name}` : "Connect"}
-              </Button>
-            ) : null}
-            {p.auth === "webhook" ? (
-              <Button onClick={finish} className="w-full">
-                Done
-              </Button>
-            ) : null}
-            {p.auth === "none" && p.providerId === "csv" ? (
-              acted ? (
-                <Button onClick={finish} className="w-full">
+            ) : view.action === "upload_file" ? (
+              uploaded ? (
+                <Button onClick={finishFileImport} className="w-full">
                   Done
                 </Button>
               ) : (
                 <label className="inline-flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-sm border border-transparent bg-accent px-4 text-[14px] font-medium text-accent-fg hover:bg-accent-strong">
                   <UploadSimple size={16} weight="bold" aria-hidden />
-                  Upload file
-                  <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(e) => setActed(e.target.files !== null && e.target.files.length > 0)} />
+                  {view.actionLabel}
+                  <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(e) => setUploaded(e.target.files !== null && e.target.files.length > 0)} />
                 </label>
               )
-            ) : null}
-            {p.auth === "none" && p.providerId !== "csv" && snippet ? (
-              acted ? (
-                <Button onClick={finish} className="w-full">
-                  Done
-                </Button>
-              ) : (
-                <Button
-                  onClick={async () => {
-                    if (await copy("link", snippet.url)) setActed(true);
-                  }}
-                  className="w-full"
-                  leading={<LinkSimple size={16} weight="bold" />}
-                >
-                  Copy link
-                </Button>
-              )
-            ) : null}
+            ) : (
+              <Button onClick={() => setPhase("requested")} className="w-full">
+                {view.actionLabel}
+              </Button>
+            )}
+            <p className="text-[12px] leading-snug text-fg-subtle">{view.actionEffect}</p>
           </div>
         </motion.div>
       )}

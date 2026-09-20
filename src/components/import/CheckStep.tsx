@@ -8,6 +8,7 @@ import { DetailsRow } from "@/components/ui/DetailsRow";
 import { Sheet } from "@/components/ui/Sheet";
 import { Surface } from "@/components/ui/Surface";
 import { HeroCard } from "@/components/owner/HeroCard";
+import { MoneyDisclosure } from "./MoneyDisclosure";
 import { errorRows, lineOf, SEVERITY_LABEL, SEVERITY_ORDER, type Severity } from "./import-model";
 
 export interface CheckStepProps {
@@ -15,7 +16,7 @@ export interface CheckStepProps {
   onImport: () => void;
 }
 
-type Open = "rows" | Severity | null;
+type Open = "rows" | "money" | Severity | null;
 
 /** One number (ready), one list (what is in, what is skipped, what to check), one button. */
 export function CheckStep({ report, onImport }: CheckStepProps) {
@@ -26,6 +27,10 @@ export function CheckStep({ report, onImport }: CheckStepProps) {
   const ready = Math.round(Math.max(0, Math.min(100, report.readyPercent)));
   const keep = Math.max(0, total - errors);
   const openGroup = grouped.find((g) => g.severity === open);
+  // Money the file carries, whether it is called a payment or a won deal. It is
+  // shown only behind the row that explains what it counts toward.
+  const recordedMoney = report.payments.count + report.contractedValue.count;
+  const recordedTotal = report.payments.totalMinor + report.contractedValue.totalMinor;
 
   return (
     <div className="flex flex-col gap-4">
@@ -34,6 +39,16 @@ export function CheckStep({ report, onImport }: CheckStepProps) {
       <Surface padding="none">
         <div className="divide-y divide-line">
           <DetailsRow label="Rows" value={formatCount(keep)} data-testid="rows-open" onClick={() => setOpen("rows")} />
+          {recordedMoney > 0 ? (
+            <DetailsRow
+              label="Money"
+              hint="Recorded by the old system. Not collected cash."
+              value={formatMoneyMinor(recordedTotal, report.money.currency)}
+              ariaLabel={`Money: ${formatMoneyMinor(recordedTotal, report.money.currency)} recorded by the old system, which does not count toward net collected cash`}
+              data-testid="money-open"
+              onClick={() => setOpen("money")}
+            />
+          ) : null}
           {grouped.map((g) => (
             <DetailsRow key={g.severity} label={SEVERITY_LABEL[g.severity]} value={formatCount(g.items.length)} data-testid={`${g.severity}-open`} onClick={() => setOpen(g.severity)} />
           ))}
@@ -49,9 +64,15 @@ export function CheckStep({ report, onImport }: CheckStepProps) {
           <Line k="People" v={formatCount(report.contacts.create + report.contacts.merge)} sub={`${formatCount(report.contacts.create)} new, ${formatCount(report.contacts.merge)} merge`} />
           <Line k="Deals" v={formatCount(report.opportunities)} />
           <Line k="Appointments" v={formatCount(report.appointments)} />
-          <Line k="Payments" v={formatCount(report.payments.count)} sub={report.payments.count ? formatMoneyMinor(report.payments.totalMinor, report.payments.currency) : undefined} />
+          {/* Counts only. Every money figure lives behind Money, with the sentence that says what it counts toward. */}
+          <Line k="Payments" v={formatCount(report.payments.count)} sub={report.payments.count ? "Recorded, see Money" : undefined} />
+          <Line k="Won deals" v={formatCount(report.contractedValue.count)} sub={report.contractedValue.count ? "Contracted value, see Money" : undefined} />
           {report.consentPreserved > 0 ? <Line k={report.consentPreserved === 1 ? "Opt-out kept" : "Opt-outs kept"} v={formatCount(report.consentPreserved)} /> : null}
         </dl>
+      </Sheet>
+
+      <Sheet open={open === "money"} onClose={() => setOpen(null)} title="Money" description={`${formatCount(recordedMoney)} ${recordedMoney === 1 ? "record" : "records"} in this file`}>
+        <MoneyDisclosure report={report} />
       </Sheet>
 
       <Sheet open={!!openGroup} onClose={() => setOpen(null)} title={openGroup ? SEVERITY_LABEL[openGroup.severity] : ""} description={openGroup ? `${formatCount(openGroup.items.length)} rows` : undefined}>
